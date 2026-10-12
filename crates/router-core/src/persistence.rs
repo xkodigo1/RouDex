@@ -254,6 +254,41 @@ impl RouterStore {
         Ok(())
     }
 
+    pub fn latest_task_approval(&self, task_id: &str) -> Result<Option<TaskApproval>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT task_id, decision, reason FROM task_approvals
+             WHERE task_id = ?1 ORDER BY id DESC LIMIT 1",
+        )?;
+        Ok(statement
+            .query_row(params![task_id], |row| {
+                Ok(TaskApproval {
+                    task_id: row.get(0)?,
+                    decision: row.get(1)?,
+                    reason: row.get(2)?,
+                })
+            })
+            .optional()?)
+    }
+
+    pub fn dependencies_completed(&self, task_id: &str) -> Result<bool, StoreError> {
+        let pending: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM task_dependencies d
+             LEFT JOIN tasks t ON t.task_id = d.depends_on
+             WHERE d.task_id = ?1 AND (t.task_id IS NULL OR t.status <> 'completed')",
+            params![task_id],
+            |row| row.get(0),
+        )?;
+        Ok(pending == 0)
+    }
+
+    pub fn update_run_status(&self, run_id: &str, status: &str) -> Result<(), StoreError> {
+        self.connection.execute(
+            "UPDATE runs SET status = ?1 WHERE run_id = ?2",
+            params![status, run_id],
+        )?;
+        Ok(())
+    }
+
     fn dependencies_for(&self, task_id: &str) -> Result<Vec<String>, rusqlite::Error> {
         let mut statement = self.connection.prepare(
             "SELECT depends_on FROM task_dependencies WHERE task_id = ?1 ORDER BY depends_on",
