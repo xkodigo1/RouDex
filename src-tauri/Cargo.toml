@@ -1,0 +1,12 @@
+[package]
+name = "roudex-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "roudex_desktop"
+path = "src/lib.rs"
+
+[dependencies]
+router-core = { path = "../crates/router-core" }

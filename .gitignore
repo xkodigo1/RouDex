@@ -9,3 +9,5 @@ out/
 *.log
 .turbo/
 .vite/
+target/
+src-tauri/target/
