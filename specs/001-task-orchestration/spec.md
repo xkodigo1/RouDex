@@ -1,6 +1,6 @@
 # Especificación 001 — Orquestación local guiada por tareas
 
-Estado: propuesta activa  
+Estado: propuesta activa
 Última actualización: 2026-10-12
 
 ## Problema
