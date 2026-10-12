@@ -31,6 +31,8 @@ política administrada del equipo:
 El script compila una copia estable del ejecutable en el almacenamiento local
 del usuario y registra un handler `UserPromptSubmit` en la política local
 administrada de Codex Desktop (`%ProgramData%\OpenAI\Codex\requirements.toml`).
+El handler usa un entrypoint local de PowerShell para entregar de forma estable
+el JSON del hook al ejecutable del router en Windows.
 Los hooks administrados se consideran confiables por política y no requieren
 una aprobación manual en la interfaz. El instalador retira solamente el hook
 de usuario de RouDex para evitar que el mismo mensaje se procese dos veces.

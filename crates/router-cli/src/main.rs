@@ -269,9 +269,13 @@ fn install_managed_hook() -> Result<(), String> {
     fs::copy(&executable, &managed_executable)
         .map_err(|error| format!("could not install managed router executable: {error}"))?;
 
+    let managed_script = managed_dir.join("route-prompt.ps1");
+    fs::write(&managed_script, MANAGED_HOOK_SCRIPT)
+        .map_err(|error| format!("could not install managed hook entrypoint: {error}"))?;
     let command = format!(
-        "\"{}\" route-prompt --record-only",
-        managed_executable.display()
+        "{} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
+        WINDOWS_POWERSHELL,
+        managed_script.display()
     );
     let document = format!(
         "{MANAGED_MARKER}\n\n[features]\nhooks = true\n\n[hooks]\nwindows_managed_dir = '{}'\n\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = '{}'\ncommand_windows = '{}'\ntimeout = 600\nstatusMessage = \"Routing desktop message\"\n",
@@ -337,6 +341,11 @@ fn uninstall_managed_hook() -> Result<(), String> {
         fs::remove_file(&managed_executable)
             .map_err(|error| format!("could not remove managed router executable: {error}"))?;
     }
+    let managed_script = managed_hook_dir().join("route-prompt.ps1");
+    if managed_script.exists() {
+        fs::remove_file(&managed_script)
+            .map_err(|error| format!("could not remove managed hook entrypoint: {error}"))?;
+    }
     Ok(())
 }
 
@@ -375,6 +384,12 @@ fn hooks_path() -> PathBuf {
 }
 
 const MANAGED_MARKER: &str = "# RouDex managed desktop routing hook";
+const WINDOWS_POWERSHELL: &str = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+const MANAGED_HOOK_SCRIPT: &str = r#"$router = Join-Path $PSScriptRoot 'router-cli.exe'
+$inputText = [Console]::In.ReadToEnd()
+$inputText | & $router route-prompt --record-only
+exit $LASTEXITCODE
+"#;
 
 fn managed_requirements_path() -> PathBuf {
     if let Some(path) = env::var_os("ROUDEX_CODEX_REQUIREMENTS_PATH") {

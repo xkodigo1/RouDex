@@ -176,13 +176,15 @@ fn managed_hook_installation_is_explicit_and_idempotent() {
     assert!(document.contains("hooks = true"));
     assert!(document.contains("[[hooks.UserPromptSubmit]]"));
     assert!(document.contains("command_windows"));
-    assert!(document.contains("route-prompt --record-only"));
+    assert!(document.contains("route-prompt.ps1"));
     assert!(managed_dir.join("router-cli.exe").exists());
+    assert!(managed_dir.join("route-prompt.ps1").exists());
     assert!(!root.join("codex/hooks.json").exists());
 
     let removed = run(&["uninstall-managed-hook"], "", &root, &environment);
     assert!(removed.is_null());
     assert!(!requirements.exists());
     assert!(!managed_dir.join("router-cli.exe").exists());
+    assert!(!managed_dir.join("route-prompt.ps1").exists());
     fs::remove_dir_all(root).expect("cleanup");
 }
