@@ -37,6 +37,7 @@ fn run() -> Result<(), String> {
         Some("task-recover") => task_recover(args.collect()),
         Some("task-retry") => task_retry(args.collect()),
         Some("task-status") => task_status(args.collect()),
+        Some("run-events") => run_events(args.collect()),
         Some("install-hook") => install_hook(),
         Some("install-managed-hook") => install_managed_hook(),
         Some("uninstall-hook") => uninstall_hook(),
@@ -192,6 +193,18 @@ fn task_status(args: Vec<String>) -> Result<(), String> {
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("task no encontrada: {task_id}"))?;
     write_json(&serde_json::to_value(task).map_err(|error| error.to_string())?)
+}
+
+fn run_events(args: Vec<String>) -> Result<(), String> {
+    let run_id = args
+        .first()
+        .ok_or_else(|| "run-events requiere un runId".to_owned())?;
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let events = store
+        .events_for_run(run_id)
+        .map_err(|error| error.to_string())?;
+    write_json(&serde_json::to_value(events).map_err(|error| error.to_string())?)
 }
 
 fn continue_run(args: Vec<String>) -> Result<(), String> {
@@ -597,6 +610,6 @@ fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|task-plan <manifest>|task-approve <taskId> [approved|denied]|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
+        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|task-plan <manifest>|task-approve <taskId> [approved|denied]|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
     );
 }

@@ -73,7 +73,9 @@ fn main() {
                 respond(
                     &mut stdout,
                     json!({ "id": id, "result": { "thread": {
-                    "id": "fake-thread", "turns": [{ "id": "fake-turn", "status": status,
+                    "id": "fake-thread", "turns": [{
+                        "id": if scenario == "resume-wrong-turn" { "wrong-turn" } else { "fake-turn" },
+                        "status": if scenario == "resume-wrong-turn" { "completed" } else { status },
                         "items": [{ "type": "agentMessage", "text": "recovered completion" }] }]
                 } } }),
                 );
@@ -120,7 +122,9 @@ fn main() {
                         "method": "turn/completed",
                         "params": {
                             "threadId": "fake-thread",
-                            "turn": { "id": "fake-turn", "status": if scenario == "turn-failed" { "failed" } else { "completed" } }
+                            "turn": { "id": "fake-turn", "status": match scenario.as_str() {
+                                "turn-failed" => "failed", "turn-interrupted" => "interrupted", _ => "completed"
+                            } }
                         }
                     }),
                 );

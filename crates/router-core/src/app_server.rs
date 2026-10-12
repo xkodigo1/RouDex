@@ -347,6 +347,16 @@ impl AppServerClient {
             if event_turn.is_some_and(|id| id != turn_id) {
                 continue;
             }
+            // Turn-scoped output is only evidence when both identities match.
+            // In particular, malformed terminal notifications must not be durable.
+            if matches!(
+                message["method"].as_str(),
+                Some("turn/completed" | "item/agentMessage/delta")
+            ) && (params["threadId"].as_str() != Some(thread_id.as_str())
+                || event_turn != Some(turn_id.as_str()))
+            {
+                continue;
+            }
             if message.get("method").is_some() {
                 evidence(&message).map_err(AppServerError::Evidence)?;
             }

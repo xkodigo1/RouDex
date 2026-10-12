@@ -135,6 +135,50 @@ pub struct TaskCoordinator<'a> {
     store: &'a RouterStore,
 }
 
+// Batch dispatch must check persisted gates before even constructing a runtime.
+// Keep the factory lazy so an implementation that spawns in its constructor is safe.
+struct DeferredRuntime<'a, R, F> {
+    factory: &'a mut F,
+    runtime: Option<R>,
+}
+
+impl<R: TaskRuntime, F: FnMut(&TaskDefinition) -> Result<R, CoordinatorError>>
+    DeferredRuntime<'_, R, F>
+{
+    fn runtime(&mut self, task: &TaskDefinition) -> Result<&mut R, String> {
+        if self.runtime.is_none() {
+            self.runtime = Some((self.factory)(task).map_err(|error| error.to_string())?);
+        }
+        Ok(self.runtime.as_mut().expect("runtime initialized"))
+    }
+}
+
+impl<R: TaskRuntime, F: FnMut(&TaskDefinition) -> Result<R, CoordinatorError>> TaskRuntime
+    for DeferredRuntime<'_, R, F>
+{
+    fn start_thread(&mut self, task: &TaskDefinition) -> Result<String, String> {
+        self.runtime(task)?.start_thread(task)
+    }
+
+    fn run_turn(&mut self, task: &TaskDefinition, thread_id: &str) -> Result<RuntimeTurn, String> {
+        self.runtime(task)?.run_turn(task, thread_id)
+    }
+
+    fn run_turn_with_evidence(
+        &mut self,
+        task: &TaskDefinition,
+        thread_id: &str,
+        evidence: &mut dyn FnMut(&Value) -> Result<(), String>,
+    ) -> Result<RuntimeTurn, String> {
+        self.runtime(task)?
+            .run_turn_with_evidence(task, thread_id, evidence)
+    }
+
+    fn verify(&mut self, task: &TaskDefinition) -> Result<Value, String> {
+        self.runtime(task)?.verify(task)
+    }
+}
+
 impl<'a> TaskCoordinator<'a> {
     pub fn new(store: &'a RouterStore) -> Self {
         Self { store }
@@ -168,6 +212,21 @@ impl<'a> TaskCoordinator<'a> {
                 | TaskStatus::AwaitingApproval
         ) {
             return self.existing_receipt(&task, "task is not ready for dispatch");
+        }
+        if task.status == TaskStatus::Blocked {
+            if let Some(run) = self.store.latest_run_for_task(task_id)? {
+                if self
+                    .store
+                    .events_for_run(&run.run_id)?
+                    .iter()
+                    .any(|event| event.event_type == "thread.resume.failed")
+                {
+                    return self.existing_receipt(
+                        &task,
+                        "thread recovery is blocked; explicit recovery required",
+                    );
+                }
+            }
         }
         if !self.store.dependencies_completed(task_id)? {
             if matches!(task.status, TaskStatus::Planned | TaskStatus::Ready) {
@@ -370,7 +429,7 @@ impl<'a> TaskCoordinator<'a> {
                     reason.into(),
                 ));
             }
-            self.store.update_run_status(&run_id, "completed")?;
+            self.store.update_run_status(run_id, "completed")?;
             self.store
                 .set_task_status(&task.id, TaskStatus::Completed)?;
             Ok(TaskExecutionReceipt {
@@ -394,7 +453,7 @@ impl<'a> TaskCoordinator<'a> {
                 text: Some(turn.text),
             })
         } else {
-            self.fail_task(&task.id, &run_id, "turn.incomplete", &turn.status)?;
+            self.fail_task(&task.id, run_id, "turn.incomplete", &turn.status)?;
             Ok(failed_receipt_with_thread(
                 task.id.clone(),
                 route_id.into(),
@@ -507,7 +566,10 @@ impl<'a> TaskCoordinator<'a> {
                 break;
             };
             visited.insert(task.id.clone());
-            let mut runtime = runtime_for(&task)?;
+            let mut runtime = DeferredRuntime {
+                factory: &mut runtime_for,
+                runtime: None,
+            };
             receipts.push(self.dispatch_task(&task.id, &mut runtime)?);
         }
         Ok(receipts)
@@ -584,6 +646,62 @@ impl<'a> TaskCoordinator<'a> {
             event_type: "thread.resumed".into(),
             payload: json!({ "threadId": thread_id }),
         })?;
+        // A crash can happen after the terminal event is durable but before the
+        // verification/status update. Never replay that turn, even if the server
+        // history is incomplete. Only use evidence for the latest dispatched turn.
+        let latest_turn_id = events.iter().rev().find_map(|event| {
+            if event.event_type == "turn/started" {
+                event.payload["turn"]["id"].as_str()
+            } else {
+                None
+            }
+        });
+        let persisted = events.iter().rev().find_map(|event| {
+            let payload = &event.payload;
+            let (turn_id, status, text) = match event.event_type.as_str() {
+                "turn.completed" => (
+                    payload["turnId"].as_str()?,
+                    payload["status"].as_str()?,
+                    payload["text"].as_str().unwrap_or_default(),
+                ),
+                "turn/completed" => (
+                    payload["turn"]["id"].as_str()?,
+                    payload["turn"]["status"].as_str()?,
+                    "",
+                ),
+                _ => return None,
+            };
+            if payload["threadId"].as_str() != Some(thread_id.as_str())
+                || latest_turn_id.is_some_and(|id| id != turn_id)
+                || !matches!(status, "completed" | "failed")
+            {
+                return None;
+            }
+            Some(RuntimeTurn {
+                thread_id: thread_id.clone(),
+                turn_id: turn_id.into(),
+                status: status.into(),
+                text: text.into(),
+            })
+        });
+        let recovered = persisted.or(recovered);
+        if recovered
+            .as_ref()
+            .is_some_and(|turn| latest_turn_id.is_some_and(|id| id != turn.turn_id))
+        {
+            let reason =
+                "resumed history does not match the persisted turn; explicit recovery required";
+            self.store.set_task_status(&task.id, TaskStatus::Blocked)?;
+            self.store.update_run_status(run_id, "blocked")?;
+            self.store.record_event(&EventRecord {
+                run_id: run_id.into(),
+                event_type: "thread.resume.failed".into(),
+                payload: json!({ "reason": reason }),
+            })?;
+            let mut blocked = task.clone();
+            blocked.status = TaskStatus::Blocked;
+            return self.existing_receipt(&blocked, reason);
+        }
         self.execute_turn(&task, &run.route_id, run_id, &thread_id, runtime, recovered)
     }
 
@@ -656,15 +774,21 @@ impl<'a> TaskCoordinator<'a> {
             .store
             .get_task(task_id)?
             .ok_or_else(|| CoordinatorError::TaskNotFound(task_id.to_owned()))?;
-        if task.definition.status != TaskStatus::Interrupted {
+        if !matches!(
+            task.definition.status,
+            TaskStatus::Interrupted | TaskStatus::Failed
+        ) {
             return Ok(TaskExecutionReceipt {
                 task_id: task_id.to_owned(),
                 route_id: None,
                 run_id: None,
                 thread_id: None,
                 status: task.definition.status,
-                text: Some("task is not interrupted".to_owned()),
+                text: Some("task is not retryable".to_owned()),
             });
+        }
+        if task.definition.status == TaskStatus::Failed {
+            self.store.set_task_status(task_id, TaskStatus::Blocked)?;
         }
         self.store.set_task_status(task_id, TaskStatus::Ready)?;
         Ok(TaskExecutionReceipt {
