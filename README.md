@@ -16,3 +16,8 @@ El primer hito establece una base local para:
 
 La ejecución no requiere cuentas, sincronización remota ni credenciales dentro
 del repositorio.
+
+## Instalación
+
+Consulta [docs/installation.md](docs/installation.md) para preparar el
+workspace y activar el adaptador local de mensajes.
