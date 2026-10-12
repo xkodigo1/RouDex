@@ -39,7 +39,7 @@ impl TaskStatus {
                 | (Ready, AwaitingApproval | Running | Blocked)
                 | (AwaitingApproval, Ready | Running | Blocked)
                 | (Running, Completed | Failed | Interrupted | Blocked)
-                | (Interrupted, Running | Blocked)
+                | (Interrupted, Ready | Running | Blocked)
                 | (Failed, Blocked)
                 | (Blocked, Ready)
         )

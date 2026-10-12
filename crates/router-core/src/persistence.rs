@@ -221,6 +221,22 @@ impl RouterStore {
             .map_err(StoreError::from)
     }
 
+    pub fn tasks_for_spec(&self, spec_id: &str) -> Result<Vec<TaskDefinition>, StoreError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT task_id FROM tasks WHERE spec_id = ?1 ORDER BY rowid")?;
+        let ids = statement
+            .query_map(params![spec_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        ids.into_iter()
+            .map(|id| {
+                self.get_task(&id)?
+                    .map(|task| task.definition)
+                    .ok_or_else(|| rusqlite::Error::QueryReturnedNoRows.into())
+            })
+            .collect()
+    }
+
     pub fn set_task_status(&self, task_id: &str, next: TaskStatus) -> Result<(), StoreError> {
         let current = self
             .get_task(task_id)?
@@ -289,6 +305,89 @@ impl RouterStore {
         Ok(())
     }
 
+    /// Claim and record a dispatch atomically so two coordinators cannot execute it.
+    pub fn begin_task_run(
+        &self,
+        task: &TaskDefinition,
+        spec_id: &str,
+        receipt: &RouteReceipt,
+    ) -> Result<bool, StoreError> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let claimed = self.connection.execute(
+            "UPDATE tasks SET status = 'running', updated_at = ?2 WHERE task_id = ?1
+             AND status = 'ready'
+             AND NOT EXISTS (SELECT 1 FROM task_dependencies d LEFT JOIN tasks t
+                 ON t.task_id = d.depends_on WHERE d.task_id = ?1
+                 AND (t.task_id IS NULL OR t.status <> 'completed'))
+             AND (approval = 'not_required' OR
+                 (SELECT decision FROM task_approvals WHERE task_id = ?1 ORDER BY id DESC LIMIT 1) = 'approved')",
+            params![task.id, now_string()],
+        )?;
+        if claimed == 0 {
+            return Ok(false);
+        }
+        self.record_route(
+            &RoutePromptInput {
+                prompt: task.prompt.clone(),
+                session_id: spec_id.into(),
+                turn_id: task.id.clone(),
+                cwd: task.cwd.clone(),
+                permission_mode: Some(task.approval.clone()),
+            },
+            receipt,
+        )?;
+        self.update_run_status(&receipt.run_id, "running")?;
+        self.record_event(&EventRecord {
+            run_id: receipt.run_id.clone(),
+            event_type: "task.started".into(),
+            payload: serde_json::json!({ "taskId": task.id, "profile": receipt.profile,
+                "model": receipt.model, "effort": receipt.effort, "definition": task }),
+        })?;
+        transaction.commit()?;
+        Ok(true)
+    }
+
+    pub fn begin_resume(&self, task_id: &str, run_id: &str) -> Result<bool, StoreError> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let claimed = self.connection.execute(
+            "UPDATE tasks SET status = 'running', updated_at = ?3 WHERE task_id = ?1
+             AND status = 'interrupted' AND EXISTS (SELECT 1 FROM runs WHERE run_id = ?2
+                 AND turn_id = ?1 AND status = 'interrupted')",
+            params![task_id, run_id, now_string()],
+        )?;
+        if claimed == 0 {
+            return Ok(false);
+        }
+        self.update_run_status(run_id, "running")?;
+        transaction.commit()?;
+        Ok(true)
+    }
+
+    pub fn latest_run_for_task(&self, task_id: &str) -> Result<Option<StoredRun>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT run_id, route_id, session_id, turn_id, cwd, prompt,
+                    profile, model, effort, status
+             FROM runs WHERE turn_id = ?1 ORDER BY rowid DESC LIMIT 1",
+        )?;
+        statement
+            .query_row(params![task_id], |row| {
+                Ok(StoredRun {
+                    run_id: row.get(0)?,
+                    route_id: row.get(1)?,
+                    session_id: row.get(2)?,
+                    turn_id: row.get(3)?,
+                    cwd: row.get(4)?,
+                    prompt: row.get(5)?,
+                    profile: row.get(6)?,
+                    model: row.get(7)?,
+                    effort: row.get(8)?,
+                    status: row.get(9)?,
+                })
+            })
+            .optional()
+            .map_err(StoreError::from)
+    }
+
     fn dependencies_for(&self, task_id: &str) -> Result<Vec<String>, rusqlite::Error> {
         let mut statement = self.connection.prepare(
             "SELECT depends_on FROM task_dependencies WHERE task_id = ?1 ORDER BY depends_on",
@@ -340,6 +439,39 @@ impl RouterStore {
                 event.event_type,
                 serde_json::to_string(&event.payload)?,
                 now_string(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn events_for_run(&self, run_id: &str) -> Result<Vec<EventRecord>, StoreError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT event_type, payload FROM events WHERE run_id = ?1 ORDER BY id")?;
+        let events = statement
+            .query_map(params![run_id], |row| {
+                let payload: String = row.get(1)?;
+                Ok(EventRecord {
+                    run_id: run_id.into(),
+                    event_type: row.get(0)?,
+                    payload: serde_json::from_str(&payload).map_err(to_sql_error)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(events)
+    }
+
+    pub fn record_terminal_event(&self, event: &EventRecord) -> Result<(), StoreError> {
+        self.connection.execute(
+            "INSERT INTO events (run_id, event_type, payload, created_at)
+             SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS (
+                SELECT 1 FROM events WHERE run_id = ?1 AND event_type = ?2
+                AND json_extract(payload, '$.turnId') = json_extract(?3, '$.turnId'))",
+            params![
+                event.run_id,
+                event.event_type,
+                serde_json::to_string(&event.payload)?,
+                now_string()
             ],
         )?;
         Ok(())

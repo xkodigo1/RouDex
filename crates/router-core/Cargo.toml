@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "fake-app-server"
+path = "tests/support/fake_app_server.rs"
+
 [dependencies]
 rusqlite.workspace = true
 serde.workspace = true

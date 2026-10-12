@@ -34,6 +34,8 @@ fn run() -> Result<(), String> {
         Some("task-plan") => task_plan(args.collect()),
         Some("task-approve") => task_approve(args.collect()),
         Some("task-run") => task_run(args.collect()),
+        Some("task-recover") => task_recover(args.collect()),
+        Some("task-retry") => task_retry(args.collect()),
         Some("task-status") => task_status(args.collect()),
         Some("install-hook") => install_hook(),
         Some("install-managed-hook") => install_managed_hook(),
@@ -102,6 +104,11 @@ fn task_run(args: Vec<String>) -> Result<(), String> {
     let task_id = args
         .first()
         .ok_or_else(|| "task-run requiere un taskId".to_owned())?;
+    if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
+        || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some()
+    {
+        return Err("task-run no puede invocarse desde un worker activo".to_owned());
+    }
     let store = RouterStore::open(RouterStore::default_path())
         .map_err(|error| format!("could not open local state: {error}"))?;
     let task = store
@@ -123,9 +130,37 @@ fn task_run(args: Vec<String>) -> Result<(), String> {
         return write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?);
     }
     let mut runtime =
-        LocalTaskRuntime::start(&task.definition.cwd).map_err(|error| error.to_string())?;
+        LocalTaskRuntime::start(&task.definition).map_err(|error| error.to_string())?;
     let receipt = TaskCoordinator::new(&store)
         .dispatch_task(task_id, &mut runtime)
+        .map_err(|error| error.to_string())?;
+    write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?)
+}
+
+fn task_recover(args: Vec<String>) -> Result<(), String> {
+    let task_id = args
+        .first()
+        .ok_or_else(|| "task-recover requiere un taskId".to_owned())?;
+    let reason = args
+        .get(1)
+        .map(String::as_str)
+        .unwrap_or("worker process interrupted");
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let receipt = TaskCoordinator::new(&store)
+        .recover_running_task(task_id, reason)
+        .map_err(|error| error.to_string())?;
+    write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?)
+}
+
+fn task_retry(args: Vec<String>) -> Result<(), String> {
+    let task_id = args
+        .first()
+        .ok_or_else(|| "task-retry requiere un taskId".to_owned())?;
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let receipt = TaskCoordinator::new(&store)
+        .retry_interrupted_task(task_id)
         .map_err(|error| error.to_string())?;
     write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?)
 }
@@ -562,6 +597,6 @@ fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|task-plan <manifest>|task-approve <taskId> [approved|denied]|task-run <taskId>|task-status <taskId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
+        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|task-plan <manifest>|task-approve <taskId> [approved|denied]|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
     );
 }

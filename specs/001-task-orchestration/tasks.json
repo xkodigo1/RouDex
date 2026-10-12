@@ -66,7 +66,8 @@
       "title": "Dispatch ready tasks through the local App Server",
       "prompt": "Implement the task coordinator that selects the assigned model and effort, starts or resumes a local App Server thread over stdio, executes ready tasks and persists route and run evidence.",
       "depends_on": ["T-002", "T-003"],
-      "status": "planned",
+      "status": "interrupted",
+      "execution": "roudex",
       "profile": "deep",
       "model": "gpt-6.1-sol",
       "effort": "high",
@@ -75,6 +76,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-core"] },
       "acceptance": ["The assigned profile resolves to the declared model and effort", "A ready task creates a thread and turn through stdio"],
+      "route_id": "6f3d9382-b7cc-49ad-9f61-6a332163271c",
+      "run_id": "f6dd27a6-ed1e-442c-a148-44695ee0b8ba",
+      "evidence": "Protocol test passes with a fake App Server; local App Server started with the assigned model but did not return a completed turn during integration validation and was recovered as interrupted.",
       "verify": "Protocol test with a fake App Server plus cargo test --workspace"
     },
     {
