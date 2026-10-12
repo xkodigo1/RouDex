@@ -31,7 +31,9 @@ fn run() -> Result<(), String> {
         Some("route-prompt") => route_prompt(args.collect()),
         Some("continue-run") => continue_run(args.collect()),
         Some("install-hook") => install_hook(),
+        Some("install-managed-hook") => install_managed_hook(),
         Some("uninstall-hook") => uninstall_hook(),
+        Some("uninstall-managed-hook") => uninstall_managed_hook(),
         Some("status") => status(),
         _ => {
             print_usage();
@@ -243,6 +245,51 @@ fn install_hook() -> Result<(), String> {
     write_hooks(&path, &document)
 }
 
+fn install_managed_hook() -> Result<(), String> {
+    let requirements = managed_requirements_path();
+    let managed_dir = managed_hook_dir();
+    let executable = env::current_exe()
+        .map_err(|error| format!("could not locate router executable: {error}"))?;
+    let managed_executable = managed_dir.join("router-cli.exe");
+
+    if requirements.exists() {
+        let contents = fs::read_to_string(&requirements)
+            .map_err(|error| format!("could not read managed requirements: {error}"))?;
+        if !contents.contains(MANAGED_MARKER) {
+            return Err(format!(
+                "managed requirements already exist at {}; preserve that policy and add the RouDex hook manually",
+                requirements.display()
+            ));
+        }
+    }
+
+    uninstall_hook()?;
+    fs::create_dir_all(&managed_dir)
+        .map_err(|error| format!("could not create managed hook directory: {error}"))?;
+    fs::copy(&executable, &managed_executable)
+        .map_err(|error| format!("could not install managed router executable: {error}"))?;
+
+    let command = format!("\"{}\" route-prompt", managed_executable.display());
+    let document = format!(
+        "{MANAGED_MARKER}\n\n[features]\nhooks = true\n\n[hooks]\nwindows_managed_dir = '{}'\n\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = '{}'\ncommand_windows = '{}'\ntimeout = 600\nstatusMessage = \"Routing desktop message\"\n",
+        managed_dir.display(),
+        command,
+        command
+    );
+    if let Some(parent) = requirements.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("could not create requirements directory: {error}"))?;
+    }
+    fs::write(&requirements, document)
+        .map_err(|error| format!("could not write managed requirements: {error}"))?;
+    eprintln!(
+        "Managed hook installed at {} using {}",
+        requirements.display(),
+        managed_executable.display()
+    );
+    Ok(())
+}
+
 fn uninstall_hook() -> Result<(), String> {
     let path = hooks_path();
     if !path.exists() {
@@ -266,6 +313,28 @@ fn uninstall_hook() -> Result<(), String> {
         });
     }
     write_hooks(&path, &document)
+}
+
+fn uninstall_managed_hook() -> Result<(), String> {
+    let requirements = managed_requirements_path();
+    if requirements.exists() {
+        let contents = fs::read_to_string(&requirements)
+            .map_err(|error| format!("could not read managed requirements: {error}"))?;
+        if !contents.contains(MANAGED_MARKER) {
+            return Err(format!(
+                "managed requirements at {} are not owned by RouDex",
+                requirements.display()
+            ));
+        }
+        fs::remove_file(&requirements)
+            .map_err(|error| format!("could not remove managed requirements: {error}"))?;
+    }
+    let managed_executable = managed_hook_dir().join("router-cli.exe");
+    if managed_executable.exists() {
+        fs::remove_file(&managed_executable)
+            .map_err(|error| format!("could not remove managed router executable: {error}"))?;
+    }
+    Ok(())
 }
 
 fn status() -> Result<(), String> {
@@ -302,6 +371,35 @@ fn hooks_path() -> PathBuf {
         .join("hooks.json")
 }
 
+const MANAGED_MARKER: &str = "# RouDex managed desktop routing hook";
+
+fn managed_requirements_path() -> PathBuf {
+    if let Some(path) = env::var_os("ROUDEX_CODEX_REQUIREMENTS_PATH") {
+        return PathBuf::from(path);
+    }
+    if cfg!(windows) {
+        env::var_os("ProgramData")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"))
+            .join("OpenAI")
+            .join("Codex")
+            .join("requirements.toml")
+    } else {
+        PathBuf::from("/etc/codex/requirements.toml")
+    }
+}
+
+fn managed_hook_dir() -> PathBuf {
+    if let Some(path) = env::var_os("ROUDEX_MANAGED_HOOK_DIR") {
+        return PathBuf::from(path);
+    }
+    env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".roudex"))
+        .join("RouDex")
+        .join("hooks")
+}
+
 fn hook_command() -> String {
     let executable = env::current_exe().unwrap_or_else(|_| PathBuf::from("router-cli"));
     format!("\"{}\" route-prompt", executable.display())
@@ -329,6 +427,6 @@ fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|install-hook|uninstall-hook|status>"
+        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
     );
 }

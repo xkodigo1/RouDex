@@ -150,3 +150,38 @@ fn hook_installation_is_idempotent() {
     );
     fs::remove_dir_all(root).expect("cleanup");
 }
+
+#[test]
+fn managed_hook_installation_is_explicit_and_idempotent() {
+    let root = temp_root("managed-hooks");
+    let requirements = root.join("requirements.toml");
+    let managed_dir = root.join("managed");
+    let requirements_value = requirements.to_string_lossy().to_string();
+    let managed_dir_value = managed_dir.to_string_lossy().to_string();
+    let environment = [
+        (
+            "ROUDEX_CODEX_REQUIREMENTS_PATH",
+            requirements_value.as_str(),
+        ),
+        ("ROUDEX_MANAGED_HOOK_DIR", managed_dir_value.as_str()),
+    ];
+
+    let first = run(&["install-managed-hook"], "", &root, &environment);
+    assert!(first.is_null());
+    let second = run(&["install-managed-hook"], "", &root, &environment);
+    assert!(second.is_null());
+
+    let document = fs::read_to_string(&requirements).expect("managed requirements");
+    assert!(document.contains("# RouDex managed desktop routing hook"));
+    assert!(document.contains("hooks = true"));
+    assert!(document.contains("[[hooks.UserPromptSubmit]]"));
+    assert!(document.contains("command_windows"));
+    assert!(managed_dir.join("router-cli.exe").exists());
+    assert!(!root.join("codex/hooks.json").exists());
+
+    let removed = run(&["uninstall-managed-hook"], "", &root, &environment);
+    assert!(removed.is_null());
+    assert!(!requirements.exists());
+    assert!(!managed_dir.join("router-cli.exe").exists());
+    fs::remove_dir_all(root).expect("cleanup");
+}

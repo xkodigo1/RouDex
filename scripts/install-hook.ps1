@@ -1,5 +1,6 @@
 param(
-    [switch]$Release
+    [switch]$Release,
+    [switch]$Managed
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,9 +32,10 @@ if (-not (Test-Path -LiteralPath $source)) {
 
 New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
 Copy-Item -LiteralPath $source -Destination $destination -Force
-& $destination install-hook
+$installMode = if ($Managed) { "install-managed-hook" } else { "install-hook" }
+& $destination $installMode
 if ($LASTEXITCODE -ne 0) {
     throw "No se pudo instalar el hook de mensajes."
 }
 
-Write-Output "Hook instalado: $destination"
+Write-Output "Hook instalado ($installMode): $destination"
