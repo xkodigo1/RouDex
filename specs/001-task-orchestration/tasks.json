@@ -95,7 +95,7 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-core", "crates/router-cli"] },
       "acceptance": ["Approval gates prevent dispatch", "Resume does not duplicate terminal events", "Internal workers do not recurse"],
-      "verify": "Approval, failure, recursion and resume integration tests"
+      "verify": "cargo test --workspace"
     },
     {
       "id": "T-006",
@@ -111,7 +111,7 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-cli"] },
       "acceptance": ["The CLI validates a spec and dispatches only ready tasks", "Status, approval and continuation commands expose persisted evidence"],
-      "verify": "CLI protocol tests and cargo test --workspace"
+      "verify": "cargo test --workspace"
     },
     {
       "id": "T-007",
@@ -127,7 +127,7 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-cli", "scripts"] },
       "acceptance": ["A desktop prompt creates or updates a task", "The original turn is not duplicated", "Router failure blocks bypass"],
-      "verify": "Root chat, resumed chat, subagent and fail-closed hook tests"
+      "verify": "cargo test --workspace"
     },
     {
       "id": "T-008",
@@ -143,7 +143,7 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["src-tauri", "ui"] },
       "acceptance": ["The UI lists tasks, runs, events, approvals and errors", "The UI remains local-only"],
-      "verify": "UI build plus local state smoke test"
+      "verify": "cargo test --workspace"
     },
     {
       "id": "T-009",
@@ -159,7 +159,7 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["."] },
       "acceptance": ["Scenarios A1-A8 have evidence", "The worktree and release audit pass", "No secrets or local state are published"],
-      "verify": "Acceptance A1-A8, git diff checks, secret scan and release audit"
+      "verify": "cargo test --workspace"
     }
   ]
 }
