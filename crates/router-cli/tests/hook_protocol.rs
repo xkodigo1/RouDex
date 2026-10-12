@@ -143,7 +143,7 @@ fn hook_installation_is_idempotent() {
     assert!(entries[0]["hooks"][0]["command"]
         .as_str()
         .expect("hook command")
-        .contains("route-prompt"));
+        .contains("route-prompt --record-only"));
     assert_eq!(
         entries[0]["hooks"][0]["commandWindows"],
         entries[0]["hooks"][0]["command"]
@@ -176,6 +176,7 @@ fn managed_hook_installation_is_explicit_and_idempotent() {
     assert!(document.contains("hooks = true"));
     assert!(document.contains("[[hooks.UserPromptSubmit]]"));
     assert!(document.contains("command_windows"));
+    assert!(document.contains("route-prompt --record-only"));
     assert!(managed_dir.join("router-cli.exe").exists());
     assert!(!root.join("codex/hooks.json").exists());
 

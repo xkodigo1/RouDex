@@ -51,8 +51,10 @@ disponible con `-Release` sin `-Managed`, pero depende de la revisión de
 confianza de hooks y no es la modalidad global recomendada.
 
 El adaptador devuelve `decision: block` si no puede registrar o enrutar un
-mensaje. El worker interno se marca mediante una variable de proceso local para
-evitar que el propio router se invoque recursivamente.
+mensaje. El hook de Desktop usa el modo de registro para que el turno original
+se ejecute una sola vez; la respuesta de clasificación llega al mismo turno
+mediante `additionalContext`. Las ejecuciones internas opcionales se marcan
+mediante una variable de proceso local para evitar recursión.
 
 ## Consultar estado
 

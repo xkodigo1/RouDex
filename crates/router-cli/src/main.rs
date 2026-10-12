@@ -269,7 +269,10 @@ fn install_managed_hook() -> Result<(), String> {
     fs::copy(&executable, &managed_executable)
         .map_err(|error| format!("could not install managed router executable: {error}"))?;
 
-    let command = format!("\"{}\" route-prompt", managed_executable.display());
+    let command = format!(
+        "\"{}\" route-prompt --record-only",
+        managed_executable.display()
+    );
     let document = format!(
         "{MANAGED_MARKER}\n\n[features]\nhooks = true\n\n[hooks]\nwindows_managed_dir = '{}'\n\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = '{}'\ncommand_windows = '{}'\ntimeout = 600\nstatusMessage = \"Routing desktop message\"\n",
         managed_dir.display(),
@@ -402,7 +405,7 @@ fn managed_hook_dir() -> PathBuf {
 
 fn hook_command() -> String {
     let executable = env::current_exe().unwrap_or_else(|_| PathBuf::from("router-cli"));
-    format!("\"{}\" route-prompt", executable.display())
+    format!("\"{}\" route-prompt --record-only", executable.display())
 }
 
 fn read_hooks(path: &PathBuf) -> Result<Value, String> {
