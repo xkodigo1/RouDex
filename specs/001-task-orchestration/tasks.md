@@ -12,7 +12,7 @@ eventos y evidencia de verificación del coordinador.
 | T-001 | completed | — | Crear spec, decisiones y manifest ejecutable |
 | T-002 | completed | T-001 | Modelar tasks, dependencias, aprobaciones y estados en dominio/SQLite |
 | T-003 | completed | T-002 | Validar y cargar el manifest JSON como grafo acíclico |
-| T-004 | failed | T-002, T-003 | El thread y el turn reales completaron; la verificación quedó fallida porque `verify` era una descripción en prosa y no un comando ejecutable |
+| T-004 | completed | T-002, T-003 | Coordinador ejecutado mediante App Server local con modelo/esfuerzo asignados, evidencia persistida y verificación de 28 pruebas |
 | T-005 | planned | T-004 | Persistir eventos, fallos, recursión e idempotencia de resume |
 | T-006 | planned | T-004, T-005 | Exponer comandos CLI de plan, ejecución, aprobación, estado y continuación |
 | T-007 | planned | T-006 | Integrar el adaptador de escritorio con creación/actualización de tasks |
@@ -26,7 +26,7 @@ eventos y evidencia de verificación del coordinador.
 | T-001 | `8f79c7d6-d072-4b54-b31a-758ab3a79041` | `a7845c37-bbfb-49f5-8132-024b5e64f911` | Revisión RouDex: grafo acíclico; detectó campos y gates faltantes | pendiente |
 | T-002 | bootstrap | — | `cargo test -p router-core` — 5 tests passed | pendiente |
 | T-003 | bootstrap | — | `cargo test --workspace` — 8 router-core tests passed | pendiente |
-| T-004 | `0b804590-4350-4706-935f-1e5fdb638c1a` | `7df4a224-db95-4e43-b5bd-eb9d8d05a949` | App Server local completó el thread y el turn asignados; `cargo test --workspace` y la prueba fake pasan; la verificación falló únicamente por ejecutar literalmente el texto descriptivo anterior de `verify` | pendiente |
+| T-004 | `9c51d6bb-e24a-4384-b420-44f6aa7e89d5` | `ab86fa49-4873-4863-9b69-2b9d6b2945cb` | App Server local completó el thread y el turn asignados; `cargo test --workspace` pasó con 28 pruebas; se conservaron eventos, modelo, esfuerzo y run_id | pendiente |
 | T-005 | — | — | pendiente | pendiente |
 | T-006 | — | — | pendiente | pendiente |
 | T-007 | — | — | pendiente | pendiente |

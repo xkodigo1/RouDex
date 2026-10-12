@@ -70,13 +70,24 @@ fn main() {
                 } else {
                     "interrupted"
                 };
+                let mut turns = json!([{
+                    "id": if matches!(scenario.as_str(), "resume-wrong-turn" | "resume-wrong-interrupted-turn") {
+                        "wrong-turn"
+                    } else {
+                        "fake-turn"
+                    },
+                    "status": if scenario == "resume-wrong-turn" { "completed" } else { status },
+                    "items": [{ "type": "agentMessage", "text": "recovered completion" }]
+                }]);
+                if scenario == "resume-empty-history" {
+                    turns = json!([]);
+                } else if scenario == "resume-missing-turn-id" {
+                    turns[0].as_object_mut().unwrap().remove("id");
+                }
                 respond(
                     &mut stdout,
                     json!({ "id": id, "result": { "thread": {
-                    "id": "fake-thread", "turns": [{
-                        "id": if scenario == "resume-wrong-turn" { "wrong-turn" } else { "fake-turn" },
-                        "status": if scenario == "resume-wrong-turn" { "completed" } else { status },
-                        "items": [{ "type": "agentMessage", "text": "recovered completion" }] }]
+                    "id": "fake-thread", "turns": turns
                 } } }),
                 );
             }

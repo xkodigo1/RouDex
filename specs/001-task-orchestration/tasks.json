@@ -66,7 +66,7 @@
       "title": "Dispatch ready tasks through the local App Server",
       "prompt": "Implement the task coordinator that selects the assigned model and effort, starts or resumes a local App Server thread over stdio, executes ready tasks and persists route and run evidence.",
       "depends_on": ["T-002", "T-003"],
-      "status": "failed",
+      "status": "completed",
       "execution": "roudex",
       "profile": "deep",
       "model": "gpt-6.1-sol",
@@ -76,9 +76,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-core"] },
       "acceptance": ["The assigned profile resolves to the declared model and effort", "A ready task creates a thread and turn through stdio"],
-      "route_id": "0b804590-4350-4706-935f-1e5fdb638c1a",
-      "run_id": "7df4a224-db95-4e43-b5bd-eb9d8d05a949",
-      "evidence": "El App Server local completó el thread y el turn asignados; la verificación falló porque el campo verify todavía describía pruebas en prosa y se intentó ejecutar literalmente como comando. La prueba fake y cargo test --workspace pasan.",
+      "route_id": "9c51d6bb-e24a-4384-b420-44f6aa7e89d5",
+      "run_id": "ab86fa49-4873-4863-9b69-2b9d6b2945cb",
+      "evidence": "El App Server local completó el thread y el turn asignados con el modelo y esfuerzo declarados; cargo test --workspace pasó con 28 pruebas y se persistieron route_id, run_id, thread_id, turn_id y eventos de protocolo.",
       "verify": "cargo test --workspace"
     },
     {

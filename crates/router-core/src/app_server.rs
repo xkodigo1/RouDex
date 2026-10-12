@@ -212,6 +212,15 @@ impl AppServerClient {
         task: &TaskDefinition,
         thread_id: &str,
     ) -> Result<Option<AppServerTurn>, AppServerError> {
+        self.resume_task_thread_for_turn(task, thread_id, None)
+    }
+
+    pub fn resume_task_thread_for_turn(
+        &mut self,
+        task: &TaskDefinition,
+        thread_id: &str,
+        expected_turn_id: Option<&str>,
+    ) -> Result<Option<AppServerTurn>, AppServerError> {
         let mut params = task_thread_params(task)?;
         params["threadId"] = json!(thread_id);
         // serviceName is a thread/start field, not a resume override.
@@ -229,6 +238,14 @@ impl AppServerClient {
         let turns = thread["turns"]
             .as_array()
             .ok_or_else(|| AppServerError::Protocol("resumed thread has no turn history".into()))?;
+        if expected_turn_id.is_some_and(|expected| {
+            turns.last().and_then(|turn| turn["id"].as_str()) != Some(expected)
+        }) {
+            return Err(AppServerError::Protocol(
+                "resumed history does not match the persisted turn; explicit recovery required"
+                    .into(),
+            ));
+        }
         match turns.last() {
             Some(turn) if turn["status"] == "completed" => Ok(Some(AppServerTurn {
                 thread_id: thread_id.into(),

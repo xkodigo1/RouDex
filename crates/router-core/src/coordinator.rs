@@ -50,6 +50,22 @@ pub trait TaskRuntime {
     ) -> Result<Option<RuntimeTurn>, String> {
         Err("runtime does not support thread resume".into())
     }
+    /// Resume only when history confirms the persisted turn identity. Runtimes
+    /// that return no completed turn must override this to validate interrupted history.
+    fn resume_thread_for_turn(
+        &mut self,
+        task: &TaskDefinition,
+        thread_id: &str,
+        expected_turn_id: Option<&str>,
+    ) -> Result<Option<RuntimeTurn>, String> {
+        let turn = self.resume_thread(task, thread_id)?;
+        if expected_turn_id.is_some_and(|expected| {
+            turn.as_ref().map(|turn| turn.turn_id.as_str()) != Some(expected)
+        }) {
+            return Err("runtime cannot confirm the persisted turn identity".into());
+        }
+        Ok(turn)
+    }
     fn run_turn_with_evidence(
         &mut self,
         task: &TaskDefinition,
@@ -106,8 +122,17 @@ impl TaskRuntime for LocalTaskRuntime {
         task: &TaskDefinition,
         thread_id: &str,
     ) -> Result<Option<RuntimeTurn>, String> {
+        self.resume_thread_for_turn(task, thread_id, None)
+    }
+
+    fn resume_thread_for_turn(
+        &mut self,
+        task: &TaskDefinition,
+        thread_id: &str,
+        expected_turn_id: Option<&str>,
+    ) -> Result<Option<RuntimeTurn>, String> {
         self.client()?
-            .resume_task_thread(task, thread_id)
+            .resume_task_thread_for_turn(task, thread_id, expected_turn_id)
             .map(|turn| turn.map(runtime_turn))
             .map_err(|error| error.to_string())
     }
@@ -588,6 +613,15 @@ impl<'a> TaskCoordinator<'a> {
             .store
             .get_task(&run.turn_id)?
             .ok_or_else(|| CoordinatorError::TaskNotFound(run.turn_id.clone()))?;
+        if self
+            .store
+            .latest_run_for_task(&stored.definition.id)?
+            .is_some_and(|latest| latest.run_id != run_id)
+        {
+            return Err(CoordinatorError::Runtime(
+                "run was superseded by a later dispatch; resume the latest run instead".into(),
+            ));
+        }
         if run.status != "interrupted" || stored.definition.status != TaskStatus::Interrupted {
             return self.existing_receipt(&stored.definition, "run is not interrupted");
         }
@@ -605,6 +639,17 @@ impl<'a> TaskCoordinator<'a> {
                 "run has no persisted thread; explicit recovery required".into(),
             )
         })?;
+        let latest_turn_id = events.iter().rev().find_map(|event| {
+            if event.event_type == "turn/started"
+                && event.payload["threadId"].as_str() == Some(thread_id.as_str())
+            {
+                event.payload["turn"]["id"]
+                    .as_str()
+                    .filter(|id| !id.is_empty())
+            } else {
+                None
+            }
+        });
         if task.approval != "not_required"
             && !self
                 .store
@@ -621,7 +666,7 @@ impl<'a> TaskCoordinator<'a> {
                 .definition;
             return self.existing_receipt(&task, "resume was already claimed");
         }
-        let recovered = match runtime.resume_thread(&task, &thread_id) {
+        let recovered = match runtime.resume_thread_for_turn(&task, &thread_id, latest_turn_id) {
             Ok(turn) => turn,
             Err(error) => {
                 self.store.set_task_status(&task.id, TaskStatus::Blocked)?;
@@ -649,13 +694,6 @@ impl<'a> TaskCoordinator<'a> {
         // A crash can happen after the terminal event is durable but before the
         // verification/status update. Never replay that turn, even if the server
         // history is incomplete. Only use evidence for the latest dispatched turn.
-        let latest_turn_id = events.iter().rev().find_map(|event| {
-            if event.event_type == "turn/started" {
-                event.payload["turn"]["id"].as_str()
-            } else {
-                None
-            }
-        });
         let persisted = events.iter().rev().find_map(|event| {
             let payload = &event.payload;
             let (turn_id, status, text) = match event.event_type.as_str() {

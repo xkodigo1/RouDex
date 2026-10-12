@@ -325,6 +325,9 @@ fn resume_reuses_run_and_thread_and_is_idempotent_after_completion() {
         "resume-completed",
         "resume-missing",
         "resume-wrong-turn",
+        "resume-wrong-interrupted-turn",
+        "resume-empty-history",
+        "resume-missing-turn-id",
     ] {
         let fixture = Fixture::new();
         let store = RouterStore::in_memory().unwrap();
@@ -348,13 +351,23 @@ fn resume_reuses_run_and_thread_and_is_idempotent_after_completion() {
         );
         assert_eq!(
             resumed.status,
-            if matches!(scenario, "resume-missing" | "resume-wrong-turn") {
-                TaskStatus::Blocked
-            } else {
+            if matches!(scenario, "success" | "resume-completed") {
                 TaskStatus::Completed
+            } else {
+                TaskStatus::Blocked
             }
         );
         let events_before = store.events_for_run(run_id).unwrap();
+        if resumed.status == TaskStatus::Blocked {
+            assert_eq!(
+                events_before
+                    .iter()
+                    .filter(|event| event.event_type == "thread.resume.failed")
+                    .count(),
+                1
+            );
+            assert!(fixture.requests("command/exec").is_empty());
+        }
         coordinator
             .resume_run(run_id, &mut fixture.runtime(scenario))
             .unwrap();
@@ -368,6 +381,83 @@ fn resume_reuses_run_and_thread_and_is_idempotent_after_completion() {
             .unwrap();
         assert!(receipts.iter().all(|r| r.status == TaskStatus::Blocked));
     }
+}
+
+#[test]
+fn superseded_interrupted_run_cannot_resume_or_change_the_current_run() {
+    let fixture = Fixture::new();
+    let store = RouterStore::in_memory().unwrap();
+    store.upsert_task("spec", &fixture.task("T-004")).unwrap();
+    let coordinator = TaskCoordinator::new(&store);
+    let first = coordinator
+        .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
+        .unwrap();
+    coordinator.retry_interrupted_task("T-004").unwrap();
+    let second = coordinator
+        .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
+        .unwrap();
+    assert_ne!(first.run_id, second.run_id);
+    let first_run_id = first.run_id.unwrap();
+    let second_run_id = second.run_id.unwrap();
+    let before = store.events_for_run(&first_run_id).unwrap();
+    let error = coordinator
+        .resume_run(&first_run_id, &mut fixture.runtime("success"))
+        .unwrap_err();
+    assert!(error.to_string().contains("superseded"));
+    assert!(fixture.requests("thread/resume").is_empty());
+    assert_eq!(fixture.requests("turn/start").len(), 2);
+    assert_eq!(store.events_for_run(&first_run_id).unwrap(), before);
+    assert_eq!(
+        store.get_run(&second_run_id).unwrap().unwrap().status,
+        "interrupted"
+    );
+    assert_eq!(
+        store.get_task("T-004").unwrap().unwrap().definition.status,
+        TaskStatus::Interrupted
+    );
+}
+
+#[test]
+fn resume_uses_the_immutable_assignment_when_the_manifest_changes() {
+    let fixture = Fixture::new();
+    let store = RouterStore::in_memory().unwrap();
+    let mut task = fixture.task("T-004");
+    store.upsert_task("spec", &task).unwrap();
+    let coordinator = TaskCoordinator::new(&store);
+    let first = coordinator
+        .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
+        .unwrap();
+    task.profile = "routine".into();
+    task.model = "gpt-6-luna".into();
+    task.effort = "medium".into();
+    task.prompt = "An unrelated new instruction".into();
+    task.verify = "An unrelated new verification".into();
+    store.upsert_task("spec", &task).unwrap();
+    let resumed = coordinator
+        .resume_run(
+            first.run_id.as_ref().unwrap(),
+            &mut fixture.runtime("success"),
+        )
+        .unwrap();
+    assert_eq!(resumed.status, TaskStatus::Completed);
+    assert_eq!(resumed.route_id, first.route_id);
+    assert_eq!(resumed.run_id, first.run_id);
+    let turns = fixture.requests("turn/start");
+    assert_eq!(turns[1]["message"]["params"]["model"], "gpt-6.1-sol");
+    assert_eq!(turns[1]["message"]["params"]["effort"], "high");
+    assert_eq!(
+        turns[1]["message"]["params"]["input"][0]["text"],
+        "Perform the local task"
+    );
+    let verification = fixture.requests("command/exec");
+    assert_eq!(
+        verification[0]["message"]["params"]["command"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap(),
+        "echo verified"
+    );
 }
 
 #[test]
