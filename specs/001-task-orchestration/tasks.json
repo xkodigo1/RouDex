@@ -46,7 +46,8 @@
       "title": "Validate the executable task graph",
       "prompt": "Add JSON manifest loading and validation for required fields, duplicate ids, missing dependencies and dependency cycles, with focused tests.",
       "depends_on": ["T-002"],
-      "status": "pending",
+      "status": "completed",
+      "execution": "bootstrap",
       "profile": "routine",
       "model": "gpt-6-luna",
       "effort": "medium",
@@ -55,6 +56,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-core"] },
       "acceptance": ["Duplicate ids, missing dependencies and cycles are rejected", "A valid manifest produces ready and blocked tasks"],
+      "evidence": "cargo test --workspace (8 router-core tests passed)",
+      "route_id": null,
+      "run_id": null,
       "verify": "cargo test --workspace"
     },
     {

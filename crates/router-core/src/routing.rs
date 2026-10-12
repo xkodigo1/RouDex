@@ -93,31 +93,42 @@ pub fn classify_prompt(prompt: &str) -> TaskClass {
 
 pub fn route_prompt(input: &RoutePromptInput) -> ModelRoute {
     match classify_prompt(&input.prompt) {
-        TaskClass::Micro => ModelRoute {
+        TaskClass::Micro => resolve_profile("micro").expect("built-in profile"),
+        TaskClass::Routine => resolve_profile("routine").expect("built-in profile"),
+        TaskClass::Standard => resolve_profile("standard").expect("built-in profile"),
+        TaskClass::Deep => resolve_profile("deep").expect("built-in profile"),
+        TaskClass::Frontier => resolve_profile("frontier").expect("built-in profile"),
+    }
+}
+
+pub fn resolve_profile(profile: &str) -> Option<ModelRoute> {
+    match profile {
+        "micro" => Some(ModelRoute {
             profile: "micro",
             model: "gpt-6-luna",
             effort: "low",
-        },
-        TaskClass::Routine => ModelRoute {
+        }),
+        "routine" => Some(ModelRoute {
             profile: "routine",
             model: "gpt-6-luna",
             effort: "medium",
-        },
-        TaskClass::Standard => ModelRoute {
+        }),
+        "standard" => Some(ModelRoute {
             profile: "standard",
             model: "gpt-6.1-sol",
             effort: "medium",
-        },
-        TaskClass::Deep => ModelRoute {
+        }),
+        "deep" => Some(ModelRoute {
             profile: "deep",
             model: "gpt-6.1-sol",
             effort: "high",
-        },
-        TaskClass::Frontier => ModelRoute {
+        }),
+        "frontier" => Some(ModelRoute {
             profile: "frontier",
             model: "gpt-6-astra",
             effort: "high",
-        },
+        }),
+        _ => None,
     }
 }
 

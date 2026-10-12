@@ -2,6 +2,7 @@ pub mod app_server;
 pub mod domain;
 pub mod persistence;
 pub mod routing;
+pub mod task_manifest;
 
 pub use app_server::{AppServerClient, AppServerConfig, AppServerError, AppServerTurn};
 pub use domain::{
@@ -10,3 +11,4 @@ pub use domain::{
 };
 pub use persistence::{RouterStore, StoreError};
 pub use routing::{classify_prompt, route_prompt, ModelRoute, TaskClass};
+pub use task_manifest::{ManifestError, TaskManifest};

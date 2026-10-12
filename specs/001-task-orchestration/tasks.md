@@ -2,16 +2,16 @@
 
 Las tasks de implementación deben despacharse mediante RouDex. T-001 es la
 task de definición de la especificación y se validó mediante el runtime actual
-como revisión de solo lectura. T-002 es el bootstrap explícito del
-almacenamiento que el coordinador necesita para existir; no se le inventa un
-`run_id`. Desde T-003, las tasks requieren `route_id`, `run_id`, eventos y
-evidencia de verificación del coordinador.
+como revisión de solo lectura. T-002 y T-003 son el bootstrap explícito del
+almacenamiento y la validación que el coordinador necesita para existir; no se
+les inventa un `run_id`. Desde T-004, las tasks requieren `route_id`, `run_id`,
+eventos y evidencia de verificación del coordinador.
 
 | ID | Estado | Depende de | Resultado |
 | --- | --- | --- | --- |
 | T-001 | completed | — | Crear spec, decisiones y manifest ejecutable |
 | T-002 | completed | T-001 | Modelar tasks, dependencias, aprobaciones y estados en dominio/SQLite |
-| T-003 | pending | T-002 | Validar y cargar el manifest JSON como grafo acíclico |
+| T-003 | completed | T-002 | Validar y cargar el manifest JSON como grafo acíclico |
 | T-004 | pending | T-002, T-003 | Coordinar dispatch real por App Server con modelo y esfuerzo asignados |
 | T-005 | pending | T-004 | Persistir eventos, fallos, recursión e idempotencia de resume |
 | T-006 | pending | T-004, T-005 | Exponer comandos CLI de plan, ejecución, aprobación, estado y continuación |
@@ -25,7 +25,7 @@ evidencia de verificación del coordinador.
 | --- | --- | --- | --- | --- |
 | T-001 | `8f79c7d6-d072-4b54-b31a-758ab3a79041` | `a7845c37-bbfb-49f5-8132-024b5e64f911` | Revisión RouDex: grafo acíclico; detectó campos y gates faltantes | pendiente |
 | T-002 | bootstrap | — | `cargo test -p router-core` — 5 tests passed | pendiente |
-| T-003 | — | — | pendiente | pendiente |
+| T-003 | bootstrap | — | `cargo test --workspace` — 8 router-core tests passed | pendiente |
 | T-004 | — | — | pendiente | pendiente |
 | T-005 | — | — | pendiente | pendiente |
 | T-006 | — | — | pendiente | pendiente |

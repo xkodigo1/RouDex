@@ -66,8 +66,8 @@ bloqueada.
 
 ## D011 — Bootstrap explícito del almacenamiento
 
-T-002 es la única excepción de bootstrap: crea el almacenamiento que el propio
-coordinador necesita para poder registrar y ejecutar tasks. Se valida con
-pruebas locales y queda identificada como `bootstrap`, sin inventar un
-`run_id`. Desde T-003, las units de implementación se deben despachar por
-RouDex y conservar su recibo y eventos.
+T-002 y T-003 son las units de bootstrap: crean el almacenamiento y la
+validación que el propio coordinador necesita para poder registrar y ejecutar
+tasks. Se validan con pruebas locales y quedan identificadas como `bootstrap`,
+sin inventar un `run_id`. Desde T-004, las units de implementación se deben
+despachar por RouDex y conservar su recibo y eventos.
