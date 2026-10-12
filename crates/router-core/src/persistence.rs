@@ -1,5 +1,8 @@
-use crate::domain::{EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, StoredRun};
-use rusqlite::{params, Connection};
+use crate::domain::{
+    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, StoredRun, StoredTask, TaskApproval,
+    TaskDefinition, TaskStatus,
+};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -9,6 +12,8 @@ pub enum StoreError {
     Database(#[from] rusqlite::Error),
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("invalid task transition from {from} to {to}")]
+    InvalidTaskTransition { from: String, to: String },
 }
 
 pub struct RouterStore {
@@ -76,9 +81,187 @@ impl RouterStore {
                  created_at TEXT NOT NULL
              );
              CREATE INDEX IF NOT EXISTS idx_events_run_id ON events(run_id);
-             CREATE INDEX IF NOT EXISTS idx_runs_session_id ON runs(session_id);",
+             CREATE INDEX IF NOT EXISTS idx_runs_session_id ON runs(session_id);
+             CREATE TABLE IF NOT EXISTS tasks (
+                 task_id TEXT PRIMARY KEY,
+                 spec_id TEXT NOT NULL,
+                 title TEXT NOT NULL,
+                 prompt TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 profile TEXT NOT NULL,
+                 model TEXT NOT NULL,
+                 effort TEXT NOT NULL,
+                 approval TEXT NOT NULL,
+                 scope TEXT NOT NULL,
+                 cwd TEXT NOT NULL,
+                 sandbox_type TEXT NOT NULL,
+                 writable_roots TEXT NOT NULL,
+                 acceptance TEXT NOT NULL,
+                 verify TEXT NOT NULL,
+                 created_at TEXT NOT NULL,
+                 updated_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS task_dependencies (
+                 task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+                 depends_on TEXT NOT NULL,
+                 PRIMARY KEY (task_id, depends_on)
+             );
+             CREATE INDEX IF NOT EXISTS idx_tasks_spec_id ON tasks(spec_id);
+             CREATE TABLE IF NOT EXISTS task_approvals (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+                 decision TEXT NOT NULL,
+                 reason TEXT,
+                 created_at TEXT NOT NULL
+             );",
         )?;
         Ok(())
+    }
+
+    pub fn upsert_task(
+        &self,
+        spec_id: &str,
+        definition: &TaskDefinition,
+    ) -> Result<(), StoreError> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let now = now_string();
+        transaction.execute(
+            "INSERT INTO tasks (
+                task_id, spec_id, title, prompt, status, profile, model, effort,
+                approval, scope, cwd, sandbox_type, writable_roots, acceptance,
+                verify, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16)
+             ON CONFLICT(task_id) DO UPDATE SET
+                spec_id = excluded.spec_id,
+                title = excluded.title,
+                prompt = excluded.prompt,
+                profile = excluded.profile,
+                model = excluded.model,
+                effort = excluded.effort,
+                approval = excluded.approval,
+                scope = excluded.scope,
+                cwd = excluded.cwd,
+                sandbox_type = excluded.sandbox_type,
+                writable_roots = excluded.writable_roots,
+                acceptance = excluded.acceptance,
+                verify = excluded.verify,
+                updated_at = excluded.updated_at",
+            params![
+                definition.id,
+                spec_id,
+                definition.title,
+                definition.prompt,
+                task_status_name(&definition.status),
+                definition.profile,
+                definition.model,
+                definition.effort,
+                definition.approval,
+                serde_json::to_string(&definition.scope)?,
+                definition.cwd,
+                definition.sandbox.kind,
+                serde_json::to_string(&definition.sandbox.writable_roots)?,
+                serde_json::to_string(&definition.acceptance)?,
+                definition.verify,
+                now,
+            ],
+        )?;
+        transaction.execute(
+            "DELETE FROM task_dependencies WHERE task_id = ?1",
+            params![definition.id],
+        )?;
+        for dependency in &definition.depends_on {
+            transaction.execute(
+                "INSERT INTO task_dependencies (task_id, depends_on) VALUES (?1, ?2)",
+                params![definition.id, dependency],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn get_task(&self, task_id: &str) -> Result<Option<StoredTask>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT task_id, spec_id, title, prompt, status, profile, model, effort,
+                    approval, scope, cwd, sandbox_type, writable_roots, acceptance, verify
+             FROM tasks WHERE task_id = ?1",
+        )?;
+        statement
+            .query_row(params![task_id], |row| {
+                let id: String = row.get(0)?;
+                let spec_id: String = row.get(1)?;
+                let depends_on = self.dependencies_for(&id).map_err(to_sql_error)?;
+                let status: String = row.get(4)?;
+                Ok(StoredTask {
+                    spec_id,
+                    definition: TaskDefinition {
+                        id,
+                        title: row.get(2)?,
+                        prompt: row.get(3)?,
+                        depends_on,
+                        status: parse_task_status(&status).map_err(to_sql_error)?,
+                        profile: row.get(5)?,
+                        model: row.get(6)?,
+                        effort: row.get(7)?,
+                        approval: row.get(8)?,
+                        scope: serde_json::from_str(&row.get::<_, String>(9)?)
+                            .map_err(to_sql_error)?,
+                        cwd: row.get(10)?,
+                        sandbox: crate::domain::TaskSandbox {
+                            kind: row.get(11)?,
+                            writable_roots: serde_json::from_str(&row.get::<_, String>(12)?)
+                                .map_err(to_sql_error)?,
+                        },
+                        acceptance: serde_json::from_str(&row.get::<_, String>(13)?)
+                            .map_err(to_sql_error)?,
+                        verify: row.get(14)?,
+                    },
+                })
+            })
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn set_task_status(&self, task_id: &str, next: TaskStatus) -> Result<(), StoreError> {
+        let current = self
+            .get_task(task_id)?
+            .ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)?
+            .definition
+            .status;
+        if !current.can_transition_to(&next) {
+            return Err(StoreError::InvalidTaskTransition {
+                from: task_status_name(&current).to_owned(),
+                to: task_status_name(&next).to_owned(),
+            });
+        }
+        self.connection.execute(
+            "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
+            params![task_status_name(&next), now_string(), task_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_task_approval(&self, approval: &TaskApproval) -> Result<(), StoreError> {
+        self.connection.execute(
+            "INSERT INTO task_approvals (task_id, decision, reason, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                approval.task_id,
+                approval.decision,
+                approval.reason,
+                now_string()
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn dependencies_for(&self, task_id: &str) -> Result<Vec<String>, rusqlite::Error> {
+        let mut statement = self.connection.prepare(
+            "SELECT depends_on FROM task_dependencies WHERE task_id = ?1 ORDER BY depends_on",
+        )?;
+        let dependencies = statement
+            .query_map(params![task_id], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(dependencies)
     }
 
     pub fn record_route(
@@ -180,8 +363,6 @@ impl RouterStore {
     }
 }
 
-use rusqlite::OptionalExtension;
-
 fn now_string() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -191,10 +372,36 @@ fn now_string() -> String {
         .to_string()
 }
 
+fn task_status_name(status: &TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Planned => "planned",
+        TaskStatus::Ready => "ready",
+        TaskStatus::AwaitingApproval => "awaiting_approval",
+        TaskStatus::Running => "running",
+        TaskStatus::Completed => "completed",
+        TaskStatus::Failed => "failed",
+        TaskStatus::Blocked => "blocked",
+        TaskStatus::Interrupted => "interrupted",
+    }
+}
+
+fn parse_task_status(value: &str) -> Result<TaskStatus, serde_json::Error> {
+    serde_json::from_value(serde_json::Value::String(value.to_owned()))
+}
+
+fn to_sql_error<E>(error: E) -> rusqlite::Error
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{RoutePromptInput, RouteReceipt, RouteStatus};
+    use crate::domain::{
+        RoutePromptInput, RouteReceipt, RouteStatus, TaskDefinition, TaskSandbox, TaskStatus,
+    };
 
     #[test]
     fn persists_route_and_events() {
@@ -223,5 +430,85 @@ mod tests {
             })
             .expect("event");
         assert_eq!(store.count_runs().expect("count"), 1);
+    }
+
+    #[test]
+    fn persists_tasks_dependencies_and_approvals() {
+        let store = RouterStore::in_memory().expect("store");
+        let task = TaskDefinition {
+            id: "T-002".to_owned(),
+            title: "Persist tasks".to_owned(),
+            prompt: "Implement persistence".to_owned(),
+            depends_on: vec!["T-001".to_owned()],
+            status: TaskStatus::Ready,
+            profile: "standard".to_owned(),
+            model: "gpt-6.1-sol".to_owned(),
+            effort: "medium".to_owned(),
+            approval: "manual".to_owned(),
+            scope: vec!["crates/router-core".to_owned()],
+            cwd: ".".to_owned(),
+            sandbox: TaskSandbox {
+                kind: "workspaceWrite".to_owned(),
+                writable_roots: vec!["crates/router-core".to_owned()],
+            },
+            acceptance: vec!["records persist".to_owned()],
+            verify: "cargo test --workspace".to_owned(),
+        };
+        store
+            .upsert_task("001-task-orchestration", &task)
+            .expect("task");
+        let stored = store
+            .get_task("T-002")
+            .expect("read task")
+            .expect("task exists");
+        assert_eq!(stored.definition.depends_on, vec!["T-001"]);
+        store
+            .record_task_approval(&TaskApproval {
+                task_id: "T-002".to_owned(),
+                decision: "approved".to_owned(),
+                reason: Some("local test".to_owned()),
+            })
+            .expect("approval");
+        store
+            .set_task_status("T-002", TaskStatus::Running)
+            .expect("running transition");
+        assert_eq!(
+            store
+                .get_task("T-002")
+                .expect("read task")
+                .expect("task")
+                .definition
+                .status,
+            TaskStatus::Running
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_task_transition() {
+        let store = RouterStore::in_memory().expect("store");
+        let task = TaskDefinition {
+            id: "T-003".to_owned(),
+            title: "Transition".to_owned(),
+            prompt: "test".to_owned(),
+            depends_on: vec![],
+            status: TaskStatus::Planned,
+            profile: "routine".to_owned(),
+            model: "gpt-6-luna".to_owned(),
+            effort: "medium".to_owned(),
+            approval: "not_required".to_owned(),
+            scope: vec![".".to_owned()],
+            cwd: ".".to_owned(),
+            sandbox: TaskSandbox {
+                kind: "readOnly".to_owned(),
+                writable_roots: vec![],
+            },
+            acceptance: vec!["test".to_owned()],
+            verify: "cargo test".to_owned(),
+        };
+        store.upsert_task("spec", &task).expect("task");
+        let error = store
+            .set_task_status("T-003", TaskStatus::Completed)
+            .expect_err("invalid transition");
+        assert!(matches!(error, StoreError::InvalidTaskTransition { .. }));
     }
 }

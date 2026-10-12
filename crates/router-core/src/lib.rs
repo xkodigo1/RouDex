@@ -4,6 +4,9 @@ pub mod persistence;
 pub mod routing;
 
 pub use app_server::{AppServerClient, AppServerConfig, AppServerError, AppServerTurn};
-pub use domain::{EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun};
+pub use domain::{
+    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
+    TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,
+};
 pub use persistence::{RouterStore, StoreError};
 pub use routing::{classify_prompt, route_prompt, ModelRoute, TaskClass};

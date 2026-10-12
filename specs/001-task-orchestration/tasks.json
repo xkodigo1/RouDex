@@ -26,7 +26,8 @@
       "title": "Model executable tasks and persistence",
       "prompt": "Implement the domain and SQLite persistence required by specification 001 for tasks, dependencies, approvals, statuses, runs and events. Preserve existing behavior and add focused tests.",
       "depends_on": ["T-001"],
-      "status": "ready",
+      "status": "completed",
+      "execution": "bootstrap",
       "profile": "standard",
       "model": "gpt-6.1-sol",
       "effort": "medium",
@@ -35,6 +36,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-core"] },
       "acceptance": ["Task, dependency, approval and lifecycle records persist", "Invalid state transitions are rejected"],
+      "evidence": "cargo test -p router-core (5 passed)",
+      "route_id": null,
+      "run_id": null,
       "verify": "cargo test --workspace"
     },
     {

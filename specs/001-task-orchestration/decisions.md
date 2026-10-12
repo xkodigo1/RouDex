@@ -63,3 +63,11 @@ La respuesta del modelo, un `runId` o un evento de finalización no convierten
 por sí solos una task en `completed`. El coordinador debe persistir el
 resultado de `verify`; una task sin evidencia permanece pendiente, fallida o
 bloqueada.
+
+## D011 — Bootstrap explícito del almacenamiento
+
+T-002 es la única excepción de bootstrap: crea el almacenamiento que el propio
+coordinador necesita para poder registrar y ejecutar tasks. Se valida con
+pruebas locales y queda identificada como `bootstrap`, sin inventar un
+`run_id`. Desde T-003, las units de implementación se deben despachar por
+RouDex y conservar su recibo y eventos.
