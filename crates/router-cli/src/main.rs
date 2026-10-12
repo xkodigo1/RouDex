@@ -12,7 +12,10 @@ use uuid::Uuid;
 fn main() {
     let command = env::args().nth(1);
     if let Err(error) = run() {
-        if matches!(command.as_deref(), Some("route-prompt") | Some("continue-run")) {
+        if matches!(
+            command.as_deref(),
+            Some("route-prompt") | Some("continue-run")
+        ) {
             let _ = write_block(&format!("Enrutamiento rechazado: {error}"));
             return;
         } else {
