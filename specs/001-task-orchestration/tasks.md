@@ -26,7 +26,7 @@ eventos y evidencia de verificación del coordinador.
 | T-001 | `8f79c7d6-d072-4b54-b31a-758ab3a79041` | `a7845c37-bbfb-49f5-8132-024b5e64f911` | Revisión RouDex: grafo acíclico; detectó campos y gates faltantes | pendiente |
 | T-002 | bootstrap | — | `cargo test -p router-core` — 5 tests passed | pendiente |
 | T-003 | bootstrap | — | `cargo test --workspace` — 8 router-core tests passed | pendiente |
-| T-004 | `9c51d6bb-e24a-4384-b420-44f6aa7e89d5` | `ab86fa49-4873-4863-9b69-2b9d6b2945cb` | App Server local completó el thread y el turn asignados; `cargo test --workspace` pasó con 28 pruebas; se conservaron eventos, modelo, esfuerzo y run_id | pendiente |
+| T-004 | `9c51d6bb-e24a-4384-b420-44f6aa7e89d5` | `ab86fa49-4873-4863-9b69-2b9d6b2945cb` | App Server local completó el thread y el turn asignados; `cargo test --workspace` pasó con 28 pruebas; se conservaron eventos, modelo, esfuerzo y run_id | `6cd5669` |
 | T-005 | — | — | pendiente | pendiente |
 | T-006 | — | — | pendiente | pendiente |
 | T-007 | — | — | pendiente | pendiente |
