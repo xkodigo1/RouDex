@@ -144,5 +144,9 @@ fn hook_installation_is_idempotent() {
         .as_str()
         .expect("hook command")
         .contains("route-prompt"));
+    assert_eq!(
+        entries[0]["hooks"][0]["commandWindows"],
+        entries[0]["hooks"][0]["command"]
+    );
     fs::remove_dir_all(root).expect("cleanup");
 }

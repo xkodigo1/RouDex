@@ -235,6 +235,7 @@ fn install_hook() -> Result<(), String> {
         "hooks": [{
             "type": "command",
             "command": command,
+            "commandWindows": command,
             "timeout": 600,
             "statusMessage": "Routing desktop message"
         }]
@@ -254,9 +255,11 @@ fn uninstall_hook() -> Result<(), String> {
                 .as_array()
                 .map(|handlers| {
                     handlers.iter().any(|handler| {
-                        handler["command"]
-                            .as_str()
-                            .is_some_and(|value| value.contains("route-prompt"))
+                        ["command", "commandWindows"].iter().any(|field| {
+                            handler[*field]
+                                .as_str()
+                                .is_some_and(|value| value.contains("route-prompt"))
+                        })
                     })
                 })
                 .unwrap_or(false)
