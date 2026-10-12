@@ -10,3 +10,6 @@ path = "src/lib.rs"
 
 [dependencies]
 router-core = { path = "../crates/router-core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }

@@ -11,3 +11,4 @@ out/
 .vite/
 target/
 src-tauri/target/
+src-tauri/gen/
