@@ -1,6 +1,7 @@
 use router_core::{
-    AppServerClient, AppServerConfig, EventRecord, RoutePromptInput, RouteReceipt, RouteStatus,
-    RouterStore,
+    AppServerClient, AppServerConfig, EventRecord, LocalTaskRuntime, RoutePromptInput,
+    RouteReceipt, RouteStatus, RouterStore, RuntimeTurn, TaskApproval, TaskCoordinator,
+    TaskDefinition, TaskManifest, TaskRuntime, TaskStatus,
 };
 use serde_json::{json, Value};
 use std::env;
@@ -30,6 +31,10 @@ fn run() -> Result<(), String> {
     match args.next().as_deref() {
         Some("route-prompt") => route_prompt(args.collect()),
         Some("continue-run") => continue_run(args.collect()),
+        Some("task-plan") => task_plan(args.collect()),
+        Some("task-approve") => task_approve(args.collect()),
+        Some("task-run") => task_run(args.collect()),
+        Some("task-status") => task_status(args.collect()),
         Some("install-hook") => install_hook(),
         Some("install-managed-hook") => install_managed_hook(),
         Some("uninstall-hook") => uninstall_hook(),
@@ -40,6 +45,118 @@ fn run() -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+fn task_plan(args: Vec<String>) -> Result<(), String> {
+    let manifest_path = args
+        .first()
+        .ok_or_else(|| "task-plan requiere la ruta de un manifest JSON".to_owned())?;
+    let manifest = TaskManifest::load(manifest_path).map_err(|error| error.to_string())?;
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    TaskCoordinator::new(&store)
+        .import_manifest(&manifest)
+        .map_err(|error| error.to_string())?;
+    write_json(&json!({
+        "specId": manifest.spec_id,
+        "taskCount": manifest.tasks.len(),
+        "readyTaskIds": manifest.ready_tasks().iter().map(|task| task.id.clone()).collect::<Vec<_>>()
+    }))
+}
+
+fn task_approve(args: Vec<String>) -> Result<(), String> {
+    let task_id = args
+        .first()
+        .ok_or_else(|| "task-approve requiere un taskId".to_owned())?;
+    let decision = args.get(1).map(String::as_str).unwrap_or("approved");
+    if !matches!(decision, "approved" | "denied") {
+        return Err("la decisión debe ser approved o denied".to_owned());
+    }
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let task = store
+        .get_task(task_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("task no encontrada: {task_id}"))?;
+    store
+        .record_task_approval(&TaskApproval {
+            task_id: task_id.to_owned(),
+            decision: decision.to_owned(),
+            reason: Some("explicit CLI decision".to_owned()),
+        })
+        .map_err(|error| error.to_string())?;
+    if task.definition.status == TaskStatus::AwaitingApproval {
+        let next = if decision == "approved" {
+            TaskStatus::Ready
+        } else {
+            TaskStatus::Blocked
+        };
+        store
+            .set_task_status(task_id, next)
+            .map_err(|error| error.to_string())?;
+    }
+    write_json(&json!({ "taskId": task_id, "decision": decision }))
+}
+
+fn task_run(args: Vec<String>) -> Result<(), String> {
+    let task_id = args
+        .first()
+        .ok_or_else(|| "task-run requiere un taskId".to_owned())?;
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let task = store
+        .get_task(task_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("task no encontrada: {task_id}"))?;
+    let needs_approval = task.definition.approval != "not_required"
+        && store
+            .latest_task_approval(task_id)
+            .map_err(|error| error.to_string())?
+            .as_ref()
+            .map(|approval| approval.decision.as_str())
+            != Some("approved");
+    if needs_approval {
+        let mut probe = ApprovalProbe;
+        let receipt = TaskCoordinator::new(&store)
+            .dispatch_task(task_id, &mut probe)
+            .map_err(|error| error.to_string())?;
+        return write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?);
+    }
+    let mut runtime =
+        LocalTaskRuntime::start(&task.definition.cwd).map_err(|error| error.to_string())?;
+    let receipt = TaskCoordinator::new(&store)
+        .dispatch_task(task_id, &mut runtime)
+        .map_err(|error| error.to_string())?;
+    write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?)
+}
+
+struct ApprovalProbe;
+
+impl TaskRuntime for ApprovalProbe {
+    fn start_thread(&mut self, _task: &TaskDefinition) -> Result<String, String> {
+        Err("approval probe must not start a thread".to_owned())
+    }
+
+    fn run_turn(
+        &mut self,
+        _task: &TaskDefinition,
+        _thread_id: &str,
+    ) -> Result<RuntimeTurn, String> {
+        Err("approval probe must not run a turn".to_owned())
+    }
+}
+
+fn task_status(args: Vec<String>) -> Result<(), String> {
+    let task_id = args
+        .first()
+        .ok_or_else(|| "task-status requiere un taskId".to_owned())?;
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let task = store
+        .get_task(task_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("task no encontrada: {task_id}"))?;
+    write_json(&serde_json::to_value(task).map_err(|error| error.to_string())?)
 }
 
 fn continue_run(args: Vec<String>) -> Result<(), String> {
@@ -445,6 +562,6 @@ fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
+        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|task-plan <manifest>|task-approve <taskId> [approved|denied]|task-run <taskId>|task-status <taskId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
     );
 }

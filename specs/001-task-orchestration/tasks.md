@@ -12,12 +12,12 @@ eventos y evidencia de verificación del coordinador.
 | T-001 | completed | — | Crear spec, decisiones y manifest ejecutable |
 | T-002 | completed | T-001 | Modelar tasks, dependencias, aprobaciones y estados en dominio/SQLite |
 | T-003 | completed | T-002 | Validar y cargar el manifest JSON como grafo acíclico |
-| T-004 | pending | T-002, T-003 | Coordinar dispatch real por App Server con modelo y esfuerzo asignados |
-| T-005 | pending | T-004 | Persistir eventos, fallos, recursión e idempotencia de resume |
-| T-006 | pending | T-004, T-005 | Exponer comandos CLI de plan, ejecución, aprobación, estado y continuación |
-| T-007 | pending | T-006 | Integrar el adaptador de escritorio con creación/actualización de tasks |
-| T-008 | pending | T-006 | Conectar la UI local al estado de tasks, runs, eventos y aprobaciones |
-| T-009 | pending | T-005, T-006, T-007, T-008 | Ejecutar aceptación A1–A8 y publicar milestone |
+| T-004 | planned | T-002, T-003 | Coordinar dispatch real por App Server con modelo y esfuerzo asignados |
+| T-005 | planned | T-004 | Persistir eventos, fallos, recursión e idempotencia de resume |
+| T-006 | planned | T-004, T-005 | Exponer comandos CLI de plan, ejecución, aprobación, estado y continuación |
+| T-007 | planned | T-006 | Integrar el adaptador de escritorio con creación/actualización de tasks |
+| T-008 | planned | T-006 | Conectar la UI local al estado de tasks, runs, eventos y aprobaciones |
+| T-009 | planned | T-005, T-006, T-007, T-008 | Ejecutar aceptación A1–A8 y publicar milestone |
 
 ## Registro de ejecución
 

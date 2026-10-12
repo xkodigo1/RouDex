@@ -125,6 +125,73 @@ fn internal_worker_bypasses_the_hook_once() {
 }
 
 #[test]
+fn task_plan_imports_manifest_and_reports_ready_tasks() {
+    let root = temp_root("task-plan");
+    let manifest_path = root.join("tasks.json");
+    let manifest = serde_json::json!({
+        "spec_id": "spec-test",
+        "title": "Task test",
+        "version": 1,
+        "tasks": [
+            {
+                "id": "T-001",
+                "title": "Foundation",
+                "prompt": "Prepare the foundation",
+                "depends_on": [],
+                "status": "completed",
+                "profile": "routine",
+                "model": "gpt-6-luna",
+                "effort": "medium",
+                "approval": "not_required",
+                "scope": ["crates/router-core"],
+                "cwd": ".",
+                "sandbox": {"type": "readOnly", "writable_roots": []},
+                "acceptance": ["foundation exists"],
+                "verify": "cargo test"
+            },
+            {
+                "id": "T-002",
+                "title": "Next",
+                "prompt": "Implement the next task",
+                "depends_on": ["T-001"],
+                "status": "planned",
+                "profile": "standard",
+                "model": "gpt-6.1-sol",
+                "effort": "medium",
+                "approval": "manual",
+                "scope": ["crates/router-core"],
+                "cwd": ".",
+                "sandbox": {"type": "workspaceWrite", "writable_roots": ["crates/router-core"]},
+                "acceptance": ["next exists"],
+                "verify": "cargo test"
+            }
+        ]
+    });
+    fs::create_dir_all(&root).expect("manifest directory");
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec(&manifest).expect("manifest JSON"),
+    )
+    .expect("manifest");
+    let manifest_arg = manifest_path.to_string_lossy().to_string();
+    let response = run(&["task-plan", manifest_arg.as_str()], "", &root, &[]);
+    assert_eq!(response["specId"], "spec-test");
+    assert_eq!(response["taskCount"], 2);
+    assert_eq!(response["readyTaskIds"], serde_json::json!(["T-002"]));
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).expect("state store");
+    assert_eq!(
+        store
+            .get_task("T-002")
+            .expect("task")
+            .expect("exists")
+            .spec_id,
+        "spec-test"
+    );
+    drop(store);
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
 fn hook_installation_is_idempotent() {
     let root = temp_root("hooks");
     let first = run(&["install-hook"], "", &root, &[]);
