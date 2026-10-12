@@ -14,11 +14,19 @@ fn main() {
         }
         let message: Value = serde_json::from_str(&line).expect("fake app server request");
         if let Some(path) = &log_path {
-            let mut log = OpenOptions::new().create(true).append(true).open(path).expect("request log");
-            serde_json::to_writer(&mut log, &json!({ "message": message,
-                "internal": std::env::var("ROUDEX_ROUTER_INTERNAL").ok(),
-                "activeTask": std::env::var("ROUDEX_ACTIVE_TASK_ID").ok()
-            })).expect("log request");
+            let mut log = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .expect("request log");
+            serde_json::to_writer(
+                &mut log,
+                &json!({ "message": message,
+                    "internal": std::env::var("ROUDEX_ROUTER_INTERNAL").ok(),
+                    "activeTask": std::env::var("ROUDEX_ACTIVE_TASK_ID").ok()
+                }),
+            )
+            .expect("log request");
             writeln!(log).expect("log newline");
         }
         let method = message["method"].as_str().unwrap_or_default();
@@ -31,8 +39,12 @@ fn main() {
             "initialized" => {}
             "thread/start" => {
                 assert_eq!(message["params"]["model"], "gpt-6.1-sol");
+                assert_eq!(message["params"]["sandbox"], "workspace-write");
                 if scenario == "model-rejected" {
-                    respond(&mut stdout, json!({ "id": id, "error": { "message": "assigned model unavailable" } }));
+                    respond(
+                        &mut stdout,
+                        json!({ "id": id, "error": { "message": "assigned model unavailable" } }),
+                    );
                     continue;
                 }
                 respond(
@@ -42,24 +54,40 @@ fn main() {
             }
             "thread/resume" => {
                 assert_eq!(message["params"]["model"], "gpt-6.1-sol");
-                assert_eq!(message["params"]["config"]["model_reasoning_effort"], "high");
+                assert_eq!(
+                    message["params"]["config"]["model_reasoning_effort"],
+                    "high"
+                );
                 if scenario == "resume-missing" {
-                    respond(&mut stdout, json!({ "id": id, "error": { "message": "thread not found" } }));
+                    respond(
+                        &mut stdout,
+                        json!({ "id": id, "error": { "message": "thread not found" } }),
+                    );
                     continue;
                 }
-                let status = if scenario == "resume-completed" { "completed" } else { "interrupted" };
-                respond(&mut stdout, json!({ "id": id, "result": { "thread": {
+                let status = if scenario == "resume-completed" {
+                    "completed"
+                } else {
+                    "interrupted"
+                };
+                respond(
+                    &mut stdout,
+                    json!({ "id": id, "result": { "thread": {
                     "id": "fake-thread", "turns": [{ "id": "fake-turn", "status": status,
                         "items": [{ "type": "agentMessage", "text": "recovered completion" }] }]
-                } } }));
+                } } }),
+                );
             }
             "turn/start" => {
                 assert_eq!(message["params"]["model"], "gpt-6.1-sol");
                 assert_eq!(message["params"]["effort"], "high");
                 // Interleaved notifications may arrive before the request response.
-                respond(&mut stdout, json!({ "method": "item/agentMessage/delta", "params": {
-                    "threadId": "unrelated-thread", "turnId": "fake-turn", "delta": "ignore me"
-                }}));
+                respond(
+                    &mut stdout,
+                    json!({ "method": "item/agentMessage/delta", "params": {
+                        "threadId": "unrelated-thread", "turnId": "fake-turn", "delta": "ignore me"
+                    }}),
+                );
                 respond(
                     &mut stdout,
                     json!({ "id": id, "result": { "turn": { "id": "fake-turn" } } }),
@@ -67,12 +95,18 @@ fn main() {
                 if scenario == "disconnect" {
                     break;
                 }
-                respond(&mut stdout, json!({ "method": "turn/completed", "params": {
-                    "threadId": "fake-thread", "turn": { "id": "other-turn", "status": "completed" }
-                }}));
-                respond(&mut stdout, json!({ "method": "turn/completed", "params": {
-                    "turn": { "status": "completed" }
-                }}));
+                respond(
+                    &mut stdout,
+                    json!({ "method": "turn/completed", "params": {
+                        "threadId": "fake-thread", "turn": { "id": "other-turn", "status": "completed" }
+                    }}),
+                );
+                respond(
+                    &mut stdout,
+                    json!({ "method": "turn/completed", "params": {
+                        "turn": { "status": "completed" }
+                    }}),
+                );
                 respond(
                     &mut stdout,
                     json!({
@@ -91,10 +125,13 @@ fn main() {
                     }),
                 );
             }
-            "command/exec" => respond(&mut stdout, json!({ "id": id, "result": {
-                "exitCode": if scenario == "verify-failed" { 1 } else { 0 },
-                "stdout": "verification output", "stderr": ""
-            }})),
+            "command/exec" => respond(
+                &mut stdout,
+                json!({ "id": id, "result": {
+                    "exitCode": if scenario == "verify-failed" { 1 } else { 0 },
+                    "stdout": "verification output", "stderr": ""
+                }}),
+            ),
             _ => panic!("unexpected app server method: {method}"),
         }
     }

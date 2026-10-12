@@ -149,7 +149,7 @@ impl AppServerClient {
                 "model": model,
                 "cwd": cwd,
                 "approvalPolicy": approval_policy,
-                "sandboxPolicy": sandbox_policy(sandbox),
+                "sandbox": sandbox,
                 "serviceName": "roudex"
             }
         }))?;
@@ -215,7 +215,10 @@ impl AppServerClient {
         let mut params = task_thread_params(task)?;
         params["threadId"] = json!(thread_id);
         // serviceName is a thread/start field, not a resume override.
-        params.as_object_mut().expect("thread parameters").remove("serviceName");
+        params
+            .as_object_mut()
+            .expect("thread parameters")
+            .remove("serviceName");
         let response = self.request("thread/resume", params)?;
         let thread = &response["result"]["thread"];
         if thread["id"].as_str() != Some(thread_id) {

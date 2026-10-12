@@ -490,8 +490,13 @@ impl<'a> TaskCoordinator<'a> {
             let mut next = None;
             for task in self.store.tasks_for_spec(spec_id)? {
                 if !visited.contains(&task.id)
-                    && matches!(task.status, TaskStatus::Planned | TaskStatus::Ready
-                        | TaskStatus::Blocked | TaskStatus::AwaitingApproval)
+                    && matches!(
+                        task.status,
+                        TaskStatus::Planned
+                            | TaskStatus::Ready
+                            | TaskStatus::Blocked
+                            | TaskStatus::AwaitingApproval
+                    )
                     && self.store.dependencies_completed(&task.id)?
                 {
                     next = Some(task);
