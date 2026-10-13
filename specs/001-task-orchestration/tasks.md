@@ -16,7 +16,7 @@ eventos y evidencia de verificación del coordinador.
 | T-005 | completed | T-004 | Gates de aprobación, fallos fail-closed, recursión e idempotencia de `runId` implementados y verificados con 40 pruebas |
 | T-006 | completed | T-004, T-005 | CLI de carga de spec, listado, aprobación, despacho, estado y continuación implementado y verificado con 44 pruebas |
 | T-007 | completed | T-006 | Adaptador de escritorio implementado, deduplica entregas, actualiza tasks elegibles y bloquea bypass; verificado con 51 pruebas |
-| T-008 | planned | T-006 | Conectar la UI local al estado de tasks, runs, eventos y aprobaciones |
+| T-008 | completed | T-006 | UI Tauri/React local-only conectada al estado de tasks, runs, eventos, aprobaciones y errores; verificada con 56 pruebas |
 | T-009 | planned | T-005, T-006, T-007, T-008 | Ejecutar aceptación A1–A12 y publicar milestone |
 
 ## Registro de ejecución
@@ -30,7 +30,7 @@ eventos y evidencia de verificación del coordinador.
 | T-005 | `29099428-fc64-45cf-ba0d-b3e1b2f3cf16` | `f3a93f3f-ed52-42d9-9cd1-bb0c9d530de4` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 40 pruebas; se registraron gates y evidencia transaccional | `f19ede6` |
 | T-006 | `b7aefd6d-b13b-44f7-8ade-b5a998be84ab` | `fc30becd-b90d-4116-826c-697068df92c6` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 44 pruebas y se conservaron gates/evidencia | `00ed728` |
 | T-007 | `b9cd7413-d7cd-4125-9936-c7424e99cec1` | `2a54340d-f8fd-4c27-8b52-b514fbdb57db` | [Evidencia de entrada de escritorio](../../crates/router-cli/tests/desktop-ingress-evidence.md); App Server local completó el run y `cargo test --workspace` pasó con 51 pruebas | `7ee89e3` |
-| T-008 | — | — | pendiente | pendiente |
+| T-008 | `d1f95766-5e6f-4aae-b272-431846bc2d06` | `d53cfb52-2874-4a9e-90c9-ec743a7a4ca4` | App Server local ejecutó la task; `cargo test --workspace` pasó con 56 pruebas, build frontend e IPC fixture verificados; smoke nativo Tauri pendiente | pendiente |
 | T-009 | — | — | pendiente | pendiente |
 
 ## Definition of Done por task

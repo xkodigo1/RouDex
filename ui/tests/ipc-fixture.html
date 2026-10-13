@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es"><head><meta charset="UTF-8"><title>RouDex local IPC fixture</title></head>
+<body>
+<nav aria-label="Fixture controls">
+  <button id="populated">Fixture: populated</button><button id="empty">Fixture: empty</button>
+  <button id="read-error">Fixture: read error</button><button id="event-error">Fixture: event error</button>
+</nav>
+<div id="root"></div>
+<script type="module">
+// Development-only browser fixture, excluded from Vite's production entrypoint.
+// Uses Tauri's existing IPC mock, synthetic ids and no real local database.
+import { mockIPC } from "@tauri-apps/api/mocks";
+let mode = "populated";
+for (const id of ["populated", "empty", "read-error", "event-error"]) {
+  document.getElementById(id).onclick = () => { mode = id; };
+}
+const tasks = [
+  {id:"FIXTURE-A", spec_id:"fixture", title:"Needs approval", status:"awaiting_approval", model:"fixture-model", profile:"standard", effort:"medium", approval:"manual"},
+  {id:"FIXTURE-B", spec_id:"fixture", title:"Failed check", status:"failed", model:"fixture-model", profile:"standard", effort:"medium", approval:"manual", dependencies:"FIXTURE-A"},
+];
+const runs = [
+  {run_id:"fixture-run-a", route_id:"fixture-route-a", task_id:"FIXTURE-A", status:"interrupted", model:"fixture-model", effort:"medium", created_at:"100"},
+  {run_id:"fixture-run-b", route_id:"fixture-route-b", task_id:"FIXTURE-B", status:"failed", model:"fixture-model", effort:"medium", created_at:"99"},
+];
+mockIPC(async (cmd, args) => {
+  if (cmd === "local_snapshot") {
+    if (mode === "read-error") throw new Error("Fixture: database unavailable");
+    return {state_path:"fixture.sqlite3", initialized:true, tasks:mode === "empty" ? [] : tasks,
+      runs:mode === "empty" ? [] : runs,
+      approvals:mode === "empty" ? [] : [{id:1, task_id:"FIXTURE-B", decision:"approved", latest:true, reason:"Fixture approval", created_at:"98"}],
+      errors:mode === "empty" ? [] : [{id:20, run_id:"fixture-run-b", event_type:"verification.failed", created_at:"101", payload:{reason:"Fixture check failed"}}],
+      error_count:mode === "empty" ? 0 : 1};
+  }
+  if (cmd === "local_run_events") {
+    if (mode === "event-error") throw new Error("Fixture: events unavailable");
+    // First run is deliberately slower to exercise switching during a request.
+    await new Promise((resolve) => setTimeout(resolve, args.runId === "fixture-run-a" ? 1200 : 50));
+    return {run_id:args.runId, total:1, events:[{id:1, run_id:args.runId, event_type:"fixture.event", created_at:"102", payload:{text:args.runId}}]};
+  }
+  throw new Error(`Unexpected command: ${cmd}`);
+});
+await import("../src/main.jsx");
+</script>
+</body></html>

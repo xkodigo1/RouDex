@@ -2542,6 +2542,7 @@ name = "roudex-desktop"
 version = "0.1.0"
 dependencies = [
  "router-core",
+ "rusqlite",
  "serde",
  "serde_json",
  "tauri",

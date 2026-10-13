@@ -143,7 +143,7 @@
       "title": "Expose local orchestration state in the UI",
       "prompt": "Connect the local Tauri/React interface to task, run, event, approval and error state without introducing remote services.",
       "depends_on": ["T-006"],
-      "status": "planned",
+      "status": "completed",
       "profile": "standard",
       "model": "gpt-6.1-sol",
       "effort": "medium",
@@ -152,6 +152,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["src-tauri", "ui"] },
       "acceptance": ["The UI lists tasks, runs, events, approvals and errors", "The UI remains local-only"],
+      "route_id": "d1f95766-5e6f-4aae-b272-431846bc2d06",
+      "run_id": "d53cfb52-2874-4a9e-90c9-ec743a7a4ca4",
+      "evidence": "El App Server local ejecutó T-008 con aprobación explícita; la UI Tauri/React lee tasks, runs, eventos, aprobaciones y errores en modo solo lectura local. cargo test --workspace pasó con 56 pruebas y el build frontend pasó.",
       "verify": "cargo test --workspace"
     },
     {

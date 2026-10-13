@@ -36,3 +36,34 @@ h3 { margin-top: 8px; font-size: 20px; }
 .line-item { border-top: 1px solid #202c3d; padding: 13px 0; color: #7b8ba1; font-size: 13px; }
 .line-item b { color: #c7d4e5; font-weight: 600; }
 @media (max-width: 980px) { body { min-width: 0; } .shell { width: min(100% - 32px, 720px); } .hero { align-items: flex-start; flex-direction: column; } .metrics, .content-grid { grid-template-columns: 1fr; } }
+
+.desk-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 36px 0 20px; }
+.desk-heading h2 { font-size: 36px; }
+.desk-heading .lede { margin-top: 12px; }
+.metrics { margin-top: 20px; }
+.section-panel { margin-top: 16px; min-height: 0; }
+.panel h3 { margin-bottom: 18px; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+th { color: #91a9c7; font-size: 12px; }
+th, td { padding: 12px 10px; border-bottom: 1px solid #202c3d; vertical-align: top; }
+td small { display: block; margin-top: 6px; color: #91a9c7; }
+.badge { display: inline-block; border: 1px solid #486384; border-radius: 5px; padding: 3px 6px; font-size: 12px; overflow-wrap: anywhere; }
+.badge-completed, .badge-approved { color: #93ddb4; border-color: #357451; }
+.badge-running, .badge-ready { color: #9ec8ff; }
+.badge-awaiting_approval, .badge-blocked, .badge-interrupted { color: #f1cf83; border-color: #80632a; }
+.badge-failed, .badge-denied { color: #ffaaaa; border-color: #914848; }
+.identifier { display: block; margin: 10px 0; overflow-wrap: anywhere; color: #91a9c7; font-size: 12px; }
+.run-list, .event-list { list-style: none; padding: 0; margin: 14px 0 0; max-height: 480px; overflow: auto; }
+.run-list li, .event-list li { margin-bottom: 10px; }
+.run-button { display: block; width: 100%; text-align: left; }
+.run-button[aria-pressed="true"] { border-color: #9ec8ff; background: #1c3048; }
+button:not(:disabled), summary { cursor: pointer; }
+button:disabled { opacity: .6; }
+button:focus-visible, summary:focus-visible { outline: 2px solid #9ec8ff; outline-offset: 3px; }
+.event-list details { border-bottom: 1px solid #303b4d; padding: 10px 0; }
+.event-list summary { overflow-wrap: anywhere; font-size: 13px; }
+.event-list summary span { display: block; margin-top: 5px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflow: auto; font-size: 12px; color: #c7d4e5; }
+.error-banner { border: 1px solid #914848; background: #361d24; color: #ffc1c1; padding: 14px; margin: 14px 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .desk-heading { align-items: flex-start; flex-direction: column; } .topbar { gap: 16px; flex-wrap: wrap; } .panel { padding: 16px; } }
