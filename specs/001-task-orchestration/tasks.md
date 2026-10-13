@@ -29,7 +29,7 @@ eventos y evidencia de verificación del coordinador.
 | T-004 | `9c51d6bb-e24a-4384-b420-44f6aa7e89d5` | `ab86fa49-4873-4863-9b69-2b9d6b2945cb` | App Server local completó el thread y el turn asignados; `cargo test --workspace` pasó con 28 pruebas; se conservaron eventos, modelo, esfuerzo y run_id | `6cd5669` |
 | T-005 | `29099428-fc64-45cf-ba0d-b3e1b2f3cf16` | `f3a93f3f-ed52-42d9-9cd1-bb0c9d530de4` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 40 pruebas; se registraron gates y evidencia transaccional | `f19ede6` |
 | T-006 | `b7aefd6d-b13b-44f7-8ade-b5a998be84ab` | `fc30becd-b90d-4116-826c-697068df92c6` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 44 pruebas y se conservaron gates/evidencia | `00ed728` |
-| T-007 | `b9cd7413-d7cd-4125-9936-c7424e99cec1` | `2a54340d-f8fd-4c27-8b52-b514fbdb57db` | [Evidencia de entrada de escritorio](../../crates/router-cli/tests/desktop-ingress-evidence.md); App Server local completó el run y `cargo test --workspace` pasó con 51 pruebas | pendiente |
+| T-007 | `b9cd7413-d7cd-4125-9936-c7424e99cec1` | `2a54340d-f8fd-4c27-8b52-b514fbdb57db` | [Evidencia de entrada de escritorio](../../crates/router-cli/tests/desktop-ingress-evidence.md); App Server local completó el run y `cargo test --workspace` pasó con 51 pruebas | `7ee89e3` |
 | T-008 | — | — | pendiente | pendiente |
 | T-009 | — | — | pendiente | pendiente |
 
