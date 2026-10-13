@@ -1,7 +1,11 @@
 # Especificación 001 — Orquestación local guiada por tareas
 
-Estado: propuesta activa
-Última actualización: 2026-10-12
+Estado: aceptación automatizada verificada; publicación del milestone en curso
+Última actualización: 2026-10-13
+
+Evidencia de T-009: [auditoría de aceptación](acceptance-evidence.md), con
+58 pruebas aprobadas, discrepancia histórica de T-001 y limitaciones de UI
+nativa. La publicación firmada del milestone está en curso.
 
 ## Problema
 
