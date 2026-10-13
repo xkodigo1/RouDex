@@ -254,7 +254,10 @@ impl<'a> TaskCoordinator<'a> {
             }
         }
         if !self.store.dependencies_completed(task_id)? {
-            if matches!(task.status, TaskStatus::Planned | TaskStatus::Ready) {
+            if matches!(
+                task.status,
+                TaskStatus::Planned | TaskStatus::Ready | TaskStatus::AwaitingApproval
+            ) {
                 self.store.set_task_status(task_id, TaskStatus::Blocked)?;
             }
             return Ok(TaskExecutionReceipt {
@@ -265,6 +268,20 @@ impl<'a> TaskCoordinator<'a> {
                 status: TaskStatus::Blocked,
                 text: Some("task has incomplete dependencies".to_owned()),
             });
+        }
+
+        if task.approval != "not_required"
+            && self
+                .store
+                .latest_task_approval(task_id)?
+                .is_some_and(|approval| approval.decision == "denied")
+        {
+            if task.status != TaskStatus::Blocked {
+                self.store.set_task_status(task_id, TaskStatus::Blocked)?;
+            }
+            let mut blocked = task.clone();
+            blocked.status = TaskStatus::Blocked;
+            return self.existing_receipt(&blocked, "manual approval denied");
         }
 
         let current = task.status.clone();
@@ -348,7 +365,12 @@ impl<'a> TaskCoordinator<'a> {
         }
 
         let thread_id = match runtime.start_thread(&task) {
-            Ok(thread_id) => thread_id,
+            Ok(thread_id) if !thread_id.is_empty() => thread_id,
+            Ok(_) => {
+                let error = "runtime returned an empty thread id".to_owned();
+                self.fail_task(&task.id, &run_id, "thread.start.failed", &error)?;
+                return Ok(failed_receipt(task.id, route_id, run_id, error));
+            }
             Err(error) => {
                 self.fail_task(&task.id, &run_id, "thread.start.failed", &error)?;
                 return Ok(failed_receipt(task.id, route_id, run_id, error));
@@ -390,14 +412,16 @@ impl<'a> TaskCoordinator<'a> {
         {
             Ok(turn) => turn,
             Err(error) => {
-                self.store
-                    .set_task_status(&task.id, TaskStatus::Interrupted)?;
-                self.store.update_run_status(run_id, "interrupted")?;
-                self.store.record_event(&EventRecord {
-                    run_id: run_id.into(),
-                    event_type: "turn.error".into(),
-                    payload: json!({ "threadId": thread_id, "reason": error }),
-                })?;
+                self.store.finish_task_run(
+                    &task.id,
+                    run_id,
+                    TaskStatus::Interrupted,
+                    Some(&EventRecord {
+                        run_id: run_id.into(),
+                        event_type: "turn.error".into(),
+                        payload: json!({ "threadId": thread_id, "reason": error }),
+                    }),
+                )?;
                 return Ok(TaskExecutionReceipt {
                     task_id: task.id.clone(),
                     route_id: Some(route_id.into()),
@@ -408,8 +432,11 @@ impl<'a> TaskCoordinator<'a> {
                 });
             }
         };
-        if turn.thread_id != thread_id || turn.turn_id.is_empty() {
-            let error = "runtime returned a different thread or empty turn id";
+        if turn.thread_id != thread_id
+            || turn.turn_id.is_empty()
+            || !matches!(turn.status.as_str(), "completed" | "failed" | "interrupted")
+        {
+            let error = "runtime returned a different thread, empty turn id or non-terminal status";
             self.fail_task(&task.id, run_id, "turn.invalid", error)?;
             return Ok(failed_receipt_with_thread(
                 task.id.clone(),
@@ -438,14 +465,19 @@ impl<'a> TaskCoordinator<'a> {
                     ));
                 }
             };
-            self.store.record_event(&EventRecord {
-                run_id: run_id.into(),
-                event_type: "task.verified".into(),
-                payload: json!({ "command": task.verify, "result": verification }),
-            })?;
             if verification["exitCode"].as_i64() != Some(0) {
                 let reason = "task verification failed or returned no exit code";
-                self.fail_task(&task.id, run_id, "verification.failed", reason)?;
+                self.store.finish_task_run(
+                    &task.id,
+                    run_id,
+                    TaskStatus::Failed,
+                    Some(&EventRecord {
+                        run_id: run_id.into(),
+                        event_type: "verification.failed".into(),
+                        payload: json!({ "taskId": task.id, "reason": reason,
+                        "command": task.verify, "result": verification }),
+                    }),
+                )?;
                 return Ok(failed_receipt_with_thread(
                     task.id.clone(),
                     route_id.into(),
@@ -454,9 +486,16 @@ impl<'a> TaskCoordinator<'a> {
                     reason.into(),
                 ));
             }
-            self.store.update_run_status(run_id, "completed")?;
-            self.store
-                .set_task_status(&task.id, TaskStatus::Completed)?;
+            self.store.finish_task_run(
+                &task.id,
+                run_id,
+                TaskStatus::Completed,
+                Some(&EventRecord {
+                    run_id: run_id.into(),
+                    event_type: "task.verified".into(),
+                    payload: json!({ "command": task.verify, "result": verification }),
+                }),
+            )?;
             Ok(TaskExecutionReceipt {
                 task_id: task.id.clone(),
                 route_id: Some(route_id.into()),
@@ -466,9 +505,8 @@ impl<'a> TaskCoordinator<'a> {
                 text: Some(turn.text),
             })
         } else if turn.status == "interrupted" {
-            self.store.update_run_status(run_id, "interrupted")?;
             self.store
-                .set_task_status(&task.id, TaskStatus::Interrupted)?;
+                .finish_task_run(&task.id, run_id, TaskStatus::Interrupted, None)?;
             Ok(TaskExecutionReceipt {
                 task_id: task.id.clone(),
                 route_id: Some(route_id.into()),
@@ -626,19 +664,29 @@ impl<'a> TaskCoordinator<'a> {
             return self.existing_receipt(&stored.definition, "run is not interrupted");
         }
         let events = self.store.events_for_run(run_id)?;
-        let task: TaskDefinition = events
+        let task: Option<TaskDefinition> = events
             .iter()
             .find(|event| event.event_type == "task.started")
             .and_then(|event| event.payload.get("definition"))
-            .and_then(|definition| serde_json::from_value(definition.clone()).ok())
-            .ok_or_else(|| {
-                CoordinatorError::Runtime("run has no immutable dispatch definition".into())
-            })?;
-        let thread_id = self.store.last_thread_id(run_id)?.ok_or_else(|| {
-            CoordinatorError::Runtime(
-                "run has no persisted thread; explicit recovery required".into(),
-            )
-        })?;
+            .and_then(|definition| serde_json::from_value(definition.clone()).ok());
+        let Some(task) = task.filter(|task| task.id == stored.definition.id) else {
+            return self.block_resume(
+                &stored.definition,
+                run_id,
+                "run has no valid immutable dispatch definition; explicit recovery required",
+            );
+        };
+        let Some(thread_id) = self
+            .store
+            .last_thread_id(run_id)?
+            .filter(|id| !id.is_empty())
+        else {
+            return self.block_resume(
+                &task,
+                run_id,
+                "run has no persisted thread; explicit recovery required",
+            );
+        };
         let latest_turn_id = events.iter().rev().find_map(|event| {
             if event.event_type == "turn/started"
                 && event.payload["threadId"].as_str() == Some(thread_id.as_str())
@@ -650,6 +698,13 @@ impl<'a> TaskCoordinator<'a> {
                 None
             }
         });
+        let Some(latest_turn_id) = latest_turn_id else {
+            return self.block_resume(
+                &task,
+                run_id,
+                "run has no persisted turn identity; explicit recovery required",
+            );
+        };
         if task.approval != "not_required"
             && !self
                 .store
@@ -657,6 +712,13 @@ impl<'a> TaskCoordinator<'a> {
                 .is_some_and(|approval| approval.decision == "approved")
         {
             return self.existing_receipt(&stored.definition, "resume requires approval");
+        }
+        if !self.store.dependencies_completed(&task.id)? {
+            return self.block_resume(
+                &task,
+                run_id,
+                "resume has incomplete dependencies; explicit recovery required",
+            );
         }
         if !self.store.begin_resume(&task.id, run_id)? {
             let task = self
@@ -666,26 +728,13 @@ impl<'a> TaskCoordinator<'a> {
                 .definition;
             return self.existing_receipt(&task, "resume was already claimed");
         }
-        let recovered = match runtime.resume_thread_for_turn(&task, &thread_id, latest_turn_id) {
-            Ok(turn) => turn,
-            Err(error) => {
-                self.store.set_task_status(&task.id, TaskStatus::Blocked)?;
-                self.store.update_run_status(run_id, "blocked")?;
-                self.store.record_event(&EventRecord {
-                    run_id: run_id.into(),
-                    event_type: "thread.resume.failed".into(),
-                    payload: json!({ "reason": error }),
-                })?;
-                return self.existing_receipt(
-                    &self
-                        .store
-                        .get_task(&task.id)?
-                        .expect("task exists")
-                        .definition,
-                    &error,
-                );
-            }
-        };
+        let recovered =
+            match runtime.resume_thread_for_turn(&task, &thread_id, Some(latest_turn_id)) {
+                Ok(turn) => turn,
+                Err(error) => {
+                    return self.block_resume(&task, run_id, &error);
+                }
+            };
         self.store.record_event(&EventRecord {
             run_id: run_id.into(),
             event_type: "thread.resumed".into(),
@@ -710,7 +759,7 @@ impl<'a> TaskCoordinator<'a> {
                 _ => return None,
             };
             if payload["threadId"].as_str() != Some(thread_id.as_str())
-                || latest_turn_id.is_some_and(|id| id != turn_id)
+                || latest_turn_id != turn_id
                 || !matches!(status, "completed" | "failed")
             {
                 return None;
@@ -725,22 +774,34 @@ impl<'a> TaskCoordinator<'a> {
         let recovered = persisted.or(recovered);
         if recovered
             .as_ref()
-            .is_some_and(|turn| latest_turn_id.is_some_and(|id| id != turn.turn_id))
+            .is_some_and(|turn| latest_turn_id != turn.turn_id)
         {
             let reason =
                 "resumed history does not match the persisted turn; explicit recovery required";
-            self.store.set_task_status(&task.id, TaskStatus::Blocked)?;
-            self.store.update_run_status(run_id, "blocked")?;
-            self.store.record_event(&EventRecord {
-                run_id: run_id.into(),
-                event_type: "thread.resume.failed".into(),
-                payload: json!({ "reason": reason }),
-            })?;
-            let mut blocked = task.clone();
-            blocked.status = TaskStatus::Blocked;
-            return self.existing_receipt(&blocked, reason);
+            return self.block_resume(&task, run_id, reason);
         }
         self.execute_turn(&task, &run.route_id, run_id, &thread_id, runtime, recovered)
+    }
+
+    fn block_resume(
+        &self,
+        task: &TaskDefinition,
+        run_id: &str,
+        reason: &str,
+    ) -> Result<TaskExecutionReceipt, CoordinatorError> {
+        self.store.finish_task_run(
+            &task.id,
+            run_id,
+            TaskStatus::Blocked,
+            Some(&EventRecord {
+                run_id: run_id.into(),
+                event_type: "thread.resume.failed".into(),
+                payload: json!({ "taskId": task.id, "reason": reason }),
+            }),
+        )?;
+        let mut blocked = task.clone();
+        blocked.status = TaskStatus::Blocked;
+        self.existing_receipt(&blocked, reason)
     }
 
     fn fail_task(
@@ -750,13 +811,16 @@ impl<'a> TaskCoordinator<'a> {
         event_type: &str,
         reason: &str,
     ) -> Result<(), CoordinatorError> {
-        self.store.update_run_status(run_id, "failed")?;
-        self.store.set_task_status(task_id, TaskStatus::Failed)?;
-        self.store.record_event(&EventRecord {
-            run_id: run_id.to_owned(),
-            event_type: event_type.to_owned(),
-            payload: json!({ "taskId": task_id, "reason": reason }),
-        })?;
+        self.store.finish_task_run(
+            task_id,
+            run_id,
+            TaskStatus::Failed,
+            Some(&EventRecord {
+                run_id: run_id.to_owned(),
+                event_type: event_type.to_owned(),
+                payload: json!({ "taskId": task_id, "reason": reason }),
+            }),
+        )?;
         Ok(())
     }
 
@@ -780,15 +844,20 @@ impl<'a> TaskCoordinator<'a> {
             });
         }
         let run = self.store.latest_run_for_task(task_id)?;
-        self.store
-            .set_task_status(task_id, TaskStatus::Interrupted)?;
         if let Some(run) = &run {
-            self.store.update_run_status(&run.run_id, "interrupted")?;
-            self.store.record_event(&EventRecord {
-                run_id: run.run_id.clone(),
-                event_type: "task.recovered".to_owned(),
-                payload: json!({ "taskId": task_id, "reason": reason }),
-            })?;
+            self.store.finish_task_run(
+                task_id,
+                &run.run_id,
+                TaskStatus::Interrupted,
+                Some(&EventRecord {
+                    run_id: run.run_id.clone(),
+                    event_type: "task.recovered".to_owned(),
+                    payload: json!({ "taskId": task_id, "reason": reason }),
+                }),
+            )?;
+        } else {
+            self.store
+                .set_task_status(task_id, TaskStatus::Interrupted)?;
         }
         let thread_id = match &run {
             Some(run) => self.store.last_thread_id(&run.run_id)?,

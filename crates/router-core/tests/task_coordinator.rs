@@ -1,6 +1,6 @@
 use router_core::{
-    AppServerConfig, CoordinatorError, EventRecord, LocalTaskRuntime, RouterStore, TaskApproval,
-    TaskCoordinator, TaskDefinition, TaskSandbox, TaskStatus,
+    AppServerConfig, CoordinatorError, EventRecord, LocalTaskRuntime, RouteReceipt, RouteStatus,
+    RouterStore, TaskApproval, TaskCoordinator, TaskDefinition, TaskSandbox, TaskStatus,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -287,6 +287,14 @@ fn protocol_errors_and_verification_failure_never_complete_tasks() {
         assert_ne!(run.status, "completed");
         if scenario != "verify-failed" {
             assert!(fixture.requests("command/exec").is_empty());
+        } else {
+            let events = store.events_for_run(&run.run_id).unwrap();
+            let failure = events
+                .iter()
+                .find(|event| event.event_type == "verification.failed")
+                .unwrap();
+            assert_eq!(failure.payload["result"]["exitCode"], 1);
+            assert_eq!(failure.payload["command"], "echo verified");
         }
     }
 }
@@ -499,5 +507,432 @@ fn durable_terminal_evidence_prevents_replay_after_a_crash() {
                 .count(),
             1
         );
+    }
+}
+
+#[test]
+fn denial_stays_blocked_until_an_explicit_approval() {
+    let fixture = Fixture::new();
+    let db = fixture.cwd.join("router.sqlite3");
+    let store = RouterStore::open(&db).unwrap();
+    let mut task = fixture.task("T-004");
+    task.approval = "manual".into();
+    store.upsert_task("spec", &task).unwrap();
+    let coordinator = TaskCoordinator::new(&store);
+    coordinator
+        .dispatch_task(&task.id, &mut fixture.runtime("success"))
+        .unwrap();
+    store
+        .record_task_approval(&TaskApproval {
+            task_id: task.id.clone(),
+            decision: "denied".into(),
+            reason: Some("review required".into()),
+        })
+        .unwrap();
+    assert_eq!(
+        store.get_task(&task.id).unwrap().unwrap().definition.status,
+        TaskStatus::Blocked
+    );
+    for _ in 0..2 {
+        let receipts = coordinator
+            .dispatch_ready_tasks_with_runtime::<LocalTaskRuntime, _>("spec", |_| {
+                panic!("denied task started")
+            })
+            .unwrap();
+        assert_eq!(receipts[0].status, TaskStatus::Blocked);
+    }
+    assert_eq!(store.count_runs().unwrap(), 0);
+    assert!(!fixture.log_path().exists());
+    drop(store);
+    let store = RouterStore::open(&db).unwrap();
+    assert_eq!(
+        store
+            .latest_task_approval(&task.id)
+            .unwrap()
+            .unwrap()
+            .reason
+            .as_deref(),
+        Some("review required")
+    );
+    assert!(store
+        .record_task_approval(&TaskApproval {
+            task_id: task.id.clone(),
+            decision: "yes".into(),
+            reason: None,
+        })
+        .is_err());
+    assert_eq!(
+        store
+            .latest_task_approval(&task.id)
+            .unwrap()
+            .unwrap()
+            .decision,
+        "denied"
+    );
+    store
+        .record_task_approval(&TaskApproval {
+            task_id: task.id.clone(),
+            decision: "approved".into(),
+            reason: Some("reviewed".into()),
+        })
+        .unwrap();
+    let done = TaskCoordinator::new(&store)
+        .dispatch_task(&task.id, &mut fixture.runtime("success"))
+        .unwrap();
+    assert_eq!(done.status, TaskStatus::Completed);
+    assert_eq!(fixture.requests("thread/start").len(), 1);
+}
+
+#[test]
+fn resume_claim_rechecks_revoked_approval_dependencies_and_latest_run() {
+    let fixture = Fixture::new();
+    let store = RouterStore::in_memory().unwrap();
+    let mut task = fixture.task("T-004");
+    task.approval = "manual".into();
+    store.upsert_task("spec", &task).unwrap();
+    let approve = |decision: &str| {
+        store
+            .record_task_approval(&TaskApproval {
+                task_id: task.id.clone(),
+                decision: decision.into(),
+                reason: None,
+            })
+            .unwrap()
+    };
+    approve("approved");
+    let coordinator = TaskCoordinator::new(&store);
+    let first = coordinator
+        .dispatch_task(&task.id, &mut fixture.runtime("disconnect"))
+        .unwrap();
+    let run_id = first.run_id.unwrap();
+    approve("denied");
+    let before = store.events_for_run(&run_id).unwrap();
+    assert!(!store.begin_resume(&task.id, &run_id).unwrap());
+    assert_eq!(
+        coordinator
+            .resume_run(&run_id, &mut fixture.runtime("success"))
+            .unwrap()
+            .status,
+        TaskStatus::Interrupted
+    );
+    assert_eq!(store.events_for_run(&run_id).unwrap(), before);
+    assert!(fixture.requests("thread/resume").is_empty());
+    approve("approved");
+    task.depends_on = vec!["missing".into()];
+    store.upsert_task("spec", &task).unwrap();
+    assert!(!store.begin_resume(&task.id, &run_id).unwrap());
+    task.depends_on.clear();
+    store.upsert_task("spec", &task).unwrap();
+    coordinator.retry_interrupted_task(&task.id).unwrap();
+    let second = coordinator
+        .dispatch_task(&task.id, &mut fixture.runtime("disconnect"))
+        .unwrap();
+    assert!(!store.begin_resume(&task.id, &run_id).unwrap());
+    assert!(store
+        .begin_resume(&task.id, second.run_id.as_ref().unwrap())
+        .unwrap());
+    assert!(!store
+        .begin_resume(&task.id, second.run_id.as_ref().unwrap())
+        .unwrap());
+}
+
+#[test]
+fn missing_recovery_identity_is_durably_blocked_without_starting_runtime() {
+    for missing in ["definition", "thread", "turn"] {
+        let fixture = Fixture::new();
+        let db = fixture.cwd.join("router.sqlite3");
+        let store = RouterStore::open(&db).unwrap();
+        let mut task = fixture.task("T-004");
+        task.status = TaskStatus::Ready;
+        store.upsert_task("spec", &task).unwrap();
+        assert!(store
+            .begin_task_run(
+                &task,
+                "spec",
+                &RouteReceipt {
+                    route_id: "route".into(),
+                    run_id: "run".into(),
+                    profile: task.profile.clone(),
+                    model: task.model.clone(),
+                    effort: task.effort.clone(),
+                    status: RouteStatus::Accepted,
+                }
+            )
+            .unwrap());
+        if missing != "thread" {
+            store
+                .record_event(&EventRecord {
+                    run_id: "run".into(),
+                    event_type: "thread.started".into(),
+                    payload: json!({"threadId": "fake-thread"}),
+                })
+                .unwrap();
+        }
+        if missing == "definition" {
+            rusqlite::Connection::open(&db)
+                .unwrap()
+                .execute("DELETE FROM events WHERE event_type = 'task.started'", [])
+                .unwrap();
+        }
+        let coordinator = TaskCoordinator::new(&store);
+        coordinator
+            .recover_running_task(&task.id, "worker crashed")
+            .unwrap();
+        let blocked = coordinator
+            .resume_run("run", &mut fixture.runtime("success"))
+            .unwrap();
+        assert_eq!(blocked.status, TaskStatus::Blocked, "{missing}");
+        assert!(blocked.text.unwrap().contains("explicit recovery required"));
+        assert_eq!(store.get_run("run").unwrap().unwrap().status, "blocked");
+        assert!(!fixture.log_path().exists());
+        let before = store.events_for_run("run").unwrap();
+        assert_eq!(
+            before
+                .iter()
+                .filter(|event| event.event_type == "thread.resume.failed")
+                .count(),
+            1
+        );
+        coordinator
+            .resume_run("run", &mut fixture.runtime("success"))
+            .unwrap();
+        coordinator
+            .dispatch_task(&task.id, &mut fixture.runtime("success"))
+            .unwrap();
+        assert_eq!(store.events_for_run("run").unwrap(), before);
+        assert_eq!(store.count_runs().unwrap(), 1);
+    }
+}
+
+#[test]
+fn terminal_notifications_are_idempotent_for_each_thread_and_turn_after_reopen() {
+    let fixture = Fixture::new();
+    let db = fixture.cwd.join("router.sqlite3");
+    let store = RouterStore::open(&db).unwrap();
+    store.upsert_task("spec", &fixture.task("T-004")).unwrap();
+    let receipt = TaskCoordinator::new(&store)
+        .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
+        .unwrap();
+    let run_id = receipt.run_id.unwrap();
+    let events = [
+        EventRecord {
+            run_id: run_id.clone(),
+            event_type: "turn/completed".into(),
+            payload: json!({"threadId": "fake-thread", "turn": {"id": "fake-turn", "status": "completed"}}),
+        },
+        EventRecord {
+            run_id: run_id.clone(),
+            event_type: "turn.completed".into(),
+            payload: json!({"threadId": "fake-thread", "turnId": "fake-turn", "status": "completed"}),
+        },
+        EventRecord {
+            run_id: run_id.clone(),
+            event_type: "turn.completed".into(),
+            payload: json!({"threadId": "another-thread", "turnId": "fake-turn", "status": "completed"}),
+        },
+    ];
+    for event in &events {
+        store.record_event(event).unwrap();
+    }
+    let before = store.events_for_run(&run_id).unwrap();
+    drop(store);
+    let store = RouterStore::open(&db).unwrap();
+    for event in &events {
+        store.record_event(event).unwrap();
+    }
+    assert_eq!(store.events_for_run(&run_id).unwrap(), before);
+    assert!(store
+        .record_event(&EventRecord {
+            run_id: run_id.clone(),
+            event_type: "turn/completed".into(),
+            payload: json!({"turn": {"status": "completed"}})
+        })
+        .is_err());
+    assert_eq!(store.events_for_run(&run_id).unwrap(), before);
+}
+
+#[test]
+fn terminal_state_and_audit_event_roll_back_together_on_database_failure() {
+    let fixture = Fixture::new();
+    let db = fixture.cwd.join("router.sqlite3");
+    let store = RouterStore::open(&db).unwrap();
+    store.upsert_task("spec", &fixture.task("T-004")).unwrap();
+    let receipt = TaskCoordinator::new(&store)
+        .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
+        .unwrap();
+    let run_id = receipt.run_id.unwrap();
+    assert!(store.begin_resume("T-004", &run_id).unwrap());
+    let fault = rusqlite::Connection::open(&db).unwrap();
+    fault.execute_batch("CREATE TRIGGER fail_audit BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;").unwrap();
+    assert!(store
+        .finish_task_run(
+            "T-004",
+            &run_id,
+            TaskStatus::Completed,
+            Some(&EventRecord {
+                run_id: run_id.clone(),
+                event_type: "task.verified".into(),
+                payload: json!({"result": {"exitCode": 0}}),
+            })
+        )
+        .is_err());
+    assert_eq!(
+        store.get_task("T-004").unwrap().unwrap().definition.status,
+        TaskStatus::Running
+    );
+    assert_eq!(store.get_run(&run_id).unwrap().unwrap().status, "running");
+    fault.execute_batch("DROP TRIGGER fail_audit").unwrap();
+    let coordinator = TaskCoordinator::new(&store);
+    coordinator
+        .recover_running_task("T-004", "audit storage restored")
+        .unwrap();
+    assert_eq!(
+        coordinator
+            .resume_run(&run_id, &mut fixture.runtime("success"))
+            .unwrap()
+            .status,
+        TaskStatus::Completed
+    );
+}
+
+#[test]
+fn concurrent_resume_claims_allow_only_one_coordinator_to_start() {
+    let fixture = Fixture::new();
+    let db = fixture.cwd.join("router.sqlite3");
+    let store = RouterStore::open(&db).unwrap();
+    store.upsert_task("spec", &fixture.task("T-004")).unwrap();
+    let interrupted = TaskCoordinator::new(&store)
+        .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
+        .unwrap();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let handles: Vec<_> = (0..2)
+        .map(|_| {
+            let db = db.clone();
+            let barrier = barrier.clone();
+            let run_id = interrupted.run_id.clone().unwrap();
+            std::thread::spawn(move || {
+                let store = RouterStore::open(db).unwrap();
+                barrier.wait();
+                store.begin_resume("T-004", &run_id).unwrap()
+            })
+        })
+        .collect();
+    let claims: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    assert_eq!(claims.iter().filter(|claimed| **claimed).count(), 1);
+    assert_eq!(
+        store
+            .events_for_run(interrupted.run_id.as_ref().unwrap())
+            .unwrap()
+            .iter()
+            .filter(|event| event.event_type == "task.resuming")
+            .count(),
+        1
+    );
+    assert_eq!(
+        store
+            .get_run(interrupted.run_id.as_ref().unwrap())
+            .unwrap()
+            .unwrap()
+            .status,
+        "running"
+    );
+}
+
+#[test]
+fn approval_decision_and_state_roll_back_together_on_database_failure() {
+    let fixture = Fixture::new();
+    let db = fixture.cwd.join("router.sqlite3");
+    let store = RouterStore::open(&db).unwrap();
+    let mut task = fixture.task("T-004");
+    task.approval = "manual".into();
+    store.upsert_task("spec", &task).unwrap();
+    TaskCoordinator::new(&store)
+        .dispatch_task(&task.id, &mut fixture.runtime("success"))
+        .unwrap();
+    let fault = rusqlite::Connection::open(&db).unwrap();
+    fault.execute_batch("CREATE TRIGGER fail_state BEFORE UPDATE ON tasks BEGIN SELECT RAISE(ABORT, 'state unavailable'); END;").unwrap();
+    let decision = TaskApproval {
+        task_id: task.id.clone(),
+        decision: "denied".into(),
+        reason: None,
+    };
+    assert!(store.record_task_approval(&decision).is_err());
+    assert!(store.latest_task_approval(&task.id).unwrap().is_none());
+    assert_eq!(
+        store.get_task(&task.id).unwrap().unwrap().definition.status,
+        TaskStatus::AwaitingApproval
+    );
+    fault.execute_batch("DROP TRIGGER fail_state").unwrap();
+    store.record_task_approval(&decision).unwrap();
+    assert_eq!(
+        store.get_task(&task.id).unwrap().unwrap().definition.status,
+        TaskStatus::Blocked
+    );
+    assert!(!fixture.log_path().exists());
+}
+
+#[test]
+fn invalid_runtime_identity_or_status_fails_without_verification() {
+    struct InvalidRuntime(&'static str);
+    impl router_core::TaskRuntime for InvalidRuntime {
+        fn start_thread(&mut self, _: &TaskDefinition) -> Result<String, String> {
+            Ok(if self.0 == "empty-thread" {
+                ""
+            } else {
+                "thread"
+            }
+            .into())
+        }
+        fn run_turn(
+            &mut self,
+            _: &TaskDefinition,
+            _: &str,
+        ) -> Result<router_core::RuntimeTurn, String> {
+            assert_ne!(self.0, "empty-thread");
+            Ok(router_core::RuntimeTurn {
+                thread_id: if self.0 == "wrong-thread" {
+                    "wrong"
+                } else {
+                    "thread"
+                }
+                .into(),
+                turn_id: if self.0 == "empty-turn" { "" } else { "turn" }.into(),
+                status: if self.0 == "non-terminal" {
+                    "inProgress"
+                } else {
+                    "completed"
+                }
+                .into(),
+                text: "untrusted result".into(),
+            })
+        }
+        fn verify(&mut self, _: &TaskDefinition) -> Result<Value, String> {
+            panic!("invalid runtime output cannot reach verification")
+        }
+    }
+    for scenario in ["empty-thread", "wrong-thread", "empty-turn", "non-terminal"] {
+        let fixture = Fixture::new();
+        let store = RouterStore::in_memory().unwrap();
+        store.upsert_task("spec", &fixture.task("T-004")).unwrap();
+        let result = TaskCoordinator::new(&store)
+            .dispatch_task("T-004", &mut InvalidRuntime(scenario))
+            .unwrap();
+        assert_eq!(result.status, TaskStatus::Failed, "{scenario}");
+        assert_eq!(
+            store
+                .get_run(result.run_id.as_ref().unwrap())
+                .unwrap()
+                .unwrap()
+                .status,
+            "failed"
+        );
+        assert!(!store
+            .events_for_run(result.run_id.as_ref().unwrap())
+            .unwrap()
+            .iter()
+            .any(|event| event.event_type == "turn.completed"));
     }
 }

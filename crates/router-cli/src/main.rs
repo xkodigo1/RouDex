@@ -1,7 +1,7 @@
 use router_core::{
     AppServerClient, AppServerConfig, EventRecord, LocalTaskRuntime, RoutePromptInput,
     RouteReceipt, RouteStatus, RouterStore, RuntimeTurn, TaskApproval, TaskCoordinator,
-    TaskDefinition, TaskManifest, TaskRuntime, TaskStatus,
+    TaskDefinition, TaskManifest, TaskRuntime,
 };
 use serde_json::{json, Value};
 use std::env;
@@ -28,7 +28,23 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    match args.next().as_deref() {
+    let command = args.next();
+    if matches!(
+        command.as_deref(),
+        Some(
+            "task-plan"
+                | "task-approve"
+                | "task-run"
+                | "task-recover"
+                | "task-retry"
+                | "continue-run"
+        )
+    ) && (env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
+        || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some())
+    {
+        return Err("un worker activo no puede invocar el ciclo del coordinador".to_owned());
+    }
+    match command.as_deref() {
         Some("route-prompt") => route_prompt(args.collect()),
         Some("continue-run") => continue_run(args.collect()),
         Some("task-plan") => task_plan(args.collect()),
@@ -77,7 +93,7 @@ fn task_approve(args: Vec<String>) -> Result<(), String> {
     }
     let store = RouterStore::open(RouterStore::default_path())
         .map_err(|error| format!("could not open local state: {error}"))?;
-    let task = store
+    store
         .get_task(task_id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("task no encontrada: {task_id}"))?;
@@ -88,16 +104,6 @@ fn task_approve(args: Vec<String>) -> Result<(), String> {
             reason: Some("explicit CLI decision".to_owned()),
         })
         .map_err(|error| error.to_string())?;
-    if task.definition.status == TaskStatus::AwaitingApproval {
-        let next = if decision == "approved" {
-            TaskStatus::Ready
-        } else {
-            TaskStatus::Blocked
-        };
-        store
-            .set_task_status(task_id, next)
-            .map_err(|error| error.to_string())?;
-    }
     write_json(&json!({ "taskId": task_id, "decision": decision }))
 }
 
@@ -105,11 +111,6 @@ fn task_run(args: Vec<String>) -> Result<(), String> {
     let task_id = args
         .first()
         .ok_or_else(|| "task-run requiere un taskId".to_owned())?;
-    if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
-        || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some()
-    {
-        return Err("task-run no puede invocarse desde un worker activo".to_owned());
-    }
     let store = RouterStore::open(RouterStore::default_path())
         .map_err(|error| format!("could not open local state: {error}"))?;
     let task = store
@@ -211,6 +212,32 @@ fn continue_run(args: Vec<String>) -> Result<(), String> {
     let run_id = args
         .first()
         .ok_or_else(|| "continue-run requiere un runId".to_owned())?;
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let run = store
+        .get_run(run_id)
+        .map_err(|error| format!("could not read run: {error}"))?
+        .ok_or_else(|| format!("runId no encontrado: {run_id}"))?;
+    // Task runs must retain the coordinator's immutable assignment, approval
+    // gates and terminal replay protection. User text cannot replace that task.
+    if store
+        .events_for_run(run_id)
+        .map_err(|error| error.to_string())?
+        .iter()
+        .any(|event| event.event_type == "task.started")
+        || store
+            .get_task(&run.turn_id)
+            .map_err(|error| error.to_string())?
+            .is_some_and(|task| task.spec_id == run.session_id)
+    {
+        let mut runtime = LocalTaskRuntime::with_config(
+            AppServerConfig::local(&run.cwd).with_active_task(&run.turn_id),
+        );
+        let receipt = TaskCoordinator::new(&store)
+            .resume_run(run_id, &mut runtime)
+            .map_err(|error| error.to_string())?;
+        return write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?);
+    }
     let mut prompt = String::new();
     io::stdin()
         .read_to_string(&mut prompt)
@@ -218,13 +245,6 @@ fn continue_run(args: Vec<String>) -> Result<(), String> {
     if prompt.trim().is_empty() {
         return write_block("No se puede continuar con un mensaje vacío.");
     }
-
-    let store = RouterStore::open(RouterStore::default_path())
-        .map_err(|error| format!("could not open local state: {error}"))?;
-    let run = store
-        .get_run(run_id)
-        .map_err(|error| format!("could not read run: {error}"))?
-        .ok_or_else(|| format!("runId no encontrado: {run_id}"))?;
     let thread_id = store
         .last_thread_id(run_id)
         .map_err(|error| format!("could not read thread: {error}"))?
@@ -270,7 +290,9 @@ fn route_prompt(args: Vec<String>) -> Result<(), String> {
     let input: RoutePromptInput = serde_json::from_str(&input_text)
         .map_err(|error| format!("invalid hook input: {error}"))?;
 
-    if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some() {
+    if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
+        || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some()
+    {
         return write_json(&json!({ "continue": true }));
     }
     if input.prompt.trim().is_empty() {

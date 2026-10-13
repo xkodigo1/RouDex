@@ -14,6 +14,10 @@ pub enum StoreError {
     Serialization(#[from] serde_json::Error),
     #[error("invalid task transition from {from} to {to}")]
     InvalidTaskTransition { from: String, to: String },
+    #[error("invalid approval decision: {0}; expected approved or denied")]
+    InvalidApproval(String),
+    #[error("invalid terminal event: threadId, turnId and terminal status are required")]
+    InvalidTerminalEvent,
 }
 
 pub struct RouterStore {
@@ -257,6 +261,10 @@ impl RouterStore {
     }
 
     pub fn record_task_approval(&self, approval: &TaskApproval) -> Result<(), StoreError> {
+        if !matches!(approval.decision.as_str(), "approved" | "denied") {
+            return Err(StoreError::InvalidApproval(approval.decision.clone()));
+        }
+        let transaction = self.connection.unchecked_transaction()?;
         self.connection.execute(
             "INSERT INTO task_approvals (task_id, decision, reason, created_at)
              VALUES (?1, ?2, ?3, ?4)",
@@ -267,6 +275,16 @@ impl RouterStore {
                 now_string()
             ],
         )?;
+        // Keep the decision and its pending-task transition in one transaction.
+        // Active/terminal runs retain their state; resume rechecks the decision.
+        self.connection.execute(
+            "UPDATE tasks SET status = CASE WHEN ?2 = 'denied' THEN 'blocked' ELSE 'ready' END,
+                updated_at = ?3 WHERE task_id = ?1
+                AND (status = 'awaiting_approval' OR
+                    (?2 = 'denied' AND status IN ('planned', 'ready')))",
+            params![approval.task_id, approval.decision, now_string()],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -352,15 +370,55 @@ impl RouterStore {
         let claimed = self.connection.execute(
             "UPDATE tasks SET status = 'running', updated_at = ?3 WHERE task_id = ?1
              AND status = 'interrupted' AND EXISTS (SELECT 1 FROM runs WHERE run_id = ?2
-                 AND turn_id = ?1 AND status = 'interrupted')",
+                 AND turn_id = ?1 AND status = 'interrupted')
+             AND ?2 = (SELECT run_id FROM runs WHERE turn_id = ?1 ORDER BY rowid DESC LIMIT 1)
+             AND NOT EXISTS (SELECT 1 FROM task_dependencies d LEFT JOIN tasks t
+                 ON t.task_id = d.depends_on WHERE d.task_id = ?1
+                 AND (t.task_id IS NULL OR t.status <> 'completed'))
+             AND EXISTS (SELECT 1 FROM events WHERE run_id = ?2 AND event_type = 'task.started'
+                 AND json_extract(payload, '$.definition.id') = ?1)
+             AND ((SELECT json_extract(payload, '$.definition.approval') FROM events
+                    WHERE run_id = ?2 AND event_type = 'task.started' ORDER BY id LIMIT 1) = 'not_required'
+                  OR (SELECT decision FROM task_approvals WHERE task_id = ?1 ORDER BY id DESC LIMIT 1) = 'approved')",
             params![task_id, run_id, now_string()],
         )?;
         if claimed == 0 {
             return Ok(false);
         }
         self.update_run_status(run_id, "running")?;
+        self.record_event(&EventRecord {
+            run_id: run_id.into(),
+            event_type: "task.resuming".into(),
+            payload: serde_json::json!({ "taskId": task_id }),
+        })?;
         transaction.commit()?;
         Ok(true)
+    }
+
+    /// Commit state and audit evidence together. A crash cannot expose a terminal
+    /// run with a still-running task (or lose the reason for a failed transition).
+    pub fn finish_task_run(
+        &self,
+        task_id: &str,
+        run_id: &str,
+        status: TaskStatus,
+        event: Option<&EventRecord>,
+    ) -> Result<(), StoreError> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let latest = self.latest_run_for_task(task_id)?;
+        if latest.as_ref().map(|run| run.run_id.as_str()) != Some(run_id) {
+            return Err(rusqlite::Error::QueryReturnedNoRows.into());
+        }
+        self.set_task_status(task_id, status.clone())?;
+        self.update_run_status(run_id, task_status_name(&status))?;
+        if let Some(event) = event {
+            if event.run_id != run_id {
+                return Err(rusqlite::Error::InvalidParameterName("event run_id".into()).into());
+            }
+            self.record_event(event)?;
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     pub fn latest_run_for_task(&self, task_id: &str) -> Result<Option<StoredRun>, StoreError> {
@@ -431,6 +489,12 @@ impl RouterStore {
     }
 
     pub fn record_event(&self, event: &EventRecord) -> Result<(), StoreError> {
+        if matches!(
+            event.event_type.as_str(),
+            "turn.completed" | "turn/completed"
+        ) {
+            return self.record_terminal_event(event);
+        }
         self.connection.execute(
             "INSERT INTO events (run_id, event_type, payload, created_at)
              VALUES (?1, ?2, ?3, ?4)",
@@ -462,11 +526,29 @@ impl RouterStore {
     }
 
     pub fn record_terminal_event(&self, event: &EventRecord) -> Result<(), StoreError> {
+        let payload = &event.payload;
+        let turn_id = payload["turnId"]
+            .as_str()
+            .or_else(|| payload["turn"]["id"].as_str());
+        let status = payload["status"]
+            .as_str()
+            .or_else(|| payload["turn"]["status"].as_str());
+        if !payload["threadId"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty())
+            || !turn_id.is_some_and(|id| !id.is_empty())
+            || !status
+                .is_some_and(|status| matches!(status, "completed" | "failed" | "interrupted"))
+        {
+            return Err(StoreError::InvalidTerminalEvent);
+        }
         self.connection.execute(
             "INSERT INTO events (run_id, event_type, payload, created_at)
              SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS (
                 SELECT 1 FROM events WHERE run_id = ?1 AND event_type = ?2
-                AND json_extract(payload, '$.turnId') = json_extract(?3, '$.turnId'))",
+                AND json_extract(payload, '$.threadId') = json_extract(?3, '$.threadId')
+                AND COALESCE(json_extract(payload, '$.turnId'), json_extract(payload, '$.turn.id'))
+                    = COALESCE(json_extract(?3, '$.turnId'), json_extract(?3, '$.turn.id')))",
             params![
                 event.run_id,
                 event.event_type,

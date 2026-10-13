@@ -95,6 +95,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-core", "crates/router-cli"] },
       "acceptance": ["Approval gates prevent dispatch", "Resume does not duplicate terminal events", "Internal workers do not recurse"],
+      "route_id": "29099428-fc64-45cf-ba0d-b3e1b2f3cf16",
+      "run_id": "f3a93f3f-ed52-42d9-9cd1-bb0c9d530de4",
+      "evidence": "El App Server local ejecutó T-005 con aprobación explícita; se implementaron gates de denegación, continuación idempotente, evidencia transaccional y protección contra recursión. cargo test --workspace pasó con 40 pruebas.",
       "verify": "cargo test --workspace"
     },
     {
