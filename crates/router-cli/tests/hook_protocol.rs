@@ -439,17 +439,14 @@ fn task_plan_imports_manifest_and_reports_ready_tasks() {
     fs::remove_dir_all(root).expect("cleanup");
 }
 
-#[test]
-fn spec_load_rejects_invalid_graph_before_importing_any_tasks() {
+fn assert_invalid_graph_is_not_imported(tasks: Vec<TaskDefinition>, expected_error: &str) {
     let root = temp_root("invalid-spec");
     fs::create_dir_all(&root).unwrap();
-    let mut task = lifecycle_task();
-    task.depends_on = vec!["missing".into()];
     let manifest = router_core::TaskManifest {
         spec_id: "invalid".into(),
         title: "Invalid".into(),
         version: 1,
-        tasks: vec![task.clone()],
+        tasks,
     };
     let path = root.join("tasks.json");
     fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
@@ -462,11 +459,34 @@ fn spec_load_rejects_invalid_graph_before_importing_any_tasks() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("missing"));
-    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
-    assert!(store.get_task(&task.id).unwrap().is_none());
-    drop(store);
+    assert!(String::from_utf8_lossy(&output.stderr).contains(expected_error));
+    // Validation must stop before opening the store or reaching dispatch.
+    assert!(!root.join("RouDex/router.sqlite3").exists());
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn spec_load_rejects_missing_dependency_before_importing_any_tasks() {
+    let mut task = lifecycle_task();
+    task.depends_on = vec!["missing".into()];
+    assert_invalid_graph_is_not_imported(vec![task], "depends on missing task missing");
+}
+
+#[test]
+fn spec_load_rejects_duplicate_ids_before_importing_any_tasks() {
+    let task = lifecycle_task();
+    let expected_error = format!("duplicate task id: {}", task.id);
+    assert_invalid_graph_is_not_imported(vec![task.clone(), task], &expected_error);
+}
+
+#[test]
+fn spec_load_rejects_cycle_before_importing_any_tasks() {
+    let mut first = lifecycle_task();
+    let mut second = first.clone();
+    second.id = "cycle-dependent".into();
+    first.depends_on = vec![second.id.clone()];
+    second.depends_on = vec![first.id.clone()];
+    assert_invalid_graph_is_not_imported(vec![first, second], "dependency cycle includes task");
 }
 
 #[test]
