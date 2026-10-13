@@ -170,7 +170,7 @@
       "scope": ["specs/001-task-orchestration", "docs", "Cargo.toml", "crates", "src-tauri", "ui"],
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["."] },
-      "acceptance": ["Scenarios A1-A8 have evidence", "The worktree and release audit pass", "No secrets or local state are published"],
+      "acceptance": ["Scenarios A1-A12 have evidence", "The worktree and release audit pass", "No secrets or local state are published"],
       "verify": "cargo test --workspace"
     }
   ]
