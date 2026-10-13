@@ -11,8 +11,9 @@ pub use coordinator::{
     TaskRuntime,
 };
 pub use domain::{
-    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
-    TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,
+    DesktopPromptInput, DesktopPromptReceipt, EventRecord, RoutePromptInput, RouteReceipt,
+    RouteStatus, RunStatus, StoredRun, StoredTask, TaskApproval, TaskDefinition, TaskSandbox,
+    TaskStatus,
 };
 pub use persistence::{RouterStore, StoreError};
 pub use routing::{classify_prompt, route_prompt, ModelRoute, TaskClass};

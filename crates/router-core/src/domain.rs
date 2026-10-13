@@ -93,6 +93,21 @@ pub struct RoutePromptInput {
     pub permission_mode: Option<String>,
 }
 
+/// Desktop ingress carries an optional explicit target; session/turn identity
+/// is the delivery key, never an instruction to start another execution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DesktopPromptInput {
+    #[serde(flatten)]
+    pub message: RoutePromptInput,
+    pub task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DesktopPromptReceipt {
+    pub task: StoredTask,
+    pub replayed: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RouteReceipt {
     pub route_id: String,

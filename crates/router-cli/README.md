@@ -3,6 +3,23 @@
 Run from the workspace root using `cargo run -p router-cli -- <command>`.
 Commands use the local SQLite store; no remote service is added.
 
+`route-prompt` reads a desktop JSON message from stdin (`prompt`, `session_id`,
+`turn_id`, `cwd`, optional `permission_mode` and `task_id`). It persists a blocked
+draft or updates an unexecuted task in the same working directory. Deliveries
+are deduplicated by session and turn; conflicting replays fail closed. Updates
+preserve the execution contract and require fresh approval. The response stops
+the original Desktop turn, and ingress never starts an App Server worker.
+`--record-only` is a compatibility alias with the same behavior. Only internal
+coordinator workers receive `continue: true` without recording another task.
+
+New drafts have no inferred scope, acceptance criteria or verification command.
+Load a reviewed manifest using the returned task/spec ids, approve the task,
+then execute with `task-run` or `task-dispatch`. Approval alone cannot execute
+an incomplete draft. Route/run ids exist only after coordinator dispatch.
+Installed hooks use a local PowerShell wrapper that also blocks when the router
+is missing, fails, or returns invalid output. Reinstall the hook after upgrading
+to deploy the wrapper; source changes do not alter the installed configuration.
+
 ```text
 spec-load <manifest.json>
 task-list <specId>

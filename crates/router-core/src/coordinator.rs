@@ -238,6 +238,19 @@ impl<'a> TaskCoordinator<'a> {
         ) {
             return self.existing_receipt(&task, "task is not ready for dispatch");
         }
+        // Desktop drafts deliberately omit the execution contract. Approval
+        // alone cannot make such a draft executable.
+        if task.verify.trim().is_empty() || task.acceptance.is_empty() || task.scope.is_empty() {
+            if task.status != TaskStatus::Blocked {
+                self.store.set_task_status(task_id, TaskStatus::Blocked)?;
+            }
+            let mut draft = task.clone();
+            draft.status = TaskStatus::Blocked;
+            return self.existing_receipt(
+                &draft,
+                "task requires scope, acceptance and verification before dispatch",
+            );
+        }
         if task.status == TaskStatus::Blocked {
             if let Some(run) = self.store.latest_run_for_task(task_id)? {
                 if self

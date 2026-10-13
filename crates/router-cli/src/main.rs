@@ -1,14 +1,13 @@
 use router_core::{
-    AppServerClient, AppServerConfig, EventRecord, LocalTaskRuntime, RoutePromptInput,
-    RouteReceipt, RouteStatus, RouterStore, RuntimeTurn, TaskApproval, TaskCoordinator,
-    TaskDefinition, TaskManifest, TaskRuntime,
+    AppServerClient, AppServerConfig, DesktopPromptInput, EventRecord, LocalTaskRuntime,
+    RouterStore, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest,
+    TaskRuntime,
 };
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use uuid::Uuid;
 
 fn main() {
     let command = env::args().nth(1);
@@ -367,119 +366,62 @@ fn continue_run(args: Vec<String>) -> Result<(), String> {
 }
 
 fn route_prompt(args: Vec<String>) -> Result<(), String> {
-    let record_only = args.iter().any(|arg| arg == "--record-only");
-    let mut input_text = String::new();
-    io::stdin()
-        .read_to_string(&mut input_text)
-        .map_err(|error| format!("could not read hook input: {error}"))?;
-    let input: RoutePromptInput = serde_json::from_str(&input_text)
-        .map_err(|error| format!("invalid hook input: {error}"))?;
-
+    // Only workers launched by the coordinator can continue the original turn.
+    // Check before parsing stdin so worker hooks cannot recurse on bad input.
     if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
         || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some()
     {
         return write_json(&json!({ "continue": true }));
     }
-    if input.prompt.trim().is_empty() {
-        return write_block("No se puede enrutar un mensaje vacío.");
+    // Retain the old flag as an ingress-only alias for already-installed hooks.
+    if !args.is_empty() && args != ["--record-only"] {
+        return Err("Usage: router-cli route-prompt [--record-only]".into());
     }
-
-    let route = router_core::route_prompt(&input);
-    let receipt = RouteReceipt {
-        route_id: Uuid::new_v4().to_string(),
-        run_id: Uuid::new_v4().to_string(),
-        profile: route.profile.to_owned(),
-        model: route.model.to_owned(),
-        effort: route.effort.to_owned(),
-        status: RouteStatus::Accepted,
-    };
+    let mut input_text = String::new();
+    io::stdin()
+        .read_to_string(&mut input_text)
+        .map_err(|error| format!("could not read hook input: {error}"))?;
+    let input: DesktopPromptInput = serde_json::from_str(&input_text)
+        .map_err(|error| format!("invalid hook input: {error}"))?;
     let store = RouterStore::open(RouterStore::default_path())
         .map_err(|error| format!("could not open local state: {error}"))?;
-    store
-        .record_route(&input, &receipt)
-        .map_err(|error| format!("could not persist route: {error}"))?;
-    store
-        .record_event(&EventRecord {
-            run_id: receipt.run_id.clone(),
-            event_type: "route.accepted".to_owned(),
-            payload: json!({
-                "sessionId": input.session_id,
-                "turnId": input.turn_id,
-                "cwd": input.cwd,
-                "profile": receipt.profile,
-                "model": receipt.model,
-                "effort": receipt.effort
-            }),
-        })
-        .map_err(|error| format!("could not persist route event: {error}"))?;
-
-    let worker_context = if record_only {
-        "Modo de registro activo; el turno continúa con el recibo local.".to_owned()
-    } else {
-        let config = AppServerConfig::local(&input.cwd);
-        let mut client = AppServerClient::start(&config)
-            .map_err(|error| format!("no se pudo iniciar el runtime local: {error}"))?;
-        let thread_id = client
-            .start_thread(
-                receipt.model.as_str(),
-                PathBuf::from(&input.cwd).as_path(),
-                "never",
-                "read-only",
-            )
-            .map_err(|error| format!("no se pudo iniciar el hilo local: {error}"))?;
-        store
-            .record_event(&EventRecord {
-                run_id: receipt.run_id.clone(),
-                event_type: "thread.started".to_owned(),
-                payload: json!({ "threadId": thread_id }),
-            })
-            .map_err(|error| format!("could not persist thread event: {error}"))?;
-        let turn = client
-            .run_turn(
-                &thread_id,
-                &input.prompt,
-                receipt.model.as_str(),
-                receipt.effort.as_str(),
-                PathBuf::from(&input.cwd).as_path(),
-                "never",
-                "read-only",
-            )
-            .map_err(|error| format!("no se pudo completar el turno local: {error}"))?;
-        store
-            .record_event(&EventRecord {
-                run_id: receipt.run_id.clone(),
-                event_type: "turn.completed".to_owned(),
-                payload: json!({
-                    "threadId": turn.thread_id,
-                    "turnId": turn.turn_id,
-                    "status": turn.status
-                }),
-            })
-            .map_err(|error| format!("could not persist completion event: {error}"))?;
-        format!("Respuesta del runtime local:\n{}", turn.text)
-    };
-
+    let receipt = store
+        .ingest_desktop_prompt(&input)
+        .map_err(|error| error.to_string())?;
+    let task = &receipt.task.definition;
     write_json(&json!({
-        "continue": true,
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": format!(
-                "Mensaje recibido por el adaptador local. routeId={} runId={} profile={} model={} effort={}\\n{}",
-                receipt.route_id,
-                receipt.run_id,
-                receipt.profile,
-                receipt.model,
-                receipt.effort,
-                worker_context
-            )
-        }
+        "continue": false,
+        "decision": "block",
+        "reason": format!(
+            "RouDex recorded task {} ({}). Review its execution contract and approval, then use task-run {} or task-dispatch {}. The Desktop turn is stopped; only the coordinator executes this task.",
+            task.id, if receipt.replayed { "replayed delivery" } else { "new delivery" },
+            task.id, receipt.task.spec_id
+        ),
+        "taskId": task.id,
+        "specId": receipt.task.spec_id,
+        "status": task.status,
+        "replayed": receipt.replayed
     }))
 }
 
 fn install_hook() -> Result<(), String> {
     let path = hooks_path();
     let mut document = read_hooks(&path)?;
-    let command = hook_command();
+    let hook_dir = hooks_path()
+        .parent()
+        .ok_or("hook directory missing")?
+        .join("roudex");
+    fs::create_dir_all(&hook_dir).map_err(|error| error.to_string())?;
+    let script = hook_dir.join("route-prompt.ps1");
+    fs::write(&script, MANAGED_HOOK_SCRIPT).map_err(|error| error.to_string())?;
+    let command = format!(
+        "{} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\" -RouterPath \"{}\"",
+        WINDOWS_POWERSHELL,
+        script.display(),
+        env::current_exe()
+            .map_err(|error| error.to_string())?
+            .display()
+    );
     let hooks = document
         .as_object_mut()
         .ok_or_else(|| "hooks.json debe contener un objeto JSON".to_owned())?
@@ -657,11 +599,7 @@ fn hooks_path() -> PathBuf {
 
 const MANAGED_MARKER: &str = "# RouDex managed desktop routing hook";
 const WINDOWS_POWERSHELL: &str = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
-const MANAGED_HOOK_SCRIPT: &str = r#"$router = Join-Path $PSScriptRoot 'router-cli.exe'
-$inputText = [Console]::In.ReadToEnd()
-$inputText | & $router route-prompt --record-only
-exit $LASTEXITCODE
-"#;
+const MANAGED_HOOK_SCRIPT: &str = include_str!("../../../scripts/route-prompt.ps1");
 
 fn managed_requirements_path() -> PathBuf {
     if let Some(path) = env::var_os("ROUDEX_CODEX_REQUIREMENTS_PATH") {
@@ -688,11 +626,6 @@ fn managed_hook_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".roudex"))
         .join("RouDex")
         .join("hooks")
-}
-
-fn hook_command() -> String {
-    let executable = env::current_exe().unwrap_or_else(|_| PathBuf::from("router-cli"));
-    format!("\"{}\" route-prompt --record-only", executable.display())
 }
 
 fn read_hooks(path: &PathBuf) -> Result<Value, String> {

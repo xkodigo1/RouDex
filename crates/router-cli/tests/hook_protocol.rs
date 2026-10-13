@@ -69,39 +69,49 @@ fn run(args: &[&str], body: &str, state_root: &Path, extra_env: &[(&str, &str)])
 }
 
 #[test]
-fn record_only_returns_a_route_receipt_and_persists_it() {
-    let root = temp_root("record");
-    let response = run(
-        &["route-prompt", "--record-only"],
-        &input("Actualizar el README con instrucciones"),
-        &root,
-        &[],
-    );
-
-    assert_eq!(response["continue"], true);
-    assert!(response["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .expect("context")
-        .contains("runId="));
-    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).expect("state store");
-    assert_eq!(store.count_runs().expect("run count"), 1);
-    drop(store);
-    fs::remove_dir_all(root).expect("cleanup");
-}
-
-#[test]
-fn router_failure_blocks_the_prompt() {
-    let root = temp_root("fail-closed");
-    let response = run(
-        &["route-prompt"],
-        &input("Analizar una tarea"),
+fn desktop_delivery_creates_a_blocked_task_and_replays_without_execution() {
+    let root = temp_root("ingress");
+    let body = input("Actualizar el README con instrucciones");
+    let response = run(&["route-prompt", "--record-only"], &body, &root, &[]);
+    assert_eq!(response["continue"], false);
+    assert_eq!(response["decision"], "block");
+    assert_eq!(response["status"], "blocked");
+    assert_eq!(response["replayed"], false);
+    assert!(response.get("runId").is_none());
+    let replay = run(&["route-prompt"], &body, &root, &[]);
+    assert_eq!(replay["taskId"], response["taskId"]);
+    assert_eq!(replay["replayed"], true);
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    let task_id = response["taskId"].as_str().unwrap();
+    let task = store.get_task(task_id).unwrap().unwrap().definition;
+    assert_eq!(task.prompt, "Actualizar el README con instrucciones");
+    assert_eq!(task.profile, "routine");
+    assert_eq!(task.approval, "manual");
+    assert_eq!(task.sandbox.kind, "readOnly");
+    // Approval alone cannot fill in the missing execution contract.
+    run(&["task-approve", task_id], "", &root, &[]);
+    let dispatch = run(
+        &["task-run", task_id],
+        "",
         &root,
         &[("ROUDEX_CODEX_BIN", "missing-codex-binary")],
     );
+    assert_eq!(dispatch["status"], "blocked");
+    assert_eq!(store.count_runs().unwrap(), 0);
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
 
+#[test]
+fn router_storage_failure_blocks_the_prompt() {
+    let root = temp_root("fail-closed");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("RouDex"), "not a directory").unwrap();
+    let response = run(&["route-prompt"], &input("Analizar una tarea"), &root, &[]);
     assert_eq!(response["continue"], false);
     assert_eq!(response["decision"], "block");
-    fs::remove_dir_all(root).expect("cleanup");
+    assert!(response.get("taskId").is_none());
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -570,7 +580,12 @@ fn hook_installation_is_idempotent() {
     assert!(entries[0]["hooks"][0]["command"]
         .as_str()
         .expect("hook command")
-        .contains("route-prompt --record-only"));
+        .contains("route-prompt.ps1"));
+    assert!(
+        fs::read_to_string(root.join("codex/roudex/route-prompt.ps1"))
+            .unwrap()
+            .contains("ConvertFrom-Json")
+    );
     assert_eq!(
         entries[0]["hooks"][0]["commandWindows"],
         entries[0]["hooks"][0]["command"]
@@ -614,4 +629,323 @@ fn managed_hook_installation_is_explicit_and_idempotent() {
     assert!(!managed_dir.join("router-cli.exe").exists());
     assert!(!managed_dir.join("route-prompt.ps1").exists());
     fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn delivery_identity_conflicts_and_invalid_messages_fail_closed() {
+    let root = temp_root("invalid-ingress");
+    let first = run(&["route-prompt"], &input("Original"), &root, &[]);
+    let conflict = run(&["route-prompt"], &input("Changed"), &root, &[]);
+    assert_eq!(conflict["decision"], "block");
+    assert!(conflict["reason"].as_str().unwrap().contains("identity"));
+    for field in ["prompt", "session_id", "turn_id", "cwd", "task_id"] {
+        let mut body: Value = serde_json::from_str(&input("New")).unwrap();
+        body[field] = " ".into();
+        let result = run(&["route-prompt"], &body.to_string(), &root, &[]);
+        assert_eq!(result["continue"], false);
+        assert!(result.get("taskId").is_none());
+    }
+    for body in ["", "not JSON", "{}"] {
+        assert_eq!(
+            run(&["route-prompt"], body, &root, &[])["decision"],
+            "block"
+        );
+    }
+    assert_eq!(
+        run(
+            &["route-prompt", "--execute"],
+            &input("Original"),
+            &root,
+            &[]
+        )["decision"],
+        "block"
+    );
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    assert_eq!(
+        store
+            .tasks_for_spec(first["specId"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        store
+            .get_task(first["taskId"].as_str().unwrap())
+            .unwrap()
+            .unwrap()
+            .definition
+            .prompt,
+        "Original"
+    );
+    assert_eq!(store.count_runs().unwrap(), 0);
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn desktop_update_preserves_contract_revokes_approval_and_rejects_stale_dispatch() {
+    let root = temp_root("update-ingress");
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    let task = lifecycle_task();
+    store.upsert_task("spec", &task).unwrap();
+    run(&["task-approve", &task.id], "", &root, &[]);
+    let mut body: Value = serde_json::from_str(&input("Updated task prompt")).unwrap();
+    body["task_id"] = task.id.clone().into();
+    let result = run(&["route-prompt"], &body.to_string(), &root, &[]);
+    assert_eq!(result["taskId"], task.id);
+    assert_eq!(result["status"], "blocked");
+    let updated = store.get_task(&task.id).unwrap().unwrap().definition;
+    assert_eq!(updated.prompt, "Updated task prompt");
+    assert_eq!(updated.scope, task.scope);
+    assert_eq!(updated.sandbox, task.sandbox);
+    assert_eq!(updated.verify, task.verify);
+    assert_eq!(updated.profile, task.profile);
+    assert_eq!(
+        store
+            .latest_task_approval(&task.id)
+            .unwrap()
+            .unwrap()
+            .decision,
+        "denied"
+    );
+    let env = [("ROUDEX_CODEX_BIN", "missing-codex-binary")];
+    assert_eq!(
+        run(&["task-run", &task.id], "", &root, &env)["status"],
+        "blocked"
+    );
+    run(&["task-approve", &task.id], "", &root, &[]);
+    let receipt = RouteReceipt {
+        route_id: "stale-route".into(),
+        run_id: "stale-run".into(),
+        profile: task.profile.clone(),
+        model: task.model.clone(),
+        effort: task.effort.clone(),
+        status: RouteStatus::Accepted,
+    };
+    assert!(!store.begin_task_run(&task, "spec", &receipt).unwrap());
+    assert_eq!(store.count_runs().unwrap(), 0);
+    // Replaying the delivery never revokes a later, explicit approval.
+    assert_eq!(
+        run(&["route-prompt"], &body.to_string(), &root, &[])["replayed"],
+        true
+    );
+    assert_eq!(
+        store
+            .latest_task_approval(&task.id)
+            .unwrap()
+            .unwrap()
+            .decision,
+        "approved"
+    );
+    let failed = run(&["task-run", &task.id], "", &root, &env);
+    assert_eq!(failed["status"], "failed");
+    assert_eq!(store.count_runs().unwrap(), 1);
+    let evidence = store
+        .events_for_run(failed["run_id"].as_str().unwrap())
+        .unwrap();
+    assert!(evidence
+        .iter()
+        .any(|event| event.event_type == "task.started"
+            && event.payload["definition"]["prompt"] == "Updated task prompt"));
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ingress_cannot_overwrite_active_or_terminal_work_or_cross_working_directories() {
+    for status in [
+        TaskStatus::Running,
+        TaskStatus::Completed,
+        TaskStatus::Failed,
+        TaskStatus::Interrupted,
+        TaskStatus::Blocked,
+    ] {
+        let root = temp_root("immutable-ingress");
+        let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+        let task = lifecycle_task();
+        store.upsert_task("spec", &task).unwrap();
+        run(&["task-approve", &task.id], "", &root, &[]);
+        store
+            .begin_task_run(
+                &task,
+                "spec",
+                &RouteReceipt {
+                    route_id: "route".into(),
+                    run_id: "run".into(),
+                    profile: task.profile.clone(),
+                    model: task.model.clone(),
+                    effort: task.effort.clone(),
+                    status: RouteStatus::Accepted,
+                },
+            )
+            .unwrap();
+        if status != TaskStatus::Running {
+            store.set_task_status(&task.id, status.clone()).unwrap();
+        }
+        let mut body: Value = serde_json::from_str(&input("Must not overwrite")).unwrap();
+        body["task_id"] = task.id.clone().into();
+        let response = run(&["route-prompt"], &body.to_string(), &root, &[]);
+        assert!(response.get("taskId").is_none());
+        assert_eq!(
+            store.get_task(&task.id).unwrap().unwrap().definition.prompt,
+            task.prompt
+        );
+        assert_eq!(
+            store.get_task(&task.id).unwrap().unwrap().definition.status,
+            status
+        );
+        assert_eq!(store.count_runs().unwrap(), 1);
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+    let root = temp_root("cross-cwd");
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    let task = lifecycle_task();
+    store.upsert_task("spec", &task).unwrap();
+    let mut body: Value = serde_json::from_str(&input("Must not overwrite")).unwrap();
+    body["cwd"] = root.to_string_lossy().as_ref().into();
+    body["task_id"] = task.id.clone().into();
+    assert!(
+        run(&["route-prompt"], &body.to_string(), &root, &[])["reason"]
+            .as_str()
+            .unwrap()
+            .contains("cwd")
+    );
+    body["task_id"] = "missing".into();
+    assert!(
+        run(&["route-prompt"], &body.to_string(), &root, &[])["reason"]
+            .as_str()
+            .unwrap()
+            .contains("not found")
+    );
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn concurrent_desktop_deliveries_persist_one_task() {
+    let root = temp_root("concurrent-ingress");
+    // Initialize the schema before testing concurrent ingress transactions.
+    drop(RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap());
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let root = root.clone();
+            std::thread::spawn(move || {
+                run(&["route-prompt"], &input("Concurrent delivery"), &root, &[])
+            })
+        })
+        .collect();
+    let responses: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    let task_id = responses[0]["taskId"].as_str().expect("task id");
+    assert_eq!(
+        responses
+            .iter()
+            .filter(|response| response["replayed"] == false)
+            .count(),
+        1
+    );
+    for response in &responses {
+        assert_eq!(response["taskId"], task_id);
+        assert_eq!(response["continue"], false);
+    }
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    assert_eq!(
+        store
+            .tasks_for_spec(responses[0]["specId"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(store.count_runs().unwrap(), 0);
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(windows)]
+fn run_hook_script(router: &Path, body: &str, root: &Path, internal: bool) -> Value {
+    let mut command = Command::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe");
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/route-prompt.ps1"))
+        .arg("-RouterPath")
+        .arg(router)
+        .env("LOCALAPPDATA", root)
+        .env_remove("ROUDEX_ROUTER_INTERNAL")
+        .env_remove("ROUDEX_ACTIVE_TASK_ID")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if internal {
+        command.env("ROUDEX_ROUTER_INTERNAL", "1");
+    }
+    let mut child = command.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(body.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).expect("fail-closed wrapper JSON")
+}
+
+#[cfg(windows)]
+#[test]
+fn powershell_boundary_blocks_missing_failed_and_malformed_routers() {
+    let root = temp_root("wrapper");
+    fs::create_dir_all(&root).unwrap();
+    assert_eq!(
+        run_hook_script(&root.join("missing.exe"), &input("Task"), &root, false)["decision"],
+        "block"
+    );
+    let fake = root.join("fake.cmd");
+    for output in [
+        "@exit /b 1",
+        "@echo garbage",
+        "@echo {\"continue\":true}",
+        "@echo {\"continue\":false,\"decision\":[\"block\",\"allow\"]}",
+        "@echo {\"continue\":\"false\",\"decision\":\"block\"}",
+        "@echo [{\"continue\":false,\"decision\":\"block\"}]",
+        "@exit /b 0",
+    ] {
+        fs::write(&fake, output).unwrap();
+        assert_eq!(
+            run_hook_script(&fake, &input("Task"), &root, false)["decision"],
+            "block"
+        );
+    }
+    // Internal guard must work even when the incoming body is malformed.
+    assert_eq!(
+        run_hook_script(&binary(), "not JSON", &root, true),
+        serde_json::json!({"continue":true})
+    );
+    let prompt = "Actualizar documentación: ejecución única 日本語";
+    let response = run_hook_script(&binary(), &input(prompt), &root, false);
+    assert_eq!(response["decision"], "block");
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    assert_eq!(
+        store
+            .get_task(response["taskId"].as_str().unwrap())
+            .unwrap()
+            .unwrap()
+            .definition
+            .prompt,
+        prompt
+    );
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
 }

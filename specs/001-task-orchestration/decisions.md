@@ -71,3 +71,23 @@ validación que el propio coordinador necesita para poder registrar y ejecutar
 tasks. Se validan con pruebas locales y quedan identificadas como `bootstrap`,
 sin inventar un `run_id`. Desde T-004, las units de implementación se deben
 despachar por RouDex y conservar su recibo y eventos.
+
+## D012 — Ingress transaccional y turno original detenido
+
+El hook solo registra entrada: detiene el turno original también en caso de
+éxito y deja la ejecución a comandos del coordinador. Ejecutar un worker dentro
+del hook y continuar Desktop duplicaría la ejecución; devolver contexto no
+impone el modelo. La clasificación no concede permisos ni inventa un contrato
+de verificación: los mensajes nuevos crean borradores bloqueados para revisión.
+
+La identidad de entrega es `(session_id, turn_id)`. SQLite guarda la entrada y
+la mutación de task en una transacción IMMEDIATE. Un replay exacto devuelve
+estado actual; uno contradictorio se rechaza. Actualizar exige `task_id`, mismo
+cwd y ausencia de runs; conserva el contrato y requiere aprobación nueva. El
+claim de dispatch compara la definición para rechazar snapshots obsoletos.
+
+Esto requiere una ampliación acotada de T-007 a dominio, persistencia y gates
+del coordinador en router-core, además del CLI y scripts originales. Se reutiliza
+SQLite y la pila Rust existente; no hay dependencias, frameworks ni servicios
+nuevos. Un wrapper PowerShell compartido por ambos instaladores bloquea errores
+de lanzamiento o protocolo y conserva UTF-8.

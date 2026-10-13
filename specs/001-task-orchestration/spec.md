@@ -178,9 +178,50 @@ fallida.
 
 Verificación: prueba de transición de estado y evento de auditoría.
 
+### A9 — Entrada de escritorio sin ejecución duplicada
+
+**Dado** un mensaje con prompt, sesión, turno y cwd válidos, **cuando** el
+adaptador lo recibe, **entonces** persiste una task bloqueada, devuelve su id y
+detiene el turno original sin iniciar App Server. Repetir el mensaje, incluso
+concurrentemente, devuelve la misma task; cambiar el contenido con la misma
+identidad se rechaza. `--record-only` conserva este contrato.
+
+Verificación: pruebas CLI de creación, replay, conflictos y ocho entregas
+simultáneas, con una task y cero runs.
+
+### A10 — Actualización pendiente y revalidación
+
+**Dado** un mensaje con `task_id` explícito y nuevo turno, **cuando** apunta a
+una task sin runs en el mismo cwd, **entonces** actualiza el prompt, conserva
+su contrato y exige aprobación nueva. Un snapshot anterior no puede despacharse.
+Una task activa, terminal o con un run previo no se sobrescribe.
+
+Verificación: pruebas CLI de actualización, aprobación revocada, snapshot
+obsoleto, estados activos/terminales y cwd distinto.
+
+### A11 — Contrato revisado antes del coordinador
+
+**Dado** un borrador creado por escritorio, **cuando** solo se aprueba,
+**entonces** no inicia el runtime. Tras cargar scope, acceptance, verify y
+sandbox revisados y aprobar explícitamente, el coordinador ejecuta el turno
+con modelo/esfuerzo asignados, persiste verificación y evita otra ejecución al
+repetir la entrega o el dispatch.
+
+Verificación: prueba integrada con App Server falso por stdio; exactamente un
+`thread/start`, un `turn/start` y un run.
+
+### A12 — Fallo del entrypoint de escritorio
+
+**Dado** un router ausente, proceso fallido, JSON inválido o SQLite inaccesible,
+**cuando** se recibe un mensaje, **entonces** el wrapper o CLI devuelve una
+decisión de bloqueo. Los workers internos evitan recursión incluso con entrada
+malformada; los prompts Unicode se conservan.
+
+Verificación: ejecución real del wrapper PowerShell en Windows y pruebas CLI.
+
 ## Criterio de finalización del milestone
 
 El milestone termina cuando todas las tasks requeridas del manifest están
-completadas, A1–A8 tienen evidencia, existe al menos una continuación por
+completadas, A1–A12 tienen evidencia, existe al menos una continuación por
 `runId`, el repositorio conserva commits independientes firmados y el
 workspace no contiene secretos ni estado local generado.

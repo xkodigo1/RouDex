@@ -52,11 +52,39 @@ La modalidad anterior, limitada a la configuración de usuario, sigue
 disponible con `-Release` sin `-Managed`, pero depende de la revisión de
 confianza de hooks y no es la modalidad global recomendada.
 
-El adaptador devuelve `decision: block` si no puede registrar o enrutar un
-mensaje. El hook de Desktop usa el modo de registro para que el turno original
-se ejecute una sola vez; la respuesta de clasificación llega al mismo turno
-mediante `additionalContext`. Las ejecuciones internas opcionales se marcan
-mediante una variable de proceso local para evitar recursión.
+El adaptador crea una task local y devuelve `continue: false` y
+`decision: block`, también cuando el registro tiene éxito. El motivo incluye
+`taskId` y `specId`: el turno original se detiene y el hook nunca inicia un
+worker. La ejecución posterior pasa exclusivamente por el coordinador.
+`--record-only` sigue aceptándose para hooks antiguos, con este mismo contrato.
+Tras actualizar el binario, vuelve a ejecutar el instalador para actualizar
+el wrapper de PowerShell de los hooks instalados.
+
+La identidad `(session_id, turn_id)` evita duplicados, incluso entre procesos
+simultáneos. Repetir exactamente el JSON devuelve la misma task y su estado
+actual. Reutilizar esa identidad con otro contenido bloquea el mensaje.
+Un nuevo turno crea otra task; para actualizar una task pendiente, el JSON debe
+incluir su `task_id`. La actualización exige el mismo directorio de trabajo,
+conserva perfil, scope, sandbox y dependencias, y revoca la aprobación anterior.
+Una task activa o con un run previo requiere recuperación explícita o una nueva
+task. Los marcadores internos del coordinador evitan recursión.
+
+Las tasks nuevas son borradores bloqueados, con aprobación manual y sandbox de
+solo lectura. El texto del mensaje y `permission_mode` no conceden permisos.
+Antes de ejecutar, prepara un manifest JSON con el `taskId` y `specId`
+devueltos, perfil/modelo/esfuerzo, scope, cwd, sandbox, acceptance y verify
+revisados. Cárgalo y apruébalo desde una terminal local:
+
+```powershell
+cargo run -p router-cli -- spec-load <manifest.json>
+cargo run -p router-cli -- task-approve <taskId> approved
+cargo run -p router-cli -- task-run <taskId>
+```
+
+También puedes despachar el grafo con `task-dispatch <specId>`. Aprobar un
+borrador sin scope, acceptance o verify no inicia el runtime. Un ejecutable
+ausente, fallo de proceso, respuesta inválida o error de SQLite produce una
+decisión de bloqueo; no habilita la ejecución en el chat original.
 
 ## Consultar estado
 

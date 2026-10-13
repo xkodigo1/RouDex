@@ -39,3 +39,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Output "Hook instalado ($installMode): $destination"
+Write-Output 'Los mensajes crean tasks locales y detienen el turno original. Revisa scope, acceptance y verify, aprueba la task y ejecútala mediante el coordinador.'

@@ -74,6 +74,130 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn desktop_ingress_reaches_stdio_only_after_contract_and_approval_review() {
+    let fixture = Fixture::new();
+    let store = RouterStore::open(fixture.cwd.join("router.sqlite3")).unwrap();
+    let message = router_core::DesktopPromptInput {
+        message: router_core::RoutePromptInput {
+            prompt: "Review the local production task".into(),
+            session_id: "desktop-session".into(),
+            turn_id: "desktop-turn".into(),
+            cwd: fixture.cwd.to_string_lossy().into_owned(),
+            permission_mode: Some("default".into()),
+        },
+        task_id: None,
+    };
+    let ingress = store.ingest_desktop_prompt(&message).unwrap();
+    let task_id = ingress.task.definition.id.clone();
+    let coordinator = TaskCoordinator::new(&store);
+    let mut runtime = LocalTaskRuntime::with_config(AppServerConfig {
+        program: PathBuf::from(env!("CARGO_BIN_EXE_fake-app-server")),
+        arguments: vec![
+            "success".into(),
+            fixture.log_path().to_string_lossy().into_owned(),
+        ],
+        working_directory: fixture.cwd.clone(),
+        service_name: "desktop-ingress-test".into(),
+        active_task_id: Some(task_id.clone()),
+    });
+    assert_eq!(
+        coordinator
+            .dispatch_task(&task_id, &mut runtime)
+            .unwrap()
+            .status,
+        TaskStatus::Blocked
+    );
+    assert!(fixture.requests("thread/start").is_empty());
+    let mut task = ingress.task.definition;
+    task.scope = vec![".".into()];
+    task.acceptance = vec!["Verification succeeds".into()];
+    task.verify = "echo verified".into();
+    task.sandbox = fixture.task("reviewed").sandbox;
+    store.upsert_task(&ingress.task.spec_id, &task).unwrap();
+    assert_eq!(
+        coordinator
+            .dispatch_task(&task_id, &mut runtime)
+            .unwrap()
+            .status,
+        TaskStatus::AwaitingApproval
+    );
+    assert!(fixture.requests("thread/start").is_empty());
+    store
+        .record_task_approval(&TaskApproval {
+            task_id: task_id.clone(),
+            decision: "approved".into(),
+            reason: Some("reviewed execution contract".into()),
+        })
+        .unwrap();
+    let completed = coordinator.dispatch_task(&task_id, &mut runtime).unwrap();
+    assert_eq!(completed.status, TaskStatus::Completed);
+    let replay = store.ingest_desktop_prompt(&message).unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.task.definition.status, TaskStatus::Completed);
+    let repeated = coordinator.dispatch_task(&task_id, &mut runtime).unwrap();
+    assert_eq!(repeated.run_id, completed.run_id);
+    assert_eq!(store.count_runs().unwrap(), 1);
+    assert_eq!(fixture.requests("thread/start").len(), 1);
+    assert_eq!(fixture.requests("turn/start").len(), 1);
+    let turn = &fixture.requests("turn/start")[0]["message"]["params"];
+    assert_eq!(turn["model"], task.model);
+    assert_eq!(turn["effort"], task.effort);
+}
+
+#[test]
+fn desktop_delivery_failure_rolls_back_task_and_approval_changes() {
+    let fixture = Fixture::new();
+    let db = fixture.cwd.join("router.sqlite3");
+    let store = RouterStore::open(&db).unwrap();
+    let mut task = fixture.task("pending");
+    task.status = TaskStatus::Ready;
+    task.approval = "manual".into();
+    store.upsert_task("spec", &task).unwrap();
+    store
+        .record_task_approval(&TaskApproval {
+            task_id: task.id.clone(),
+            decision: "approved".into(),
+            reason: None,
+        })
+        .unwrap();
+    let connection = rusqlite::Connection::open(&db).unwrap();
+    connection.execute_batch("CREATE TRIGGER reject_delivery BEFORE INSERT ON desktop_prompts BEGIN SELECT RAISE(ABORT, 'delivery unavailable'); END;").unwrap();
+    let mut input = router_core::DesktopPromptInput {
+        message: router_core::RoutePromptInput {
+            prompt: "Updated task".into(),
+            session_id: "rollback-session".into(),
+            turn_id: "rollback-turn".into(),
+            cwd: fixture.cwd.to_string_lossy().into_owned(),
+            permission_mode: None,
+        },
+        task_id: None,
+    };
+    assert!(store.ingest_desktop_prompt(&input).is_err());
+    assert!(store
+        .tasks_for_spec("desktop-rollback-session")
+        .unwrap()
+        .is_empty());
+    input.task_id = Some(task.id.clone());
+    assert!(store.ingest_desktop_prompt(&input).is_err());
+    assert_eq!(store.get_task(&task.id).unwrap().unwrap().definition, task);
+    assert_eq!(
+        store
+            .latest_task_approval(&task.id)
+            .unwrap()
+            .unwrap()
+            .decision,
+        "approved"
+    );
+    connection
+        .execute_batch("DROP TRIGGER reject_delivery;")
+        .unwrap();
+    let retried = store.ingest_desktop_prompt(&input).unwrap();
+    assert!(!retried.replayed);
+    assert_eq!(retried.task.definition.prompt, "Updated task");
+    assert_eq!(store.count_runs().unwrap(), 0);
+}
+
+#[test]
 fn stdio_dispatch_persists_route_turn_deltas_and_independent_verification() {
     let fixture = Fixture::new();
     let db = fixture.cwd.join("router.sqlite3");
