@@ -27,7 +27,7 @@ eventos y evidencia de verificación del coordinador.
 | T-002 | bootstrap | — | `cargo test -p router-core` — 5 tests passed | pendiente |
 | T-003 | bootstrap | — | `cargo test --workspace` — 8 router-core tests passed | pendiente |
 | T-004 | `9c51d6bb-e24a-4384-b420-44f6aa7e89d5` | `ab86fa49-4873-4863-9b69-2b9d6b2945cb` | App Server local completó el thread y el turn asignados; `cargo test --workspace` pasó con 28 pruebas; se conservaron eventos, modelo, esfuerzo y run_id | `6cd5669` |
-| T-005 | `29099428-fc64-45cf-ba0d-b3e1b2f3cf16` | `f3a93f3f-ed52-42d9-9cd1-bb0c9d530de4` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 40 pruebas; se registraron gates y evidencia transaccional | pendiente |
+| T-005 | `29099428-fc64-45cf-ba0d-b3e1b2f3cf16` | `f3a93f3f-ed52-42d9-9cd1-bb0c9d530de4` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 40 pruebas; se registraron gates y evidencia transaccional | `f19ede6` |
 | T-006 | — | — | pendiente | pendiente |
 | T-007 | — | — | pendiente | pendiente |
 | T-008 | — | — | pendiente | pendiente |
