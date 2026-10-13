@@ -33,6 +33,8 @@ fn run() -> Result<(), String> {
         command.as_deref(),
         Some(
             "task-plan"
+                | "spec-load"
+                | "task-dispatch"
                 | "task-approve"
                 | "task-run"
                 | "task-recover"
@@ -46,9 +48,28 @@ fn run() -> Result<(), String> {
     }
     match command.as_deref() {
         Some("route-prompt") => route_prompt(args.collect()),
-        Some("continue-run") => continue_run(args.collect()),
-        Some("task-plan") => task_plan(args.collect()),
-        Some("task-approve") => task_approve(args.collect()),
+        Some("continue-run") => {
+            continue_run(checked_args(args.collect(), 1, 1, "continue-run <runId>")?)
+        }
+        Some("spec-load" | "task-plan") => task_plan(checked_args(
+            args.collect(),
+            1,
+            1,
+            "spec-load <manifest.json>",
+        )?),
+        Some("task-list") => task_list(checked_args(args.collect(), 1, 1, "task-list <specId>")?),
+        Some("task-dispatch") => task_dispatch(checked_args(
+            args.collect(),
+            1,
+            1,
+            "task-dispatch <specId>",
+        )?),
+        Some("task-approve") => task_approve(checked_args(
+            args.collect(),
+            1,
+            2,
+            "task-approve <taskId> [approved|denied]",
+        )?),
         Some("task-run") => task_run(args.collect()),
         Some("task-recover") => task_recover(args.collect()),
         Some("task-retry") => task_retry(args.collect()),
@@ -66,6 +87,63 @@ fn run() -> Result<(), String> {
     }
 }
 
+fn checked_args(
+    args: Vec<String>,
+    min: usize,
+    max: usize,
+    usage: &str,
+) -> Result<Vec<String>, String> {
+    if !(min..=max).contains(&args.len()) || args.iter().any(|arg| arg.trim().is_empty()) {
+        return Err(format!("Usage: router-cli {usage}"));
+    }
+    Ok(args)
+}
+
+fn task_list(args: Vec<String>) -> Result<(), String> {
+    let spec_id = &args[0];
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    let tasks = store
+        .tasks_for_spec(spec_id)
+        .map_err(|error| error.to_string())?;
+    let mut entries = Vec::new();
+    for task in tasks {
+        let approval = store
+            .latest_task_approval(&task.id)
+            .map_err(|error| error.to_string())?;
+        let run = store
+            .latest_run_for_task(&task.id)
+            .map_err(|error| error.to_string())?;
+        let dependencies_completed = store
+            .dependencies_completed(&task.id)
+            .map_err(|error| error.to_string())?;
+        entries.push(json!({
+            "task": task,
+            "approval": approval,
+            "latestRun": run,
+            "dependenciesCompleted": dependencies_completed
+        }));
+    }
+    write_json(&json!({ "specId": spec_id, "tasks": entries }))
+}
+
+fn task_dispatch(args: Vec<String>) -> Result<(), String> {
+    let spec_id = &args[0];
+    let store = RouterStore::open(RouterStore::default_path())
+        .map_err(|error| format!("could not open local state: {error}"))?;
+    if store
+        .tasks_for_spec(spec_id)
+        .map_err(|error| error.to_string())?
+        .is_empty()
+    {
+        return Err(format!("spec not found: {spec_id}"));
+    }
+    let receipts = TaskCoordinator::new(&store)
+        .dispatch_ready_tasks(spec_id)
+        .map_err(|error| error.to_string())?;
+    write_json(&json!({ "specId": spec_id, "receipts": receipts }))
+}
+
 fn task_plan(args: Vec<String>) -> Result<(), String> {
     let manifest_path = args
         .first()
@@ -76,10 +154,17 @@ fn task_plan(args: Vec<String>) -> Result<(), String> {
     TaskCoordinator::new(&store)
         .import_manifest(&manifest)
         .map_err(|error| error.to_string())?;
+    // Reimports preserve lifecycle state; report readiness from that same state.
+    let persisted = TaskManifest {
+        tasks: store
+            .tasks_for_spec(&manifest.spec_id)
+            .map_err(|error| error.to_string())?,
+        ..manifest
+    };
     write_json(&json!({
-        "specId": manifest.spec_id,
-        "taskCount": manifest.tasks.len(),
-        "readyTaskIds": manifest.ready_tasks().iter().map(|task| task.id.clone()).collect::<Vec<_>>()
+        "specId": persisted.spec_id,
+        "taskCount": persisted.tasks.len(),
+        "readyTaskIds": persisted.ready_tasks().iter().map(|task| task.id.clone()).collect::<Vec<_>>()
     }))
 }
 
@@ -632,6 +717,6 @@ fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-prompt [--record-only]|continue-run <runId>|task-plan <manifest>|task-approve <taskId> [approved|denied]|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
+        "Usage: router-cli <spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|route-prompt [--record-only]|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
     );
 }

@@ -105,7 +105,7 @@
       "title": "Expose the coordinator through the CLI",
       "prompt": "Add neutral CLI commands for loading a spec, listing task status, approving a task, dispatching ready tasks and continuing a run by runId.",
       "depends_on": ["T-004", "T-005"],
-      "status": "planned",
+      "status": "completed",
       "profile": "standard",
       "model": "gpt-6.1-sol",
       "effort": "medium",
@@ -114,6 +114,9 @@
       "cwd": ".",
       "sandbox": { "type": "workspaceWrite", "writable_roots": ["crates/router-cli"] },
       "acceptance": ["The CLI validates a spec and dispatches only ready tasks", "Status, approval and continuation commands expose persisted evidence"],
+      "route_id": "b7aefd6d-b13b-44f7-8ade-b5a998be84ab",
+      "run_id": "fc30becd-b90d-4116-826c-697068df92c6",
+      "evidence": "El App Server local ejecutó T-006 con aprobación explícita; se añadieron spec-load, task-list y task-dispatch, preservando gates y continuación. cargo test --workspace pasó con 44 pruebas.",
       "verify": "cargo test --workspace"
     },
     {

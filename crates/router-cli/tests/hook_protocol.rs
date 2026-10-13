@@ -137,6 +137,8 @@ fn either_worker_marker_prevents_nested_lifecycle_commands() {
             vec!["task-recover", "T-005"],
             vec!["task-retry", "T-005"],
             vec!["task-plan", "missing.json"],
+            vec!["spec-load", "missing.json"],
+            vec!["task-dispatch", "spec"],
         ] {
             let root = temp_root("nested-worker");
             let output = Command::new(binary())
@@ -379,6 +381,8 @@ fn task_plan_imports_manifest_and_reports_ready_tasks() {
     assert_eq!(response["specId"], "spec-test");
     assert_eq!(response["taskCount"], 2);
     assert_eq!(response["readyTaskIds"], serde_json::json!(["T-002"]));
+    let loaded = run(&["spec-load", manifest_arg.as_str()], "", &root, &[]);
+    assert_eq!(loaded, response);
     let store = RouterStore::open(root.join("RouDex/router.sqlite3")).expect("state store");
     assert_eq!(
         store
@@ -388,8 +392,163 @@ fn task_plan_imports_manifest_and_reports_ready_tasks() {
             .spec_id,
         "spec-test"
     );
+    // Reloading a stale manifest must not advertise completed work as ready.
+    store.set_task_status("T-002", TaskStatus::Ready).unwrap();
+    store
+        .record_task_approval(&router_core::TaskApproval {
+            task_id: "T-002".into(),
+            decision: "approved".into(),
+            reason: None,
+        })
+        .unwrap();
+    let next = store.get_task("T-002").unwrap().unwrap().definition;
+    assert!(store
+        .begin_task_run(
+            &next,
+            "spec-test",
+            &RouteReceipt {
+                route_id: "reload-route".into(),
+                run_id: "reload-run".into(),
+                profile: next.profile.clone(),
+                model: next.model.clone(),
+                effort: next.effort.clone(),
+                status: RouteStatus::Accepted,
+            },
+        )
+        .unwrap());
+    store
+        .finish_task_run("T-002", "reload-run", TaskStatus::Completed, None)
+        .unwrap();
+    let reloaded = run(&["spec-load", manifest_arg.as_str()], "", &root, &[]);
+    assert_eq!(reloaded["readyTaskIds"], serde_json::json!([]));
+    assert_eq!(
+        store.get_task("T-002").unwrap().unwrap().definition.status,
+        TaskStatus::Completed
+    );
     drop(store);
     fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn spec_load_rejects_invalid_graph_before_importing_any_tasks() {
+    let root = temp_root("invalid-spec");
+    fs::create_dir_all(&root).unwrap();
+    let mut task = lifecycle_task();
+    task.depends_on = vec!["missing".into()];
+    let manifest = router_core::TaskManifest {
+        spec_id: "invalid".into(),
+        title: "Invalid".into(),
+        version: 1,
+        tasks: vec![task.clone()],
+    };
+    let path = root.join("tasks.json");
+    fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let output = Command::new(binary())
+        .arg("spec-load")
+        .arg(&path)
+        .env("LOCALAPPDATA", &root)
+        .env_remove("ROUDEX_ROUTER_INTERNAL")
+        .env_remove("ROUDEX_ACTIVE_TASK_ID")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing"));
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    assert!(store.get_task(&task.id).unwrap().is_none());
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn batch_cli_observes_dependencies_approvals_and_exposes_persisted_status() {
+    let root = temp_root("batch-cli");
+    let db = root.join("RouDex/router.sqlite3");
+    let task = lifecycle_task();
+    let mut dependent = task.clone();
+    dependent.id = "dependent".into();
+    dependent.depends_on = vec![task.id.clone()];
+    let store = RouterStore::open(&db).unwrap();
+    store.upsert_task("spec", &task).unwrap();
+    store.upsert_task("spec", &dependent).unwrap();
+    let env = [("ROUDEX_CODEX_BIN", "missing-codex-binary")];
+    let dispatch = run(&["task-dispatch", "spec"], "", &root, &env);
+    assert_eq!(dispatch["receipts"].as_array().unwrap().len(), 1);
+    assert_eq!(dispatch["receipts"][0]["status"], "awaiting_approval");
+    assert_eq!(store.count_runs().unwrap(), 0);
+    run(&["task-approve", &task.id, "denied"], "", &root, &env);
+    let denied = run(&["task-dispatch", "spec"], "", &root, &env);
+    assert_eq!(denied["receipts"][0]["status"], "blocked");
+    assert_eq!(store.count_runs().unwrap(), 0);
+    run(&["task-approve", &task.id], "", &root, &env);
+    let failed = run(&["task-dispatch", "spec"], "", &root, &env);
+    assert_eq!(failed["receipts"][0]["status"], "failed");
+    let run_id = failed["receipts"][0]["run_id"].as_str().unwrap();
+    let listed = run(&["task-list", "spec"], "", &root, &env);
+    assert_eq!(listed["tasks"].as_array().unwrap().len(), 2);
+    assert_eq!(listed["tasks"][0]["task"]["status"], "failed");
+    assert_eq!(listed["tasks"][0]["approval"]["decision"], "approved");
+    assert_eq!(listed["tasks"][0]["latestRun"]["run_id"], run_id);
+    assert_eq!(listed["tasks"][1]["dependenciesCompleted"], false);
+    assert!(listed["tasks"][1]["latestRun"].is_null());
+    assert!(run(&["run-events", run_id], "", &root, &env)
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["event_type"] == "thread.start.failed"));
+    assert!(run(&["task-dispatch", "spec"], "", &root, &env)["receipts"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(run(&["task-list", "unknown"], "", &root, &env)["tasks"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn neutral_commands_reject_missing_extra_and_empty_arguments() {
+    for args in [
+        vec!["spec-load"],
+        vec!["spec-load", "a", "b"],
+        vec!["task-list"],
+        vec!["task-list", ""],
+        vec!["task-dispatch"],
+        vec!["task-dispatch", "spec", "extra"],
+        vec!["task-approve", "task", "approved", "extra"],
+    ] {
+        let root = temp_root("arguments");
+        let output = Command::new(binary())
+            .args(&args)
+            .env("LOCALAPPDATA", &root)
+            .env_remove("ROUDEX_ROUTER_INTERNAL")
+            .env_remove("ROUDEX_ACTIVE_TASK_ID")
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("Usage:"));
+        assert!(!root.exists());
+    }
+}
+
+#[test]
+fn batch_dispatch_rejects_unknown_spec_without_starting_runtime() {
+    let root = temp_root("unknown-spec");
+    let output = Command::new(binary())
+        .args(["task-dispatch", "unknown"])
+        .env("LOCALAPPDATA", &root)
+        .env("ROUDEX_CODEX_BIN", "missing-codex-binary")
+        .env_remove("ROUDEX_ROUTER_INTERNAL")
+        .env_remove("ROUDEX_ACTIVE_TASK_ID")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("spec not found"));
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    assert_eq!(store.count_runs().unwrap(), 0);
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
