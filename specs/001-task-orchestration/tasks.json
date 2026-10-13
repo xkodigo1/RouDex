@@ -86,7 +86,7 @@
       "title": "Handle approvals, failures, recursion and resume",
       "prompt": "Complete the coordinator lifecycle for manual approvals, fail-closed errors, internal recursion protection and idempotent runId continuation.",
       "depends_on": ["T-004"],
-      "status": "planned",
+      "status": "completed",
       "profile": "deep",
       "model": "gpt-6.1-sol",
       "effort": "high",
