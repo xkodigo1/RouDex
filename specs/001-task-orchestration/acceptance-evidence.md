@@ -82,7 +82,7 @@ These columns alone must not be treated as runtime identity evidence.
 | T-006 | `00ed728` | Completed coordinator run and successful independent verification |
 | T-007 | `7ee89e3` | Completed coordinator run and successful independent verification |
 | T-008 | `d21242a` | Completed coordinator run and successful independent verification; native interactive smoke remains unverified |
-| T-009 | Not committed | Acceptance audit prepared; publication blocked |
+| T-009 | `d80fb74` | Acceptance audit completed; signed tag and published release `v0.5.0` verified |
 
 T-001's manifest declares `routine / gpt-6-luna / medium`, but its historical
 route/run records report `standard / gpt-6.1-sol / medium`. The legacy run remains
@@ -105,25 +105,36 @@ does not certify that every possible secret format is absent. No raw database,
 worker transcript, credential, personal machine path or build output was added
 to the publication artifacts.
 
-## Remaining publication gates
+## Remaining validation limitations
 
 1. Reconcile T-001's declared versus historical assignment explicitly; do not
    rewrite its old receipt or claim a verification event that does not exist.
+   The discrepancy remains preserved as historical evidence and does not
+   invalidate the current coordinator runs.
 2. Exercise the native Tauri window and record its IPC/display result, or
-   explicitly retain that unverified limitation in the release decision. The
+   retain this unverified limitation in the release notes. The
    desktop binary builds, five read-model tests pass, and the earlier browser
    fixture evidence is in `src-tauri/tests/local-ui-evidence.md`. Interactive
    native control is unavailable in this worker, and those earlier browser
    interactions were not rerun here.
-3. Let the enclosing coordinator collect this run's terminal and independent
-   verification evidence. A passing immutable `cargo test --workspace` command
-   alone does not satisfy T-009's publication acceptance criteria.
-4. Create and verify scoped signed commits and a signed annotated tag, push
-   them, publish the release, and verify the remote references/metadata.
 
-The worker's repository metadata is read-only, so it cannot stage, commit or
-tag. GitHub release inspection also failed because outbound socket access is
-denied. These are environment restrictions, not missing user authorization;
-publication was already requested. No attempt was made to bypass either
-restriction. The milestone must remain open until the publication evidence
-exists. See [publication-handoff.md](publication-handoff.md).
+The limitations above are intentionally retained in the published notes. They
+are not presented as completed acceptance steps.
+
+## Parent publication receipt
+
+The enclosing workflow completed the publication gates after the worker audit:
+
+- Signed audit commit: `d80fb7441d8289ee902c0f5ae6d6fc630523f4da`
+  (`docs: record specification 001 acceptance audit`).
+- Signed annotated tag: `v0.5.0`, tag object
+  `e296695c7c1a0be3b229683923490da0b1df2fd1`, peeling to `d80fb74`.
+- Published release: [v0.5.0 — Local task orchestration](https://github.com/xkodigo1/RouDex/releases/tag/v0.5.0).
+- Remote verification: the branch ref and peeled tag ref resolved to
+  `d80fb7441d8289ee902c0f5ae6d6fc630523f4da`; the release was not a draft.
+- The audit commit and tag were verified with the configured SSH signing key.
+
+T-009 is therefore complete. The two validation limitations above remain
+visible and are the only items intentionally left for a later hardening pass.
+See [publication-handoff.md](publication-handoff.md) for the publication
+checklist and receipt.

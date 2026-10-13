@@ -68,6 +68,22 @@ After the audit gates are closed and the intended signed commit is pushed:
 4. Record final task/spec status and publication evidence in a signed follow-up
    audit commit if needed. Do not amend published commits or retag the release.
 
-The parent workflow must append the signed commit, tag, release URL and remote
-verification results after publication. Existing package versions remain
-unchanged.
+## Final publication receipt
+
+The parent workflow completed the publication without amending or moving the
+published commit:
+
+- Audit commit: `d80fb7441d8289ee902c0f5ae6d6fc630523f4da`, signed and pushed
+  to `kodigo/prompt-routing`.
+- Tag: signed annotated `v0.5.0`, object
+  `e296695c7c1a0be3b229683923490da0b1df2fd1`, peeling to the audit commit.
+- Release: [v0.5.0 — Local task orchestration](https://github.com/xkodigo1/RouDex/releases/tag/v0.5.0),
+  published and not draft.
+- Remote refs verified: the branch and peeled tag resolved to
+  `d80fb7441d8289ee902c0f5ae6d6fc630523f4da` at publication time.
+- T-009 terminal and the independent `cargo test --workspace` verification
+  were already recorded by the coordinator before publication.
+
+The historical T-001 assignment discrepancy and the unverified native Tauri
+smoke remain explicitly documented limitations. Existing package versions
+remain unchanged, and no installer or binary artifact was uploaded.

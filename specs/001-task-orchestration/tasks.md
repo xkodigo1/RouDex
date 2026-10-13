@@ -17,7 +17,7 @@ eventos y evidencia de verificación del coordinador.
 | T-006 | completed | T-004, T-005 | CLI de carga de spec, listado, aprobación, despacho, estado y continuación implementado y verificado con 44 pruebas |
 | T-007 | completed | T-006 | Adaptador de escritorio implementado, deduplica entregas, actualiza tasks elegibles y bloquea bypass; verificado con 51 pruebas |
 | T-008 | completed | T-006 | UI Tauri/React local-only conectada al estado de tasks, runs, eventos, aprobaciones y errores; verificada con 56 pruebas |
-| T-009 | completed | T-005, T-006, T-007, T-008 | Aceptación A1–A12 verificada con 58 pruebas; discrepancias y limitaciones documentadas; publicación firmada en curso |
+| T-009 | completed | T-005, T-006, T-007, T-008 | Aceptación A1–A12 verificada con 58 pruebas; discrepancias y limitaciones documentadas; milestone publicado como v0.5.0 |
 
 ## Registro de ejecución
 
@@ -31,12 +31,12 @@ eventos y evidencia de verificación del coordinador.
 | T-006 | `b7aefd6d-b13b-44f7-8ade-b5a998be84ab` | `fc30becd-b90d-4116-826c-697068df92c6` | App Server local ejecutó la task con aprobación explícita; `cargo test --workspace` pasó con 44 pruebas y se conservaron gates/evidencia | `00ed728` |
 | T-007 | `b9cd7413-d7cd-4125-9936-c7424e99cec1` | `2a54340d-f8fd-4c27-8b52-b514fbdb57db` | [Evidencia de entrada de escritorio](../../crates/router-cli/tests/desktop-ingress-evidence.md); App Server local completó el run y `cargo test --workspace` pasó con 51 pruebas | `7ee89e3` |
 | T-008 | `d1f95766-5e6f-4aae-b272-431846bc2d06` | `d53cfb52-2874-4a9e-90c9-ec743a7a4ca4` | App Server local ejecutó la task; `cargo test --workspace` pasó con 56 pruebas, build frontend e IPC fixture verificados; smoke nativo Tauri pendiente | `d21242a` |
-| T-009 | `0f464250-0e29-4374-a7fb-aeea3b252c9b` | `6ad1dc47-1040-4dfd-b6d5-a9fc16e21df0` | [Auditoría de aceptación](acceptance-evidence.md): 58 pruebas aprobadas; terminal del coordinador completado; publicación firmada en curso | pendiente |
+| T-009 | `0f464250-0e29-4374-a7fb-aeea3b252c9b` | `6ad1dc47-1040-4dfd-b6d5-a9fc16e21df0` | [Auditoría de aceptación](acceptance-evidence.md): 58 pruebas aprobadas; terminal del coordinador completado; tag/release v0.5.0 verificados | `d80fb74` |
 
-El estado `completed` de T-009 corresponde al terminal del coordinador después
-de completar la auditoría automatizada. La publicación del tag y release se
-registra como evidencia adicional en el [handoff de publicación](publication-handoff.md)
-antes de cerrar definitivamente el milestone.
+El estado `completed` de T-009 corresponde al terminal del coordinador y a la
+publicación verificada del tag y release. Las limitaciones que permanecen
+abiertas están descritas en la auditoría y no se presentan como pruebas
+realizadas.
 
 ## Definition of Done por task
 

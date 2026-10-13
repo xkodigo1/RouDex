@@ -173,7 +173,7 @@
       "acceptance": ["Scenarios A1-A12 have evidence", "The worktree and release audit pass", "No secrets or local state are published"],
       "route_id": "0f464250-0e29-4374-a7fb-aeea3b252c9b",
       "run_id": "6ad1dc47-1040-4dfd-b6d5-a9fc16e21df0",
-      "evidence": "acceptance-evidence.md: 58 tests passed; T-001 historical assignment discrepancy and native UI smoke remain explicit. The coordinator completed the audit; signed publication is being finalized by the parent workflow.",
+      "evidence": "acceptance-evidence.md: 58 tests passed; T-001 historical assignment discrepancy and native UI smoke remain explicit. The coordinator completed the audit and the parent workflow published signed tag/release v0.5.0.",
       "verify": "cargo test --workspace"
     }
   ]
