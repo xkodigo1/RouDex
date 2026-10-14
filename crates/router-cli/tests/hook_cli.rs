@@ -5,7 +5,6 @@
 use router_core::RouterStore;
 use serde_json::{json, Value};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -40,12 +39,7 @@ impl Sandbox {
             command.env(name, value);
         }
         let mut child = command.spawn().unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(stdin.as_bytes())
-            .unwrap();
+        feed(child.stdin.take(), stdin.as_bytes());
         child.wait_with_output().unwrap()
     }
 
@@ -344,12 +338,7 @@ fn the_installed_command_runs_in_every_shell() {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(input.to_string().as_bytes())
-            .unwrap();
+        feed(child.stdin.take(), input.to_string().as_bytes());
         let output = child.wait_with_output().unwrap();
         let response = stdout_json(&output);
         assert!(
@@ -391,4 +380,16 @@ fn install_refuses_app_data_and_reports_the_v05_managed_hook() {
         .unwrap()
         .ends_with("requirements.toml"));
     assert!(String::from_utf8_lossy(&installed.stderr).contains("v0.5.0"));
+}
+
+/// Feed a child's stdin. The command may exit before reading it (for example
+/// when it rejects its arguments), which closes the pipe on Unix.
+fn feed(stdin: Option<std::process::ChildStdin>, input: &[u8]) {
+    use std::io::Write;
+    match stdin.expect("child stdin").write_all(input) {
+        Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
+            panic!("write child stdin: {error}")
+        }
+        _ => {}
+    }
 }

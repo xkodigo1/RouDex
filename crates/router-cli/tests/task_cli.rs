@@ -3,7 +3,6 @@ use router_core::{
 };
 use serde_json::Value;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,12 +37,7 @@ fn run(args: &[&str], body: &str, state_root: &Path, extra_env: &[(&str, &str)])
         command.env(name, value);
     }
     let mut child = command.spawn().expect("start router-cli");
-    child
-        .stdin
-        .take()
-        .expect("router stdin")
-        .write_all(body.as_bytes())
-        .expect("write router input");
+    feed(child.stdin.take(), body.as_bytes());
     let output = child.wait_with_output().expect("wait for router-cli");
     assert!(
         output.status.success(),
@@ -480,4 +474,16 @@ fn batch_dispatch_rejects_unknown_spec_without_starting_runtime() {
     assert_eq!(store.count_runs().unwrap(), 0);
     drop(store);
     fs::remove_dir_all(root).unwrap();
+}
+
+/// Feed a child's stdin. The command may exit before reading it (for example
+/// when it rejects its arguments), which closes the pipe on Unix.
+fn feed(stdin: Option<std::process::ChildStdin>, input: &[u8]) {
+    use std::io::Write;
+    match stdin.expect("child stdin").write_all(input) {
+        Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
+            panic!("write child stdin: {error}")
+        }
+        _ => {}
+    }
 }

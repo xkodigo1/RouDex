@@ -3,7 +3,6 @@ use router_core::{
 };
 use serde_json::{json, Value};
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
@@ -32,12 +31,7 @@ impl Fixture {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(config.as_bytes())
-            .unwrap();
+        feed(child.stdin.take(), config.as_bytes());
         child.wait_with_output().unwrap()
     }
 }
@@ -272,4 +266,16 @@ fn preview_preserves_existing_state_and_succeeds_without_runtime_or_writable_sto
         "synthetic inaccessible store"
     );
     assert!(!fixture.0.join("unused-codex").exists());
+}
+
+/// Feed a child's stdin. The command may exit before reading it (for example
+/// when it rejects its arguments), which closes the pipe on Unix.
+fn feed(stdin: Option<std::process::ChildStdin>, input: &[u8]) {
+    use std::io::Write;
+    match stdin.expect("child stdin").write_all(input) {
+        Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
+            panic!("write child stdin: {error}")
+        }
+        _ => {}
+    }
 }
