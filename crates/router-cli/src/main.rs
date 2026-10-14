@@ -1,7 +1,7 @@
 use router_core::{
     AppServerClient, AppServerConfig, DesktopPromptInput, EventRecord, LocalTaskRuntime,
-    RouterStore, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest,
-    TaskRuntime,
+    RouterStore, RoutingConfig, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition,
+    TaskManifest, TaskRuntime,
 };
 use serde_json::{json, Value};
 use std::env;
@@ -46,6 +46,7 @@ fn run() -> Result<(), String> {
         return Err("un worker activo no puede invocar el ciclo del coordinador".to_owned());
     }
     match command.as_deref() {
+        Some("route-preview") => route_preview(args.collect()),
         Some("route-prompt") => route_prompt(args.collect()),
         Some("continue-run") => {
             continue_run(checked_args(args.collect(), 1, 1, "continue-run <runId>")?)
@@ -96,6 +97,77 @@ fn checked_args(
         return Err(format!("Usage: router-cli {usage}"));
     }
     Ok(args)
+}
+
+// Pure preview: never open the operational store or construct a runtime. Explicit
+// configuration is a candidate supplied on stdin, not an active dispatch revision.
+fn route_preview(args: Vec<String>) -> Result<(), String> {
+    const USAGE: &str = "Usage: router-cli route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]";
+    let profile = args
+        .first()
+        .filter(|arg| !arg.trim().is_empty())
+        .ok_or(USAGE)?;
+    let mut config_stdin = false;
+    let mut model = None;
+    let mut effort = None;
+    let mut remaining = args.iter().skip(1);
+    while let Some(flag) = remaining.next() {
+        match flag.as_str() {
+            "--config-stdin" if !config_stdin => config_stdin = true,
+            "--model" if model.is_none() => {
+                model = Some(
+                    remaining
+                        .next()
+                        .filter(|v| !v.starts_with("--") && !v.trim().is_empty())
+                        .ok_or(USAGE)?,
+                );
+            }
+            "--effort" if effort.is_none() => {
+                effort = Some(
+                    remaining
+                        .next()
+                        .filter(|v| !v.starts_with("--") && !v.trim().is_empty())
+                        .ok_or(USAGE)?,
+                );
+            }
+            _ => return Err(USAGE.to_owned()),
+        }
+    }
+    let config = if config_stdin {
+        let mut contents = String::new();
+        io::stdin()
+            .read_to_string(&mut contents)
+            .map_err(|_| "could not read routing configuration from stdin")?;
+        RoutingConfig::from_json(&contents).map_err(|error| error.to_string())?
+    } else {
+        RoutingConfig::default()
+    };
+    // Dispatch uses this same built-in resolver. The validated candidate resolver
+    // delegates to it for every profile without an explicit configuration rule.
+    let route = if config_stdin {
+        config.resolve_profile(profile)
+    } else {
+        router_core::routing::resolve_profile(profile)
+    }
+    .ok_or("unknown routing profile")?;
+    if model.is_some_and(|value| value != route.model)
+        || effort.is_some_and(|value| value != route.effort)
+    {
+        return Err(
+            "task model/effort overrides conflict with the resolved routing rule".to_owned(),
+        );
+    }
+    let explicit = config
+        .overrides()
+        .iter()
+        .any(|rule| rule.profile == *profile);
+    write_json(&json!({
+        "profile": route.profile,
+        "model": route.model,
+        "effort": route.effort,
+        "reason": if explicit { "explicit" } else { "built-in" },
+        "revision": config.revision()
+    }))
 }
 
 fn task_list(args: Vec<String>) -> Result<(), String> {
@@ -650,6 +722,6 @@ fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|route-prompt [--record-only]|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
+        "Usage: router-cli <route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|route-prompt [--record-only]|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
     );
 }
