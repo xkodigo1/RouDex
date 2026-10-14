@@ -143,6 +143,10 @@ pub enum SessionEvent {
 
 pub type EventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
 
+/// Every server notification and request, as received, before it becomes a
+/// [`SessionEvent`]. Runs on the session actor: it must not call the session.
+pub type RawSink = Arc<dyn Fn(&Value) + Send + Sync>;
+
 type Reply = Sender<Result<Value, SessionError>>;
 
 enum Input {
@@ -175,6 +179,15 @@ pub struct Session {
 
 impl Session {
     pub fn start(config: &AppServerConfig, sink: EventSink) -> Result<Self, SessionError> {
+        Self::start_observed(config, sink, None)
+    }
+
+    /// Like [`Session::start`], also handing every raw server message to `raw`.
+    pub fn start_observed(
+        config: &AppServerConfig,
+        sink: EventSink,
+        raw: Option<RawSink>,
+    ) -> Result<Self, SessionError> {
         let mut command = Command::new(&config.program);
         command
             .args(&config.arguments)
@@ -183,6 +196,9 @@ impl Session {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .env("ROUDEX_ROUTER_INTERNAL", "1");
+        if let Some(task_id) = &config.active_task_id {
+            command.env("ROUDEX_ACTIVE_TASK_ID", task_id);
+        }
         let mut child = command
             .spawn()
             .map_err(|error| SessionError::Start(error.to_string()))?;
@@ -219,7 +235,8 @@ impl Session {
         });
         let closed = Arc::new(AtomicBool::new(false));
         let actor_closed = closed.clone();
-        let actor = std::thread::spawn(move || Actor::new(stdin, sink, actor_closed).run(receiver));
+        let actor =
+            std::thread::spawn(move || Actor::new(stdin, sink, raw, actor_closed).run(receiver));
         let session = Self {
             inputs,
             child: Arc::new(Mutex::new(child)),
@@ -314,7 +331,7 @@ impl Session {
             result: json!({ "decision": decision }),
             reply,
         })?;
-        wait(response, "approval response").map(|_| ())
+        wait(response, "approval response", REQUEST_TIMEOUT).map(|_| ())
     }
 
     /// True once the app-server process exited or the session was dropped.
@@ -327,13 +344,23 @@ impl Session {
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value, SessionError> {
+        self.call(method, params, REQUEST_TIMEOUT)
+    }
+
+    /// Send a request and wait up to `timeout` for its result.
+    pub(crate) fn call(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, SessionError> {
         let (reply, response) = mpsc::channel();
         self.send(Input::Request {
             method: method.into(),
             params,
             reply,
         })?;
-        wait(response, method)
+        wait(response, method, timeout)
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<(), SessionError> {
@@ -413,9 +440,10 @@ fn turn_start_params(
 fn wait(
     response: Receiver<Result<Value, SessionError>>,
     what: &str,
+    timeout: Duration,
 ) -> Result<Value, SessionError> {
     response
-        .recv_timeout(REQUEST_TIMEOUT)
+        .recv_timeout(timeout)
         .map_err(|error| match error {
             mpsc::RecvTimeoutError::Timeout => SessionError::Timeout(what.into()),
             mpsc::RecvTimeoutError::Disconnected => {
@@ -427,16 +455,23 @@ fn wait(
 struct Actor {
     stdin: ChildStdin,
     sink: EventSink,
+    raw: Option<RawSink>,
     next_id: u64,
     pending: HashMap<u64, Reply>,
     closed: Arc<AtomicBool>,
 }
 
 impl Actor {
-    fn new(stdin: ChildStdin, sink: EventSink, closed: Arc<AtomicBool>) -> Self {
+    fn new(
+        stdin: ChildStdin,
+        sink: EventSink,
+        raw: Option<RawSink>,
+        closed: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             stdin,
             sink,
+            raw,
             next_id: 1,
             pending: HashMap::new(),
             closed,
@@ -506,6 +541,9 @@ impl Actor {
 
     fn handle(&mut self, message: Value) {
         let method = message["method"].as_str().map(ToOwned::to_owned);
+        if let (Some(raw), Some(_)) = (&self.raw, &method) {
+            raw(&message);
+        }
         match (method, message.get("id").cloned()) {
             (Some(method), Some(id)) => self.server_request(&method, id, &message["params"]),
             (Some(method), None) => {

@@ -1,4 +1,3 @@
-use crate::app_server::{AppServerClient, AppServerConfig, AppServerTurn};
 use crate::classifier::RouteDecision;
 use crate::domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, TaskDefinition, TaskStatus,
@@ -79,83 +78,6 @@ pub trait TaskRuntime {
     }
     fn verify(&mut self, _task: &TaskDefinition) -> Result<Value, String> {
         Err("runtime did not supply independent verification evidence".into())
-    }
-}
-
-pub struct LocalTaskRuntime {
-    config: AppServerConfig,
-    client: Option<AppServerClient>,
-}
-
-impl LocalTaskRuntime {
-    pub fn start(task: &TaskDefinition) -> Result<Self, CoordinatorError> {
-        let config = AppServerConfig::local(&task.cwd).with_active_task(&task.id);
-        Ok(Self::with_config(config))
-    }
-
-    pub fn with_config(config: AppServerConfig) -> Self {
-        Self {
-            config,
-            client: None,
-        }
-    }
-
-    fn client(&mut self) -> Result<&mut AppServerClient, String> {
-        if self.client.is_none() {
-            self.client =
-                Some(AppServerClient::start(&self.config).map_err(|error| error.to_string())?);
-        }
-        Ok(self.client.as_mut().expect("client initialized"))
-    }
-}
-
-impl TaskRuntime for LocalTaskRuntime {
-    fn start_thread(&mut self, task: &TaskDefinition) -> Result<String, String> {
-        self.client()?
-            .start_task_thread(task)
-            .map_err(|error| error.to_string())
-    }
-
-    fn run_turn(&mut self, task: &TaskDefinition, thread_id: &str) -> Result<RuntimeTurn, String> {
-        self.run_turn_with_evidence(task, thread_id, &mut |_| Ok(()))
-    }
-
-    fn resume_thread(
-        &mut self,
-        task: &TaskDefinition,
-        thread_id: &str,
-    ) -> Result<Option<RuntimeTurn>, String> {
-        self.resume_thread_for_turn(task, thread_id, None)
-    }
-
-    fn resume_thread_for_turn(
-        &mut self,
-        task: &TaskDefinition,
-        thread_id: &str,
-        expected_turn_id: Option<&str>,
-    ) -> Result<Option<RuntimeTurn>, String> {
-        self.client()?
-            .resume_task_thread_for_turn(task, thread_id, expected_turn_id)
-            .map(|turn| turn.map(runtime_turn))
-            .map_err(|error| error.to_string())
-    }
-
-    fn run_turn_with_evidence(
-        &mut self,
-        task: &TaskDefinition,
-        thread_id: &str,
-        evidence: &mut dyn FnMut(&Value) -> Result<(), String>,
-    ) -> Result<RuntimeTurn, String> {
-        self.client()?
-            .run_task_turn(task, thread_id, evidence)
-            .map(runtime_turn)
-            .map_err(|error| error.to_string())
-    }
-
-    fn verify(&mut self, task: &TaskDefinition) -> Result<Value, String> {
-        self.client()?
-            .verify_task(task)
-            .map_err(|error| error.to_string())
     }
 }
 
@@ -637,7 +559,10 @@ impl<'a> TaskCoordinator<'a> {
         &self,
         spec_id: &str,
     ) -> Result<Vec<TaskExecutionReceipt>, CoordinatorError> {
-        self.dispatch_ready_tasks_with_runtime(spec_id, LocalTaskRuntime::start)
+        self.dispatch_ready_tasks_with_runtime(
+            spec_id,
+            crate::task_runtime::LocalTaskRuntime::start,
+        )
     }
 
     /// Supply a fresh runtime for each eligible task; gates are checked before it starts.
@@ -950,15 +875,6 @@ impl<'a> TaskCoordinator<'a> {
             status: TaskStatus::Ready,
             text: Some("task ready for retry".to_owned()),
         })
-    }
-}
-
-fn runtime_turn(turn: AppServerTurn) -> RuntimeTurn {
-    RuntimeTurn {
-        thread_id: turn.thread_id,
-        turn_id: turn.turn_id,
-        status: turn.status,
-        text: turn.text,
     }
 }
 

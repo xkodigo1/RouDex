@@ -23,9 +23,15 @@ con `router.toml`, igual que en el chat, y quedan registrados en la ejecución.
 
 ## D2 · Las tareas corren en la sesión del chat
 
-Los turnos de tarea usan la misma `Session` interactiva que el chat (un
-`codex app-server` por proyecto): streaming hacia la interfaz, aprobaciones
-`on-request` que el usuario responde, y `turn/interrupt` para detener.
+Los turnos de tarea usan la misma `Session` interactiva que el chat:
+streaming hacia la interfaz, aprobaciones `on-request` que el usuario
+responde, y `turn/interrupt` para detener. Cada ejecución de tarea tiene su
+propio proceso `codex app-server` (como hasta ahora el coordinador), porque
+el registro del chat guarda los eventos de los turnos que no conoce: compartir
+el proceso mezclaría ambos.
+
+- Un registro de ejecuciones activas (`TaskRuns`) permite a la interfaz
+  responder aprobaciones y detener el turno de una tarea.
 
 - El coordinador conserva el ciclo de vida, las compuertas, la persistencia de
   eventos y la reanudación; cambia solo el runtime que ejecuta el turno.

@@ -95,16 +95,6 @@ pub fn discover_codex(
         .unwrap_or_else(|| PathBuf::from("codex"))
 }
 
-/// Model, effort and policies for one `turn/start`.
-#[derive(Debug, Clone, Copy)]
-pub struct TurnSettings<'a> {
-    pub model: &'a str,
-    pub effort: &'a str,
-    pub cwd: &'a Path,
-    pub approval_policy: &'a str,
-    pub sandbox: &'a str,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppServerTurn {
     pub thread_id: String,
@@ -189,64 +179,6 @@ impl AppServerClient {
         self.send(json!({ "method": "initialized", "params": {} }))
     }
 
-    pub fn start_thread(
-        &mut self,
-        model: &str,
-        cwd: &Path,
-        approval_policy: &str,
-        sandbox: &str,
-    ) -> Result<String, AppServerError> {
-        let id = self.next_id();
-        self.send(json!({
-            "method": "thread/start",
-            "id": id,
-            "params": {
-                "model": model,
-                "cwd": cwd,
-                "approvalPolicy": approval_policy,
-                "sandbox": sandbox,
-                "serviceName": "roudex"
-            }
-        }))?;
-        let response = self.wait_for_response(id)?;
-        response["result"]["thread"]["id"]
-            .as_str()
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| {
-                AppServerError::Protocol("thread/start returned no thread id".to_owned())
-            })
-    }
-
-    pub fn resume_thread(&mut self, thread_id: &str) -> Result<(), AppServerError> {
-        let id = self.next_id();
-        self.send(json!({
-            "method": "thread/resume",
-            "id": id,
-            "params": { "threadId": thread_id }
-        }))?;
-        self.wait_for_response(id).map(|_| ())
-    }
-
-    pub fn run_turn(
-        &mut self,
-        thread_id: &str,
-        prompt: &str,
-        settings: &TurnSettings<'_>,
-    ) -> Result<AppServerTurn, AppServerError> {
-        self.run_turn_params(
-            json!({
-                "threadId": thread_id,
-                "input": [{ "type": "text", "text": prompt }],
-                "cwd": settings.cwd,
-                "approvalPolicy": settings.approval_policy,
-                "sandboxPolicy": sandbox_policy(settings.sandbox),
-                "model": settings.model,
-                "effort": settings.effort
-            }),
-            &mut |_| Ok(()),
-        )
-    }
-
     /// Runtime model catalog (`model/list`), following pagination.
     pub fn list_models(&mut self) -> Result<Vec<CatalogModel>, AppServerError> {
         let mut models = Vec::new();
@@ -316,135 +248,6 @@ impl AppServerClient {
             }));
         }
         Ok(turn.text)
-    }
-
-    pub fn start_task_thread(&mut self, task: &TaskDefinition) -> Result<String, AppServerError> {
-        let params = task_thread_params(task)?;
-        let response = self.request("thread/start", params)?;
-        response["result"]["thread"]["id"]
-            .as_str()
-            .filter(|id| !id.is_empty())
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| AppServerError::Protocol("thread/start returned no thread id".into()))
-    }
-
-    /// Resume persisted history before deciding whether another turn is safe.
-    pub fn resume_task_thread(
-        &mut self,
-        task: &TaskDefinition,
-        thread_id: &str,
-    ) -> Result<Option<AppServerTurn>, AppServerError> {
-        self.resume_task_thread_for_turn(task, thread_id, None)
-    }
-
-    pub fn resume_task_thread_for_turn(
-        &mut self,
-        task: &TaskDefinition,
-        thread_id: &str,
-        expected_turn_id: Option<&str>,
-    ) -> Result<Option<AppServerTurn>, AppServerError> {
-        let mut params = task_thread_params(task)?;
-        params["threadId"] = json!(thread_id);
-        // serviceName is a thread/start field, not a resume override.
-        params
-            .as_object_mut()
-            .expect("thread parameters")
-            .remove("serviceName");
-        let response = self.request("thread/resume", params)?;
-        let thread = &response["result"]["thread"];
-        if thread["id"].as_str() != Some(thread_id) {
-            return Err(AppServerError::Protocol(
-                "thread/resume returned a different thread".into(),
-            ));
-        }
-        let turns = thread["turns"]
-            .as_array()
-            .ok_or_else(|| AppServerError::Protocol("resumed thread has no turn history".into()))?;
-        if expected_turn_id.is_some_and(|expected| {
-            turns.last().and_then(|turn| turn["id"].as_str()) != Some(expected)
-        }) {
-            return Err(AppServerError::Protocol(
-                "resumed history does not match the persisted turn; explicit recovery required"
-                    .into(),
-            ));
-        }
-        match turns.last() {
-            Some(turn) if turn["status"] == "completed" => Ok(Some(AppServerTurn {
-                thread_id: thread_id.into(),
-                turn_id: turn["id"]
-                    .as_str()
-                    .ok_or_else(|| AppServerError::Protocol("resumed turn has no id".into()))?
-                    .into(),
-                text: agent_text(turn),
-                status: "completed".into(),
-                error: None,
-            })),
-            Some(turn) if turn["status"] != "interrupted" => Err(AppServerError::Turn(format!(
-                "resumed thread cannot start another turn: {}",
-                turn["status"]
-            ))),
-            _ => Ok(None),
-        }
-    }
-
-    pub fn run_task_turn(
-        &mut self,
-        task: &TaskDefinition,
-        thread_id: &str,
-        evidence: &mut dyn FnMut(&Value) -> Result<(), String>,
-    ) -> Result<AppServerTurn, AppServerError> {
-        self.run_turn_params(
-            json!({
-                "threadId": thread_id,
-                "input": [{ "type": "text", "text": task.prompt }],
-                "cwd": absolute_cwd(task)?, "approvalPolicy": "never",
-                "sandboxPolicy": task_sandbox_policy(task)?,
-                "model": task.model, "effort": task.effort
-            }),
-            evidence,
-        )
-    }
-
-    pub fn verify_task(&mut self, task: &TaskDefinition) -> Result<Value, AppServerError> {
-        // The command executes in the same server sandbox, never in the coordinator host shell.
-        let cwd = absolute_cwd(task)?;
-        // Keep cargo away from the running coordinator executable on Windows.
-        // Hex encoding keeps arbitrary task ids inside one distinct path component.
-        let task_directory = format!(
-            "task-{}",
-            task.id
-                .as_bytes()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        );
-        let cargo_target_dir = cwd
-            .join("target")
-            .join("roudex-verification")
-            .join(task_directory);
-        let command = if cfg!(windows) {
-            vec!["cmd.exe", "/D", "/S", "/C", task.verify.as_str()]
-        } else {
-            vec!["sh", "-c", task.verify.as_str()]
-        };
-        let id = self.next_id();
-        self.send(json!({ "id": id, "method": "command/exec", "params": {
-            "command": command, "cwd": cwd,
-            "sandboxPolicy": task_sandbox_policy(task)?, "timeoutMs": 120000,
-            "env": { "ROUDEX_ROUTER_INTERNAL": "1", "ROUDEX_ACTIVE_TASK_ID": task.id,
-                "CARGO_TARGET_DIR": cargo_target_dir }
-        }}))?;
-        let previous_timeout = self.response_timeout;
-        self.response_timeout = Duration::from_secs(150);
-        let response = self.wait_for_response(id);
-        self.response_timeout = previous_timeout;
-        let response = response?;
-        if response["result"]["exitCode"].as_i64().is_none() {
-            return Err(AppServerError::Protocol(
-                "verification returned no exit code".into(),
-            ));
-        }
-        Ok(response["result"].clone())
     }
 
     fn run_turn_params(
@@ -600,27 +403,133 @@ impl AppServerClient {
     }
 }
 
-fn absolute_cwd(task: &TaskDefinition) -> Result<PathBuf, AppServerError> {
+pub(crate) fn absolute_cwd(task: &TaskDefinition) -> Result<PathBuf, AppServerError> {
     std::fs::canonicalize(&task.cwd).map_err(AppServerError::Transport)
 }
 
-fn task_thread_params(task: &TaskDefinition) -> Result<Value, AppServerError> {
+/// Task turns ask before acting outside their sandbox; the UI or the CLI
+/// answers.
+pub(crate) const TASK_APPROVAL_POLICY: &str = "on-request";
+
+/// `thread/start` for a task, with its routed model and effort.
+pub(crate) fn task_thread_params(task: &TaskDefinition) -> Result<Value, AppServerError> {
     let policy = task_sandbox_policy(task)?;
     let mut config = json!({ "model_reasoning_effort": task.effort });
     if task.sandbox.kind == "workspaceWrite" {
         config["sandbox_workspace_write.writable_roots"] = policy["writableRoots"].clone();
         config["sandbox_workspace_write.network_access"] = json!(false);
     }
-    Ok(
-        json!({ "model": task.model, "cwd": absolute_cwd(task)?, "approvalPolicy": "never",
-            "sandbox": match task.sandbox.kind.as_str() {
-                "readOnly" => "read-only", "workspaceWrite" => "workspace-write",
-                _ => "danger-full-access"
-            },
-            "config": config,
-            "serviceName": "roudex"
-        }),
-    )
+    let sandbox = match task.sandbox.kind.as_str() {
+        "readOnly" => "read-only",
+        _ => "workspace-write",
+    };
+    Ok(json!({ "model": task.model, "cwd": absolute_cwd(task)?,
+        "approvalPolicy": TASK_APPROVAL_POLICY, "sandbox": sandbox, "config": config,
+        "serviceName": "roudex"
+    }))
+}
+
+/// `thread/resume` for a task thread; the same overrides as its start.
+pub(crate) fn task_resume_params(
+    task: &TaskDefinition,
+    thread_id: &str,
+) -> Result<Value, AppServerError> {
+    let mut params = task_thread_params(task)?;
+    params["threadId"] = json!(thread_id);
+    // serviceName is a thread/start field, not a resume override.
+    params
+        .as_object_mut()
+        .expect("thread parameters")
+        .remove("serviceName");
+    Ok(params)
+}
+
+/// `turn/start` that sends the task prompt.
+pub(crate) fn task_turn_params(
+    task: &TaskDefinition,
+    thread_id: &str,
+) -> Result<Value, AppServerError> {
+    Ok(json!({
+        "threadId": thread_id,
+        "input": [{ "type": "text", "text": task.prompt }],
+        "cwd": absolute_cwd(task)?, "approvalPolicy": TASK_APPROVAL_POLICY,
+        "sandboxPolicy": task_sandbox_policy(task)?,
+        "model": task.model, "effort": task.effort
+    }))
+}
+
+/// Read a resumed thread: its last turn must be the persisted one when
+/// `expected_turn_id` is given. A completed last turn is returned so it is not
+/// replayed; an interrupted (or absent) one allows another turn.
+pub(crate) fn resumed_task_turn(
+    result: &Value,
+    thread_id: &str,
+    expected_turn_id: Option<&str>,
+) -> Result<Option<AppServerTurn>, AppServerError> {
+    let thread = &result["thread"];
+    if thread["id"].as_str() != Some(thread_id) {
+        return Err(AppServerError::Protocol(
+            "thread/resume returned a different thread".into(),
+        ));
+    }
+    let turns = thread["turns"]
+        .as_array()
+        .ok_or_else(|| AppServerError::Protocol("resumed thread has no turn history".into()))?;
+    if expected_turn_id
+        .is_some_and(|expected| turns.last().and_then(|turn| turn["id"].as_str()) != Some(expected))
+    {
+        return Err(AppServerError::Protocol(
+            "resumed history does not match the persisted turn; explicit recovery required".into(),
+        ));
+    }
+    match turns.last() {
+        Some(turn) if turn["status"] == "completed" => Ok(Some(AppServerTurn {
+            thread_id: thread_id.into(),
+            turn_id: turn["id"]
+                .as_str()
+                .ok_or_else(|| AppServerError::Protocol("resumed turn has no id".into()))?
+                .into(),
+            text: agent_text(turn),
+            status: "completed".into(),
+            error: None,
+        })),
+        Some(turn) if turn["status"] != "interrupted" => Err(AppServerError::Turn(format!(
+            "resumed thread cannot start another turn: {}",
+            turn["status"]
+        ))),
+        _ => Ok(None),
+    }
+}
+
+/// `command/exec` for a task's verify command, in the task sandbox and never
+/// in the host shell. Cargo builds into a per-task target directory so it
+/// stays away from the running coordinator executable on Windows.
+pub(crate) fn task_verify_params(task: &TaskDefinition) -> Result<Value, AppServerError> {
+    let cwd = absolute_cwd(task)?;
+    // Hex encoding keeps arbitrary task ids inside one distinct path component.
+    let task_directory = format!(
+        "task-{}",
+        task.id
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    let cargo_target_dir = cwd
+        .join("target")
+        .join("roudex-verification")
+        .join(task_directory);
+    let command = if cfg!(windows) {
+        vec!["cmd.exe", "/D", "/S", "/C", task.verify.as_str()]
+    } else {
+        vec!["sh", "-c", task.verify.as_str()]
+    };
+    Ok(json!({
+        "command": command, "cwd": cwd,
+        "sandboxPolicy": task_sandbox_policy(task)?, "timeoutMs": 120000,
+        "env": { "ROUDEX_ROUTER_INTERNAL": "1", "ROUDEX_ACTIVE_TASK_ID": task.id,
+            "CARGO_TARGET_DIR": cargo_target_dir }
+    }))
 }
 
 pub(crate) fn task_sandbox_policy(task: &TaskDefinition) -> Result<Value, AppServerError> {
@@ -645,7 +554,6 @@ pub(crate) fn task_sandbox_policy(task: &TaskDefinition) -> Result<Value, AppSer
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(json!({ "type": "workspaceWrite", "writableRoots": roots, "networkAccess": false }))
         }
-        "dangerFullAccess" => Ok(json!({ "type": "dangerFullAccess" })),
         _ => Err(AppServerError::Protocol(
             "invalid task sandbox or missing writable roots".into(),
         )),
@@ -675,7 +583,7 @@ fn catalog_model(entry: &Value) -> Result<CatalogModel, AppServerError> {
     })
 }
 
-fn agent_text(turn: &Value) -> String {
+pub(crate) fn agent_text(turn: &Value) -> String {
     turn["items"]
         .as_array()
         .into_iter()
@@ -691,14 +599,6 @@ impl Drop for AppServerClient {
         let _ = self.stdin.flush();
         let _ = self.child.kill();
         let _ = self.child.wait();
-    }
-}
-
-fn sandbox_policy(name: &str) -> Value {
-    match name {
-        "read-only" => json!({ "type": "readOnly" }),
-        "danger-full-access" => json!({ "type": "dangerFullAccess" }),
-        _ => json!({ "type": "workspaceWrite" }),
     }
 }
 
