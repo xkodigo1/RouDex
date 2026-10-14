@@ -16,5 +16,8 @@ pub use domain::{
     TaskStatus,
 };
 pub use persistence::{RouterStore, StoreError};
-pub use routing::{classify_prompt, route_prompt, ModelRoute, TaskClass};
+pub use routing::{
+    classify_prompt, route_prompt, ModelRoute, RoutingConfig, RoutingConfigError, RoutingOverride,
+    TaskClass, ROUTING_CONFIG_VERSION,
+};
 pub use task_manifest::{ManifestError, TaskManifest};
