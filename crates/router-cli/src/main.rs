@@ -1,26 +1,14 @@
 use router_core::{
-    AppServerClient, AppServerConfig, DesktopPromptInput, EventRecord, LocalTaskRuntime,
-    RouterStore, RoutingConfig, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition,
-    TaskManifest, TaskRuntime,
+    AppServerConfig, LocalTaskRuntime, RouterStore, RoutingConfig, RuntimeTurn, TaskApproval,
+    TaskCoordinator, TaskDefinition, TaskManifest, TaskRuntime,
 };
 use serde_json::{json, Value};
 use std::env;
-use std::fs;
 use std::io::{self, Read};
-use std::path::PathBuf;
 
 fn main() {
-    let command = env::args().nth(1);
     if let Err(error) = run() {
-        if matches!(
-            command.as_deref(),
-            Some("route-prompt") | Some("continue-run")
-        ) {
-            let _ = write_block(&format!("Enrutamiento rechazado: {error}"));
-            return;
-        } else {
-            eprintln!("{error}");
-        }
+        eprintln!("{error}");
         std::process::exit(1);
     }
 }
@@ -47,7 +35,6 @@ fn run() -> Result<(), String> {
     }
     match command.as_deref() {
         Some("route-preview") => route_preview(args.collect()),
-        Some("route-prompt") => route_prompt(args.collect()),
         Some("continue-run") => {
             continue_run(checked_args(args.collect(), 1, 1, "continue-run <runId>")?)
         }
@@ -75,10 +62,6 @@ fn run() -> Result<(), String> {
         Some("task-retry") => task_retry(args.collect()),
         Some("task-status") => task_status(args.collect()),
         Some("run-events") => run_events(args.collect()),
-        Some("install-hook") => install_hook(),
-        Some("install-managed-hook") => install_managed_hook(),
-        Some("uninstall-hook") => uninstall_hook(),
-        Some("uninstall-managed-hook") => uninstall_managed_hook(),
         Some("status") => status(),
         _ => {
             print_usage();
@@ -394,245 +377,9 @@ fn continue_run(args: Vec<String>) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
         return write_json(&serde_json::to_value(receipt).map_err(|error| error.to_string())?);
     }
-    let mut prompt = String::new();
-    io::stdin()
-        .read_to_string(&mut prompt)
-        .map_err(|error| format!("could not read continuation: {error}"))?;
-    if prompt.trim().is_empty() {
-        return write_block("No se puede continuar con un mensaje vacío.");
-    }
-    let thread_id = store
-        .last_thread_id(run_id)
-        .map_err(|error| format!("could not read thread: {error}"))?
-        .ok_or_else(|| format!("el runId no tiene un hilo reanudable: {run_id}"))?;
-    let mut client = AppServerClient::start(&AppServerConfig::local(&run.cwd))
-        .map_err(|error| format!("no se pudo iniciar el runtime local: {error}"))?;
-    client
-        .resume_thread(&thread_id)
-        .map_err(|error| format!("no se pudo reanudar el hilo local: {error}"))?;
-    let turn = client
-        .run_turn(
-            &thread_id,
-            prompt.trim(),
-            &run.model,
-            &run.effort,
-            PathBuf::from(&run.cwd).as_path(),
-            "never",
-            "read-only",
-        )
-        .map_err(|error| format!("no se pudo completar la continuación: {error}"))?;
-    store
-        .record_event(&EventRecord {
-            run_id: run.run_id.clone(),
-            event_type: "turn.continued".to_owned(),
-            payload: json!({ "threadId": thread_id, "turnId": turn.turn_id, "status": turn.status }),
-        })
-        .map_err(|error| format!("could not persist continuation event: {error}"))?;
-    write_json(&json!({
-        "runId": run.run_id,
-        "routeId": run.route_id,
-        "threadId": turn.thread_id,
-        "status": turn.status,
-        "text": turn.text
-    }))
-}
-
-fn route_prompt(args: Vec<String>) -> Result<(), String> {
-    // Only workers launched by the coordinator can continue the original turn.
-    // Check before parsing stdin so worker hooks cannot recurse on bad input.
-    if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
-        || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some()
-    {
-        return write_json(&json!({ "continue": true }));
-    }
-    // Retain the old flag as an ingress-only alias for already-installed hooks.
-    if !args.is_empty() && args != ["--record-only"] {
-        return Err("Usage: router-cli route-prompt [--record-only]".into());
-    }
-    let mut input_text = String::new();
-    io::stdin()
-        .read_to_string(&mut input_text)
-        .map_err(|error| format!("could not read hook input: {error}"))?;
-    let input: DesktopPromptInput = serde_json::from_str(&input_text)
-        .map_err(|error| format!("invalid hook input: {error}"))?;
-    let store = RouterStore::open(RouterStore::default_path())
-        .map_err(|error| format!("could not open local state: {error}"))?;
-    let receipt = store
-        .ingest_desktop_prompt(&input)
-        .map_err(|error| error.to_string())?;
-    let task = &receipt.task.definition;
-    write_json(&json!({
-        "continue": false,
-        "decision": "block",
-        "reason": format!(
-            "RouDex recorded task {} ({}). Review its execution contract and approval, then use task-run {} or task-dispatch {}. The Desktop turn is stopped; only the coordinator executes this task.",
-            task.id, if receipt.replayed { "replayed delivery" } else { "new delivery" },
-            task.id, receipt.task.spec_id
-        ),
-        "taskId": task.id,
-        "specId": receipt.task.spec_id,
-        "status": task.status,
-        "replayed": receipt.replayed
-    }))
-}
-
-fn install_hook() -> Result<(), String> {
-    let path = hooks_path();
-    let mut document = read_hooks(&path)?;
-    let hook_dir = hooks_path()
-        .parent()
-        .ok_or("hook directory missing")?
-        .join("roudex");
-    fs::create_dir_all(&hook_dir).map_err(|error| error.to_string())?;
-    let script = hook_dir.join("route-prompt.ps1");
-    fs::write(&script, MANAGED_HOOK_SCRIPT).map_err(|error| error.to_string())?;
-    let command = format!(
-        "{} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\" -RouterPath \"{}\"",
-        WINDOWS_POWERSHELL,
-        script.display(),
-        env::current_exe()
-            .map_err(|error| error.to_string())?
-            .display()
-    );
-    let hooks = document
-        .as_object_mut()
-        .ok_or_else(|| "hooks.json debe contener un objeto JSON".to_owned())?
-        .entry("hooks")
-        .or_insert_with(|| json!({}));
-    let event_hooks = hooks
-        .as_object_mut()
-        .ok_or_else(|| "la propiedad hooks debe ser un objeto".to_owned())?
-        .entry("UserPromptSubmit")
-        .or_insert_with(|| json!([]));
-    let entries = event_hooks
-        .as_array_mut()
-        .ok_or_else(|| "UserPromptSubmit debe ser un arreglo".to_owned())?;
-    entries.retain(|entry| {
-        entry["hooks"]
-            .as_array()
-            .map(|handlers| {
-                !handlers.iter().any(|handler| {
-                    handler["command"]
-                        .as_str()
-                        .is_some_and(|value| value.contains("route-prompt"))
-                })
-            })
-            .unwrap_or(true)
-    });
-    entries.push(json!({
-        "hooks": [{
-            "type": "command",
-            "command": command,
-            "commandWindows": command,
-            "timeout": 600,
-            "statusMessage": "Routing desktop message"
-        }]
-    }));
-    write_hooks(&path, &document)
-}
-
-fn install_managed_hook() -> Result<(), String> {
-    let requirements = managed_requirements_path();
-    let managed_dir = managed_hook_dir();
-    let executable = env::current_exe()
-        .map_err(|error| format!("could not locate router executable: {error}"))?;
-    let managed_executable = managed_dir.join("router-cli.exe");
-
-    if requirements.exists() {
-        let contents = fs::read_to_string(&requirements)
-            .map_err(|error| format!("could not read managed requirements: {error}"))?;
-        if !contents.contains(MANAGED_MARKER) {
-            return Err(format!(
-                "managed requirements already exist at {}; preserve that policy and add the RouDex hook manually",
-                requirements.display()
-            ));
-        }
-    }
-
-    uninstall_hook()?;
-    fs::create_dir_all(&managed_dir)
-        .map_err(|error| format!("could not create managed hook directory: {error}"))?;
-    fs::copy(&executable, &managed_executable)
-        .map_err(|error| format!("could not install managed router executable: {error}"))?;
-
-    let managed_script = managed_dir.join("route-prompt.ps1");
-    fs::write(&managed_script, MANAGED_HOOK_SCRIPT)
-        .map_err(|error| format!("could not install managed hook entrypoint: {error}"))?;
-    let command = format!(
-        "{} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
-        WINDOWS_POWERSHELL,
-        managed_script.display()
-    );
-    let document = format!(
-        "{MANAGED_MARKER}\n\n[features]\nhooks = true\n\n[hooks]\nwindows_managed_dir = '{}'\n\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = '{}'\ncommand_windows = '{}'\ntimeout = 600\nstatusMessage = \"Routing desktop message\"\n",
-        managed_dir.display(),
-        command,
-        command
-    );
-    if let Some(parent) = requirements.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("could not create requirements directory: {error}"))?;
-    }
-    fs::write(&requirements, document)
-        .map_err(|error| format!("could not write managed requirements: {error}"))?;
-    eprintln!(
-        "Managed hook installed at {} using {}",
-        requirements.display(),
-        managed_executable.display()
-    );
-    Ok(())
-}
-
-fn uninstall_hook() -> Result<(), String> {
-    let path = hooks_path();
-    if !path.exists() {
-        return Ok(());
-    }
-    let mut document = read_hooks(&path)?;
-    if let Some(entries) = document["hooks"]["UserPromptSubmit"].as_array_mut() {
-        entries.retain(|entry| {
-            !entry["hooks"]
-                .as_array()
-                .map(|handlers| {
-                    handlers.iter().any(|handler| {
-                        ["command", "commandWindows"].iter().any(|field| {
-                            handler[*field]
-                                .as_str()
-                                .is_some_and(|value| value.contains("route-prompt"))
-                        })
-                    })
-                })
-                .unwrap_or(false)
-        });
-    }
-    write_hooks(&path, &document)
-}
-
-fn uninstall_managed_hook() -> Result<(), String> {
-    let requirements = managed_requirements_path();
-    if requirements.exists() {
-        let contents = fs::read_to_string(&requirements)
-            .map_err(|error| format!("could not read managed requirements: {error}"))?;
-        if !contents.contains(MANAGED_MARKER) {
-            return Err(format!(
-                "managed requirements at {} are not owned by RouDex",
-                requirements.display()
-            ));
-        }
-        fs::remove_file(&requirements)
-            .map_err(|error| format!("could not remove managed requirements: {error}"))?;
-    }
-    let managed_executable = managed_hook_dir().join("router-cli.exe");
-    if managed_executable.exists() {
-        fs::remove_file(&managed_executable)
-            .map_err(|error| format!("could not remove managed router executable: {error}"))?;
-    }
-    let managed_script = managed_hook_dir().join("route-prompt.ps1");
-    if managed_script.exists() {
-        fs::remove_file(&managed_script)
-            .map_err(|error| format!("could not remove managed hook entrypoint: {error}"))?;
-    }
-    Ok(())
+    Err(format!(
+        "el runId no pertenece a una task del coordinador: {run_id}"
+    ))
 }
 
 fn status() -> Result<(), String> {
@@ -640,88 +387,21 @@ fn status() -> Result<(), String> {
         .map_err(|error| format!("could not open local state: {error}"))?;
     write_json(&json!({
         "statePath": store.path(),
-        "runCount": store.count_runs().map_err(|error| error.to_string())?,
-        "hookPath": hooks_path()
+        "runCount": store.count_runs().map_err(|error| error.to_string())?
     }))
-}
-
-fn write_block(reason: &str) -> Result<(), String> {
-    write_json(&json!({ "continue": false, "decision": "block", "reason": reason }))
 }
 
 fn write_json(value: &Value) -> Result<(), String> {
     println!(
         "{}",
         serde_json::to_string(value)
-            .map_err(|error| format!("could not encode hook output: {error}"))?
+            .map_err(|error| format!("could not encode output: {error}"))?
     );
     Ok(())
 }
 
-fn hooks_path() -> PathBuf {
-    env::var_os("CODEX_HOME")
-        .or_else(|| {
-            env::var_os("USERPROFILE")
-                .map(|value| PathBuf::from(value).join(".codex").into_os_string())
-        })
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".codex"))
-        .join("hooks.json")
-}
-
-const MANAGED_MARKER: &str = "# RouDex managed desktop routing hook";
-const WINDOWS_POWERSHELL: &str = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
-const MANAGED_HOOK_SCRIPT: &str = include_str!("../../../scripts/route-prompt.ps1");
-
-fn managed_requirements_path() -> PathBuf {
-    if let Some(path) = env::var_os("ROUDEX_CODEX_REQUIREMENTS_PATH") {
-        return PathBuf::from(path);
-    }
-    if cfg!(windows) {
-        env::var_os("ProgramData")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"))
-            .join("OpenAI")
-            .join("Codex")
-            .join("requirements.toml")
-    } else {
-        PathBuf::from("/etc/codex/requirements.toml")
-    }
-}
-
-fn managed_hook_dir() -> PathBuf {
-    if let Some(path) = env::var_os("ROUDEX_MANAGED_HOOK_DIR") {
-        return PathBuf::from(path);
-    }
-    env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".roudex"))
-        .join("RouDex")
-        .join("hooks")
-}
-
-fn read_hooks(path: &PathBuf) -> Result<Value, String> {
-    if !path.exists() {
-        return Ok(json!({ "description": "Local desktop routing hooks", "hooks": {} }));
-    }
-    let contents =
-        fs::read_to_string(path).map_err(|error| format!("could not read hooks file: {error}"))?;
-    serde_json::from_str(&contents).map_err(|error| format!("invalid hooks file: {error}"))
-}
-
-fn write_hooks(path: &PathBuf, document: &Value) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("could not create hooks directory: {error}"))?;
-    }
-    let contents = serde_json::to_string_pretty(document)
-        .map_err(|error| format!("could not encode hooks file: {error}"))?;
-    fs::write(path, format!("{contents}\n"))
-        .map_err(|error| format!("could not write hooks file: {error}"))
-}
-
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|route-prompt [--record-only]|install-hook|install-managed-hook|uninstall-hook|uninstall-managed-hook|status>"
+        "Usage: router-cli <route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
     );
 }

@@ -1,7 +1,4 @@
-use router_core::{
-    route_prompt, ModelRoute, RoutePromptInput, RoutingConfig, RoutingConfigError,
-    ROUTING_CONFIG_VERSION,
-};
+use router_core::{ModelRoute, RoutingConfig, RoutingConfigError, ROUTING_CONFIG_VERSION};
 use serde_json::json;
 
 fn candidate(profile: &str, model: &str, effort: &str) -> serde_json::Value {
@@ -203,28 +200,5 @@ fn serde_deserialization_cannot_bypass_contract_validation() {
         json!({"version": 1, "revision": 0, "overrides": []}),
     ] {
         assert!(serde_json::from_value::<RoutingConfig>(document).is_err());
-    }
-}
-
-#[test]
-fn existing_prompt_routes_keep_their_builtin_mapping() {
-    for (prompt, profile) in [
-        ("Change button color", "micro"),
-        ("Actualizar el README", "routine"),
-        ("Crear interfaz", "standard"),
-        ("Corregir saldo", "deep"),
-        ("Investigar root cause", "frontier"),
-    ] {
-        let input = RoutePromptInput {
-            prompt: prompt.into(),
-            session_id: "synthetic-session".into(),
-            turn_id: "synthetic-turn".into(),
-            cwd: ".".into(),
-            permission_mode: None,
-        };
-        assert_eq!(
-            Some(route_prompt(&input)),
-            RoutingConfig::default().resolve_profile(profile)
-        );
     }
 }

@@ -50,43 +50,13 @@ fn status_counts() -> BTreeMap<String, usize> {
     .collect()
 }
 
-// H1 storage does not persist manifest extensions. This bundled, versioned
-// metadata supplies membership only, never runtime status or execution authority.
-// Unknown specs/tasks remain explicitly unassigned; no operational import occurs.
-fn milestone_membership() -> BTreeMap<(String, String), String> {
-    let manifest: Value =
-        serde_json::from_str(include_str!("../../specs/002-product-roadmap/tasks.json"))
-            .expect("bundled roadmap must be valid JSON");
-    let spec_id = manifest["spec_id"].as_str().expect("bundled spec id");
-    let mut membership = BTreeMap::new();
-    for milestone in manifest["milestones"]
-        .as_array()
-        .expect("bundled milestones")
-    {
-        for task_id in milestone["task_ids"].as_array().expect("bundled task ids") {
-            membership.insert(
-                (
-                    spec_id.into(),
-                    task_id.as_str().expect("bundled task id").into(),
-                ),
-                milestone["id"]
-                    .as_str()
-                    .expect("bundled milestone id")
-                    .into(),
-            );
-        }
-    }
-    membership
-}
-
 fn summarize(snapshot: &mut LocalSnapshot) {
-    let membership = milestone_membership();
     let mut groups: BTreeMap<(String, Option<String>), MilestoneSnapshot> = BTreeMap::new();
     for task in &mut snapshot.tasks {
         let spec_id = task["spec_id"].as_str().unwrap().to_owned();
-        let task_id = task["id"].as_str().unwrap().to_owned();
         let status = task["status"].as_str().unwrap().to_owned();
-        let milestone_id = membership.get(&(spec_id.clone(), task_id)).cloned();
+        // Milestone metadata is not persisted; tasks are grouped by spec only.
+        let milestone_id: Option<String> = None;
         task["milestone_id"] = json!(milestone_id);
         let group = groups
             .entry((spec_id.clone(), milestone_id.clone()))

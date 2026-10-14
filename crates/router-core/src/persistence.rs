@@ -1,8 +1,8 @@
 use crate::domain::{
-    DesktopPromptInput, DesktopPromptReceipt, EventRecord, RoutePromptInput, RouteReceipt,
-    RouteStatus, StoredRun, StoredTask, TaskApproval, TaskDefinition, TaskStatus,
+    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, StoredRun, StoredTask, TaskApproval,
+    TaskDefinition, TaskStatus,
 };
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -18,8 +18,6 @@ pub enum StoreError {
     InvalidApproval(String),
     #[error("invalid terminal event: threadId, turnId and terminal status are required")]
     InvalidTerminalEvent,
-    #[error("desktop ingress rejected: {0}")]
-    DesktopIngress(String),
 }
 
 pub struct RouterStore {
@@ -113,14 +111,6 @@ impl RouterStore {
                  PRIMARY KEY (task_id, depends_on)
              );
              CREATE INDEX IF NOT EXISTS idx_tasks_spec_id ON tasks(spec_id);
-             CREATE TABLE IF NOT EXISTS desktop_prompts (
-                 session_id TEXT NOT NULL,
-                 turn_id TEXT NOT NULL,
-                 input TEXT NOT NULL,
-                 task_id TEXT NOT NULL REFERENCES tasks(task_id),
-                 created_at TEXT NOT NULL,
-                 PRIMARY KEY (session_id, turn_id)
-             );
              CREATE TABLE IF NOT EXISTS task_approvals (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
                  task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
@@ -196,139 +186,6 @@ impl RouterStore {
             )?;
         }
         Ok(())
-    }
-
-    /// Persist delivery and task mutation together. Ingress never creates a run
-    /// or grants approval. IMMEDIATE serializes replays and updates against dispatch.
-    pub fn ingest_desktop_prompt(
-        &self,
-        input: &DesktopPromptInput,
-    ) -> Result<DesktopPromptReceipt, StoreError> {
-        let message = &input.message;
-        if [
-            &message.prompt,
-            &message.session_id,
-            &message.turn_id,
-            &message.cwd,
-        ]
-        .iter()
-        .any(|value| value.trim().is_empty())
-            || input
-                .task_id
-                .as_ref()
-                .is_some_and(|id| id.trim().is_empty())
-        {
-            return Err(StoreError::DesktopIngress(
-                "prompt, session_id, turn_id, cwd and any task_id must be nonempty".into(),
-            ));
-        }
-        let serialized = serde_json::to_string(input)?;
-        let transaction =
-            Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
-        let existing: Option<(String, String)> = self
-            .connection
-            .query_row(
-                "SELECT input, task_id FROM desktop_prompts WHERE session_id = ?1 AND turn_id = ?2",
-                params![message.session_id, message.turn_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()?;
-        if let Some((original, task_id)) = existing {
-            if original != serialized {
-                return Err(StoreError::DesktopIngress(
-                    "delivery identity was reused with different input".into(),
-                ));
-            }
-            let task = self
-                .get_task(&task_id)?
-                .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-            transaction.commit()?;
-            return Ok(DesktopPromptReceipt {
-                task,
-                replayed: true,
-            });
-        }
-        let cwd = std::fs::canonicalize(&message.cwd).map_err(|_| {
-            StoreError::DesktopIngress("cwd must be an existing local directory".into())
-        })?;
-        if !cwd.is_dir() {
-            return Err(StoreError::DesktopIngress("cwd must be a directory".into()));
-        }
-        let (spec_id, definition) = if let Some(task_id) = &input.task_id {
-            let stored = self
-                .get_task(task_id)?
-                .ok_or_else(|| StoreError::DesktopIngress("target task not found".into()))?;
-            let mut task = stored.definition;
-            if !matches!(
-                task.status,
-                TaskStatus::Planned
-                    | TaskStatus::Ready
-                    | TaskStatus::AwaitingApproval
-                    | TaskStatus::Blocked
-            ) || self.latest_run_for_task(task_id)?.is_some()
-            {
-                return Err(StoreError::DesktopIngress(
-                    "active or previously executed tasks require explicit recovery or a new task"
-                        .into(),
-                ));
-            }
-            if std::fs::canonicalize(&task.cwd).ok().as_ref() != Some(&cwd) {
-                return Err(StoreError::DesktopIngress(
-                    "target task cwd does not match the message".into(),
-                ));
-            }
-            task.prompt = message.prompt.clone();
-            // Preserve the reviewed scope, sandbox, dependencies and assignment.
-            // A changed prompt always requires another explicit approval.
-            task.approval = "manual".into();
-            self.write_task(&stored.spec_id, &task)?;
-            self.connection.execute(
-                "UPDATE tasks SET status = 'blocked' WHERE task_id = ?1",
-                params![task.id],
-            )?;
-            self.connection.execute(
-                "INSERT INTO task_approvals (task_id, decision, reason, created_at) VALUES (?1, 'denied', ?2, ?3)",
-                params![task.id, "desktop prompt updated; review and approve the changed task", now_string()],
-            )?;
-            (stored.spec_id, task)
-        } else {
-            let route = crate::routing::route_prompt(message);
-            let task = TaskDefinition {
-                id: format!("desktop-{}", uuid::Uuid::new_v4()),
-                title: message.prompt.chars().take(100).collect(),
-                prompt: message.prompt.clone(),
-                depends_on: vec![],
-                status: TaskStatus::Blocked,
-                profile: route.profile.into(),
-                model: route.model.into(),
-                effort: route.effort.into(),
-                approval: "manual".into(),
-                scope: vec![],
-                cwd: cwd.to_string_lossy().into_owned(),
-                sandbox: crate::domain::TaskSandbox {
-                    kind: "readOnly".into(),
-                    writable_roots: vec![],
-                },
-                acceptance: vec![],
-                verify: String::new(),
-            };
-            let spec_id = format!("desktop-{}", message.session_id);
-            self.write_task(&spec_id, &task)?;
-            (spec_id, task)
-        };
-        self.connection.execute(
-            "INSERT INTO desktop_prompts (session_id, turn_id, input, task_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![message.session_id, message.turn_id, serialized, definition.id, now_string()],
-        )?;
-        let task = self
-            .get_task(&definition.id)?
-            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-        debug_assert_eq!(task.spec_id, spec_id);
-        transaction.commit()?;
-        Ok(DesktopPromptReceipt {
-            task,
-            replayed: false,
-        })
     }
 
     pub fn get_task(&self, task_id: &str) -> Result<Option<StoredTask>, StoreError> {
