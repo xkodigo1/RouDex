@@ -1,10 +1,13 @@
 use crate::app_server::{AppServerClient, AppServerConfig, AppServerTurn};
+use crate::classifier::RouteDecision;
 use crate::domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, TaskDefinition, TaskStatus,
 };
 use crate::persistence::{RouterStore, StoreError};
-use crate::routing::resolve_profile;
+use crate::risk::RiskRules;
 use crate::task_manifest::{ManifestError, TaskManifest};
+use crate::task_route::resolve_task_route;
+use crate::tiers::RouterConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -158,6 +161,8 @@ impl TaskRuntime for LocalTaskRuntime {
 
 pub struct TaskCoordinator<'a> {
     store: &'a RouterStore,
+    /// Tier targets; `None` reads `router.toml` at each dispatch.
+    router: Option<RouterConfig>,
 }
 
 // Batch dispatch must check persisted gates before even constructing a runtime.
@@ -206,7 +211,32 @@ impl<R: TaskRuntime, F: FnMut(&TaskDefinition) -> Result<R, CoordinatorError>> T
 
 impl<'a> TaskCoordinator<'a> {
     pub fn new(store: &'a RouterStore) -> Self {
-        Self { store }
+        Self {
+            store,
+            router: None,
+        }
+    }
+
+    /// Use these tier targets instead of reading `router.toml`.
+    pub fn with_router(mut self, config: RouterConfig) -> Self {
+        self.router = Some(config);
+        self
+    }
+
+    /// Route a task with `router.toml` and the project's risk rules.
+    fn task_route(
+        &self,
+        task: &TaskDefinition,
+        tier_override: Option<crate::tiers::Tier>,
+    ) -> Result<RouteDecision, String> {
+        let config = match &self.router {
+            Some(config) => config.clone(),
+            None => RouterConfig::load_or_default(&RouterConfig::default_path())
+                .map_err(|error| error.to_string())?,
+        };
+        let rules = RiskRules::for_project(std::path::Path::new(&task.cwd))
+            .map_err(|error| error.to_string())?;
+        Ok(resolve_task_route(task, tier_override, &config, &rules))
     }
 
     pub fn import_manifest(&self, manifest: &TaskManifest) -> Result<(), CoordinatorError> {
@@ -341,33 +371,34 @@ impl<'a> TaskCoordinator<'a> {
             });
         }
 
-        let Some(route) = resolve_profile(&task.profile) else {
-            return self.block_invalid_route(&task, &stored.spec_id, "unknown routing profile");
+        let route = match self.task_route(&task, stored.tier_override) {
+            Ok(route) => route,
+            Err(reason) => return self.block_invalid_route(&task, &stored.spec_id, &reason),
         };
-        if route.model != task.model || route.effort != task.effort {
-            return self.block_invalid_route(
-                &task,
-                &stored.spec_id,
-                &format!(
-                    "profile {} resolves to {}/{}, manifest has {}/{}",
-                    task.profile, route.model, route.effort, task.model, task.effort
-                ),
-            );
-        }
+        // The stored definition never names a model; the one that runs does,
+        // and it is the one recorded for resume.
+        let stored_definition = task;
+        let task = TaskDefinition {
+            model: route.model.clone(),
+            effort: route.effort.clone(),
+            ..stored_definition.clone()
+        };
 
         let route_id = Uuid::new_v4().to_string();
         let run_id = Uuid::new_v4().to_string();
         if !self.store.begin_task_run(
+            &stored_definition,
             &task,
             &stored.spec_id,
             &RouteReceipt {
                 route_id: route_id.clone(),
                 run_id: run_id.clone(),
-                profile: route.profile.to_owned(),
-                model: route.model.to_owned(),
-                effort: route.effort.to_owned(),
+                profile: route.tier.as_str().to_owned(),
+                model: route.model.clone(),
+                effort: route.effort.clone(),
                 status: RouteStatus::Accepted,
             },
+            &route,
         )? {
             let task = self
                 .store
@@ -579,7 +610,7 @@ impl<'a> TaskCoordinator<'a> {
             &RouteReceipt {
                 route_id: route_id.clone(),
                 run_id: run_id.clone(),
-                profile: task.profile.clone(),
+                profile: task.tier.as_str().to_owned(),
                 model: task.model.clone(),
                 effort: task.effort.clone(),
                 status: RouteStatus::Blocked,
@@ -1005,9 +1036,11 @@ mod tests {
             prompt: "Implement coordinator".to_owned(),
             depends_on: vec![],
             status: TaskStatus::Ready,
-            profile: "standard".to_owned(),
-            model: "gpt-6.1-sol".to_owned(),
-            effort: "medium".to_owned(),
+            tier: crate::tiers::Tier::Estandar,
+            profile: None,
+            model: String::new(),
+            effort: String::new(),
+            milestone: None,
             approval: approval.to_owned(),
             scope: vec!["crates/router-core".to_owned()],
             cwd: ".".to_owned(),
@@ -1031,6 +1064,7 @@ mod tests {
             turns: 0,
         };
         let receipt = TaskCoordinator::new(&store)
+            .with_router(RouterConfig::default())
             .dispatch_task("T-004", &mut runtime)
             .expect("dispatch");
         assert_eq!(receipt.status, TaskStatus::Completed);
@@ -1048,6 +1082,7 @@ mod tests {
             turns: 0,
         };
         let receipt = TaskCoordinator::new(&store)
+            .with_router(RouterConfig::default())
             .dispatch_task("T-004", &mut runtime)
             .expect("dispatch");
         assert_eq!(receipt.status, TaskStatus::AwaitingApproval);

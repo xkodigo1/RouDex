@@ -3,8 +3,7 @@ use router_core::{
 };
 use router_core::{
     route_local, AppServerClient, AppServerConfig, LocalTaskRuntime, RouterConfig, RouterStore,
-    RoutingConfig, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest,
-    TaskRuntime,
+    RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest, TaskRuntime,
 };
 use serde_json::{json, Value};
 use std::env;
@@ -49,7 +48,6 @@ fn run() -> Result<(), String> {
         Some("chat") => chat(checked_args(args.collect(), 1, 1, "chat <projectDir>")?),
         Some("route") => route(checked_args(args.collect(), 1, 1, "route <projectDir>")?),
         Some("models") => models(checked_args(args.collect(), 0, 1, "models [projectDir]")?),
-        Some("route-preview") => route_preview(args.collect()),
         Some("continue-run") => {
             continue_run(checked_args(args.collect(), 1, 1, "continue-run <runId>")?)
         }
@@ -172,77 +170,6 @@ fn checked_args(
     Ok(args)
 }
 
-// Pure preview: never open the operational store or construct a runtime. Explicit
-// configuration is a candidate supplied on stdin, not an active dispatch revision.
-fn route_preview(args: Vec<String>) -> Result<(), String> {
-    const USAGE: &str = "Usage: router-cli route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]";
-    let profile = args
-        .first()
-        .filter(|arg| !arg.trim().is_empty())
-        .ok_or(USAGE)?;
-    let mut config_stdin = false;
-    let mut model = None;
-    let mut effort = None;
-    let mut remaining = args.iter().skip(1);
-    while let Some(flag) = remaining.next() {
-        match flag.as_str() {
-            "--config-stdin" if !config_stdin => config_stdin = true,
-            "--model" if model.is_none() => {
-                model = Some(
-                    remaining
-                        .next()
-                        .filter(|v| !v.starts_with("--") && !v.trim().is_empty())
-                        .ok_or(USAGE)?,
-                );
-            }
-            "--effort" if effort.is_none() => {
-                effort = Some(
-                    remaining
-                        .next()
-                        .filter(|v| !v.starts_with("--") && !v.trim().is_empty())
-                        .ok_or(USAGE)?,
-                );
-            }
-            _ => return Err(USAGE.to_owned()),
-        }
-    }
-    let config = if config_stdin {
-        let mut contents = String::new();
-        io::stdin()
-            .read_to_string(&mut contents)
-            .map_err(|_| "could not read routing configuration from stdin")?;
-        RoutingConfig::from_json(&contents).map_err(|error| error.to_string())?
-    } else {
-        RoutingConfig::default()
-    };
-    // Dispatch uses this same built-in resolver. The validated candidate resolver
-    // delegates to it for every profile without an explicit configuration rule.
-    let route = if config_stdin {
-        config.resolve_profile(profile)
-    } else {
-        router_core::routing::resolve_profile(profile)
-    }
-    .ok_or("unknown routing profile")?;
-    if model.is_some_and(|value| value != route.model)
-        || effort.is_some_and(|value| value != route.effort)
-    {
-        return Err(
-            "task model/effort overrides conflict with the resolved routing rule".to_owned(),
-        );
-    }
-    let explicit = config
-        .overrides()
-        .iter()
-        .any(|rule| rule.profile == *profile);
-    write_json(&json!({
-        "profile": route.profile,
-        "model": route.model,
-        "effort": route.effort,
-        "reason": if explicit { "explicit" } else { "built-in" },
-        "revision": config.revision()
-    }))
-}
-
 fn task_list(args: Vec<String>) -> Result<(), String> {
     let spec_id = &args[0];
     let store = RouterStore::open(RouterStore::default_path())
@@ -308,7 +235,8 @@ fn task_plan(args: Vec<String>) -> Result<(), String> {
     write_json(&json!({
         "specId": persisted.spec_id,
         "taskCount": persisted.tasks.len(),
-        "readyTaskIds": persisted.ready_tasks().iter().map(|task| task.id.clone()).collect::<Vec<_>>()
+        "readyTaskIds": persisted.ready_tasks().iter().map(|task| task.id.clone()).collect::<Vec<_>>(),
+        "warnings": persisted.warnings
     }))
 }
 
@@ -591,6 +519,6 @@ fn write_json(value: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <hook (Codex UserPromptSubmit input on stdin)|hook-install|hook-uninstall|chat <projectDir> (prompt on stdin)|route <projectDir> (prompt on stdin)|models [projectDir]|route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
+        "Usage: router-cli <hook (Codex UserPromptSubmit input on stdin)|hook-install|hook-uninstall|chat <projectDir> (prompt on stdin)|route <projectDir> (prompt on stdin)|models [projectDir]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
     );
 }

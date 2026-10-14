@@ -1,5 +1,6 @@
 use router_core::{
-    EventRecord, RouteReceipt, RouteStatus, RouterStore, TaskDefinition, TaskSandbox, TaskStatus,
+    resolve_task_route, EventRecord, RiskRules, RouteDecision, RouteReceipt, RouteStatus,
+    RouterConfig, RouterStore, TaskDefinition, TaskSandbox, TaskStatus, Tier,
 };
 use serde_json::Value;
 use std::fs;
@@ -88,9 +89,11 @@ fn lifecycle_task() -> TaskDefinition {
         prompt: "Original task".into(),
         depends_on: vec![],
         status: TaskStatus::Ready,
-        profile: "standard".into(),
-        model: "gpt-6.1-sol".into(),
-        effort: "medium".into(),
+        tier: Tier::Estandar,
+        profile: None,
+        model: String::new(),
+        effort: String::new(),
+        milestone: None,
         approval: "manual".into(),
         scope: vec![".".into()],
         cwd: ".".into(),
@@ -162,15 +165,10 @@ fn cli_continuation_uses_coordinator_approval_and_terminal_replay_gates() {
         store
             .begin_task_run(
                 &task,
+                &task,
                 "spec",
-                &RouteReceipt {
-                    route_id: "route".into(),
-                    run_id: "run".into(),
-                    profile: task.profile.clone(),
-                    model: task.model.clone(),
-                    effort: task.effort.clone(),
-                    status: RouteStatus::Accepted,
-                },
+                &receipt("route", "run", &route(&task)),
+                &route(&task),
             )
             .unwrap();
         store
@@ -310,15 +308,10 @@ fn task_plan_imports_manifest_and_reports_ready_tasks() {
     assert!(store
         .begin_task_run(
             &next,
+            &next,
             "spec-test",
-            &RouteReceipt {
-                route_id: "reload-route".into(),
-                run_id: "reload-run".into(),
-                profile: next.profile.clone(),
-                model: next.model.clone(),
-                effort: next.effort.clone(),
-                status: RouteStatus::Accepted,
-            },
+            &receipt("reload-route", "reload-run", &route(&next)),
+            &route(&next),
         )
         .unwrap());
     store
@@ -341,7 +334,9 @@ fn assert_invalid_graph_is_not_imported(tasks: Vec<TaskDefinition>, expected_err
         spec_id: "invalid".into(),
         title: "Invalid".into(),
         version: 1,
+        milestones: Vec::new(),
         tasks,
+        warnings: Vec::new(),
     };
     let path = root.join("tasks.json");
     fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
@@ -486,4 +481,42 @@ fn feed(stdin: Option<std::process::ChildStdin>, input: &[u8]) {
         }
         _ => {}
     }
+}
+
+/// The route the coordinator would give a task with the default tiers.
+fn route(task: &TaskDefinition) -> RouteDecision {
+    resolve_task_route(task, None, &RouterConfig::default(), &RiskRules::default())
+}
+
+fn receipt(route_id: &str, run_id: &str, route: &RouteDecision) -> RouteReceipt {
+    RouteReceipt {
+        route_id: route_id.into(),
+        run_id: run_id.into(),
+        profile: route.tier.as_str().into(),
+        model: route.model.clone(),
+        effort: route.effort.clone(),
+        status: RouteStatus::Accepted,
+    }
+}
+
+#[test]
+fn spec_load_translates_legacy_profiles_and_reports_it() {
+    let root = temp_root("legacy-spec");
+    fs::create_dir_all(&root).unwrap();
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../specs/003-desktop-hook/tasks.json")
+        .to_string_lossy()
+        .into_owned();
+    let response = run(&["spec-load", manifest.as_str()], "", &root, &[]);
+    assert_eq!(response["specId"], "003-desktop-hook");
+    let warnings = response["warnings"].as_array().unwrap();
+    assert!(warnings
+        .iter()
+        .any(|warning| warning.as_str().unwrap().contains("tier estandar")));
+    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    let task = store.get_task("R003-T001").unwrap().unwrap().definition;
+    assert_eq!(task.tier, Tier::Estandar);
+    assert!(task.model.is_empty(), "router.toml chooses the model");
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
 }

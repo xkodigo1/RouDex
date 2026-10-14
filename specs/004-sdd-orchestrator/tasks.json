@@ -1,0 +1,469 @@
+{
+  "spec_id": "004-sdd-orchestrator",
+  "title": "SDD orchestrator driven by the tier router",
+  "version": 1,
+  "status": "running",
+  "planning_assumption": "Plan to v1.0.0 (Codex only) approved in chat on 2026-10-14 with full access. Tasks run outside the coordinator per AGENTS.md (decision D6). Tasks declare tier instead of profile/model/effort (decision D1), so the validator's routed-field warnings are expected.",
+  "execution_policy": {
+    "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D6)",
+    "network_access": false,
+    "future_task_approval": "manual",
+    "publication_authorized": false,
+    "framework_or_dependency_changes": "None planned. Present scope and decision before adding any dependency."
+  },
+  "milestones": [
+    {
+      "id": "H1",
+      "title": "Orquestador en la app",
+      "status": "running",
+      "release_target": "v0.8.0",
+      "depends_on": [],
+      "task_ids": [
+        "R004-T001",
+        "R004-T002",
+        "R004-T003",
+        "R004-T004",
+        "R004-T005",
+        "R004-T006",
+        "R004-T007"
+      ],
+      "release_gate_task": "R004-T007",
+      "exit_criteria": [
+        "Every task completed with verify evidence.",
+        "Every scenario has evidence in acceptance-evidence.md, including an end-to-end run in the real app against Codex.",
+        "Manifests at 0.8.0, CI green on main, signed tag and release."
+      ]
+    }
+  ],
+  "acceptance_scenarios": [
+    {
+      "id": "A01",
+      "precondition": "A project with specs/<slug>/tasks.json whose tasks declare tier and milestone.",
+      "action": "List the project's specs and load one.",
+      "observable_result": "Tasks, milestones, dependencies, acceptance and verify command are imported and listed; reloading keeps lifecycle state.",
+      "task_ids": [
+        "R004-T001",
+        "R004-T004",
+        "R004-T005"
+      ],
+      "verification": "cargo test -p router-core task_manifest; Tasks screen in the fixture"
+    },
+    {
+      "id": "A02",
+      "precondition": "A manifest whose tasks use profile/model/effort (for example specs/003-desktop-hook/tasks.json).",
+      "action": "Load it.",
+      "observable_result": "Each profile maps to a tier (micro/routine -> economico, standard -> estandar, deep/frontier -> fuerte); declared model/effort are ignored and reported as a warning.",
+      "task_ids": [
+        "R004-T001"
+      ],
+      "verification": "cargo test -p router-core task_manifest"
+    },
+    {
+      "id": "A03",
+      "precondition": "Manifests with a cycle, a missing dependency, an unknown tier or a danger-full-access sandbox.",
+      "action": "Load each one.",
+      "observable_result": "Rejected with a specific error; nothing is imported.",
+      "task_ids": [
+        "R004-T001"
+      ],
+      "verification": "cargo test -p router-core task_manifest"
+    },
+    {
+      "id": "A04",
+      "precondition": "A task with tier estandar and a router.toml.",
+      "action": "Dispatch it, change router.toml, dispatch another estandar task.",
+      "observable_result": "Each run records the model and effort router.toml had at dispatch time.",
+      "task_ids": [
+        "R004-T002"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator"
+    },
+    {
+      "id": "A05",
+      "precondition": "A task whose prompt matches a risk rule, declared economico.",
+      "action": "Load it, then lower it manually and dispatch.",
+      "observable_result": "It resolves to fuerte with the rule as reason; the manual change is stored and the run records it as manual.",
+      "task_ids": [
+        "R004-T002",
+        "R004-T004"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator"
+    },
+    {
+      "id": "A06",
+      "precondition": "Tasks with incomplete dependencies or approval manual.",
+      "action": "Dispatch them; approve one; deny another.",
+      "observable_result": "No turn starts until dependencies are completed and approval is granted; a denied task stays blocked.",
+      "task_ids": [
+        "R004-T003",
+        "R004-T004"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator"
+    },
+    {
+      "id": "A07",
+      "precondition": "A ready task dispatched from the app.",
+      "action": "Watch the run; answer a command approval; stop another run.",
+      "observable_result": "Text streams into the Tasks screen, the approval appears inline and its answer reaches Codex; stopping ends the turn as interrupted.",
+      "task_ids": [
+        "R004-T003",
+        "R004-T004",
+        "R004-T005"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator; fixture and real app"
+    },
+    {
+      "id": "A08",
+      "precondition": "A task whose turn completes.",
+      "action": "Run its verify command.",
+      "observable_result": "Exit 0 completes the task with the command output as evidence; any other exit fails it with the output.",
+      "task_ids": [
+        "R004-T003"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator"
+    },
+    {
+      "id": "A09",
+      "precondition": "A spec with independent and dependent ready tasks.",
+      "action": "Run all ready tasks.",
+      "observable_result": "Tasks run one at a time in dependency order; a failure does not run its dependents.",
+      "task_ids": [
+        "R004-T003",
+        "R004-T004"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator"
+    },
+    {
+      "id": "A10",
+      "precondition": "An interrupted run, and a task blocked by thread.resume.failed.",
+      "action": "Resume the first; retry the second.",
+      "observable_result": "Resume continues the same thread without repeating a completed turn; the blocked task can be retried with a new run.",
+      "task_ids": [
+        "R004-T003",
+        "R004-T006"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator"
+    },
+    {
+      "id": "A11",
+      "precondition": "The CLI.",
+      "action": "spec-load, task-approve, task-run and task-dispatch on a tier manifest.",
+      "observable_result": "The CLI follows the same tiers and gates; approval requests from Codex are declined there.",
+      "task_ids": [
+        "R004-T006"
+      ],
+      "verification": "cargo test -p router-cli --test task_cli"
+    },
+    {
+      "id": "A12",
+      "precondition": "A task turn running.",
+      "action": "Codex starts the turn and the verify command.",
+      "observable_result": "Both carry ROUDEX_ROUTER_INTERNAL and ROUDEX_ACTIVE_TASK_ID: the Desktop hook skips them and coordinator commands refuse to run inside them.",
+      "task_ids": [
+        "R004-T003"
+      ],
+      "verification": "cargo test -p router-core --test task_coordinator; cargo test -p router-cli --test task_cli"
+    },
+    {
+      "id": "A13",
+      "precondition": "The example spec in the repository and the real Codex runtime.",
+      "action": "Load and run it from the app.",
+      "observable_result": "Every task completes with verification evidence, visible in the Tasks screen.",
+      "task_ids": [
+        "R004-T007"
+      ],
+      "verification": "specs/004-sdd-orchestrator/acceptance-evidence.md"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "R004-T001",
+      "milestone": "H1",
+      "title": "Tier manifests, milestones and stricter validation",
+      "prompt": "Extend TaskManifest/TaskDefinition: optional tier (economico|estandar|fuerte) and milestone per task, optional milestones list; tasks without tier but with profile map to a tier with a warning (D1); reject unknown tiers and danger-full-access sandboxes (D3); keep cycle and dependency checks; persist tier, tier source and milestone. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [],
+      "status": "completed",
+      "tier": "fuerte",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "crates/router-core"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "A01-A03 hold.",
+        "specs/003-desktop-hook/tasks.json loads with warnings."
+      ],
+      "verify": "cargo test -p router-core task_manifest",
+      "scenario_ids": [
+        "A01",
+        "A02",
+        "A03"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "cargo test -p router-core task_manifest: 8 passed (tier and no model, legacy profile mapping with warnings, unknown tier/profile/missing tier rejected, sandbox inside the project, milestones, repository specs 003 and 004 load).",
+        "cargo test -p router-cli --test task_cli spec_load_translates_legacy_profiles_and_reports_it: passed.",
+        "Brought forward from R004-T006: route-preview, RoutingConfig and the profile table removed, since dispatch no longer uses profiles.",
+        "Commit 82c80a2."
+      ],
+      "release_target": "v0.8.0"
+    },
+    {
+      "id": "R004-T002",
+      "milestone": "H1",
+      "title": "Resolve task tiers with router.toml and risk rules",
+      "prompt": "At dispatch resolve the task tier to model/effort with RouterConfig; apply RiskRules for the task cwd to title and prompt (force fuerte with reason); support a stored manual tier override; record tier, source, model and effort on the run. Replace the profile table in the dispatch path. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R004-T001"
+      ],
+      "status": "completed",
+      "tier": "fuerte",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "crates/router-core"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "A04 and A05 hold.",
+        "No dispatch path reads the built-in profile table."
+      ],
+      "verify": "cargo test -p router-core --test task_coordinator",
+      "scenario_ids": [
+        "A04",
+        "A05"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "cargo test -p router-core task_route: 3 passed (spec tier through router.toml, risk forces fuerte, manual wins with the risk kept on record, legacy profile reason).",
+        "cargo test -p router-core --test task_coordinator: 21 passed, including runs_record_the_model_router_toml_had_at_dispatch (A04), risk_forces_fuerte_and_a_manual_tier_wins_on_the_record (A05) and invalid_project_risk_rules_block_without_constructing_runtime.",
+        "cargo test --workspace: 126 passed; cargo clippy --workspace --all-targets -D warnings: clean.",
+        "Commit 82c80a2."
+      ],
+      "release_target": "v0.8.0"
+    },
+    {
+      "id": "R004-T003",
+      "milestone": "H1",
+      "title": "Run task turns in the interactive session",
+      "prompt": "Implement the task runtime over Session (D2): on-request approvals surfaced as events, streaming events tagged with task and run ids, interrupt, verification through command/exec in the task sandbox, resume through thread/resume; keep the coordinator gates, persistence and idempotency. Extend the fake app server for approvals and interrupts. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R004-T002"
+      ],
+      "status": "planned",
+      "tier": "fuerte",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "crates/router-core"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "A06-A10 and A12 hold against the fake app server.",
+        "Existing coordinator guarantees (no replay, superseded runs, transactional claims) still pass."
+      ],
+      "verify": "cargo test -p router-core --test task_coordinator",
+      "scenario_ids": [
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A12"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.8.0"
+    },
+    {
+      "id": "R004-T004",
+      "milestone": "H1",
+      "title": "Tauri commands and background execution",
+      "prompt": "Add Tauri commands for spec listing and loading, task listing, tier override, approve/deny, dispatch one or all ready, interrupt, retry, recover and resume; run dispatch off the UI thread and emit task events on roudex://session; reuse the chat RouterStore instead of the read-only snapshot. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R004-T003"
+      ],
+      "status": "planned",
+      "tier": "fuerte",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "src-tauri"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Commands cover A01 and A05-A09.",
+        "The window's capability still only grants event listen/unlisten."
+      ],
+      "verify": "cargo test -p roudex-desktop",
+      "scenario_ids": [
+        "A01",
+        "A05",
+        "A06",
+        "A07",
+        "A09"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.8.0"
+    },
+    {
+      "id": "R004-T005",
+      "milestone": "H1",
+      "title": "Tasks screen in the current design",
+      "prompt": "Replace the legacy TasksView with a terminal-style screen (D4): spec selector, milestones and tasks with status and tier, detail with prompt, acceptance and verify, actions (approve, deny, change tier, run, run all ready, stop, retry, resume), live transcript and verification output reusing the Threads components; extend ui/tests/chat-fixture.html and record a browser check. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R004-T004"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "ui/src",
+        "ui/tests"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "A01 and A07 are visible in the fixture.",
+        "UI build passes and the check is recorded."
+      ],
+      "verify": "pnpm --dir ui build",
+      "scenario_ids": [
+        "A01",
+        "A07"
+      ],
+      "verification_artifact": "specs/004-sdd-orchestrator/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.8.0"
+    },
+    {
+      "id": "R004-T006",
+      "milestone": "H1",
+      "title": "Legacy cleanup and CLI on tiers",
+      "prompt": "Remove route-preview, RoutingConfig and the profile table outside the D1 mapping, RunStatus, AppServerClient methods only used by tests, the legacy snapshot commands, the legacy view and ipc-fixture (D5); make the CLI task commands use tiers and the session runtime; let a task blocked by thread.resume.failed be retried. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R004-T003",
+        "R004-T005"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "crates",
+        "src-tauri",
+        "ui"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates",
+          "src-tauri",
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "A10 and A11 hold.",
+        "cargo clippy -D warnings stays clean."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A10",
+        "A11"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.8.0"
+    },
+    {
+      "id": "R004-T007",
+      "milestone": "H1",
+      "title": "Docs, example spec, end-to-end check and release gate",
+      "prompt": "Write docs/orchestrator.md, add a small example spec, run it end to end in the real app against Codex with minimal quota, record A01-A13 evidence, and bump the workspace and UI versions to 0.8.0. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R004-T006"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
+      "scope": [
+        "docs",
+        "specs/004-sdd-orchestrator",
+        "examples",
+        "README.md",
+        "Cargo.toml",
+        "Cargo.lock",
+        "ui/package.json"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "."
+        ]
+      },
+      "acceptance": [
+        "acceptance-evidence.md covers A01-A13.",
+        "Manifests at 0.8.0 and cargo test --workspace passes."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A13"
+      ],
+      "verification_artifact": "specs/004-sdd-orchestrator/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.8.0"
+    }
+  ],
+  "revision_history": []
+}

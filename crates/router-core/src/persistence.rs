@@ -2,6 +2,7 @@ use crate::domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, StoredRun, StoredTask, TaskApproval,
     TaskDefinition, TaskStatus,
 };
+use crate::tiers::Tier;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -119,9 +120,50 @@ impl RouterStore {
                  created_at TEXT NOT NULL
              );",
         )?;
+        // Columns added with tiers. Tasks stored before them get the tier
+        // their profile maps to.
+        for (column, definition) in [
+            ("tier", "TEXT"),
+            ("milestone", "TEXT"),
+            ("tier_override", "TEXT"),
+        ] {
+            let exists: bool = self.connection.query_row(
+                "SELECT count(*) > 0 FROM pragma_table_info('tasks') WHERE name = ?1",
+                [column],
+                |row| row.get(0),
+            )?;
+            if !exists {
+                self.connection.execute(
+                    &format!("ALTER TABLE tasks ADD COLUMN {column} {definition}"),
+                    [],
+                )?;
+            }
+        }
+        self.connection.execute_batch(
+            "UPDATE tasks SET tier = CASE profile
+                 WHEN 'micro' THEN 'economico' WHEN 'routine' THEN 'economico'
+                 WHEN 'deep' THEN 'fuerte' WHEN 'frontier' THEN 'fuerte'
+                 ELSE 'estandar' END
+             WHERE tier IS NULL;",
+        )?;
         crate::chat::migrate(&self.connection)?;
         crate::desktop_hook::migrate(&self.connection)?;
         Ok(())
+    }
+
+    /// Choose a task's tier by hand (`None` returns to the spec's). Refused
+    /// while the task runs or once it is completed.
+    pub fn set_task_tier_override(
+        &self,
+        task_id: &str,
+        tier: Option<Tier>,
+    ) -> Result<bool, StoreError> {
+        let changed = self.connection.execute(
+            "UPDATE tasks SET tier_override = ?2, updated_at = ?3
+             WHERE task_id = ?1 AND status NOT IN ('running', 'completed')",
+            params![task_id, tier.map(Tier::as_str), now_string()],
+        )?;
+        Ok(changed > 0)
     }
 
     pub fn upsert_task(
@@ -141,8 +183,8 @@ impl RouterStore {
             "INSERT INTO tasks (
                 task_id, spec_id, title, prompt, status, profile, model, effort,
                 approval, scope, cwd, sandbox_type, writable_roots, acceptance,
-                verify, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16)
+                verify, created_at, updated_at, tier, milestone
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16, ?17, ?18)
              ON CONFLICT(task_id) DO UPDATE SET
                 spec_id = excluded.spec_id,
                 title = excluded.title,
@@ -150,6 +192,8 @@ impl RouterStore {
                 profile = excluded.profile,
                 model = excluded.model,
                 effort = excluded.effort,
+                tier = excluded.tier,
+                milestone = excluded.milestone,
                 approval = excluded.approval,
                 scope = excluded.scope,
                 cwd = excluded.cwd,
@@ -164,7 +208,7 @@ impl RouterStore {
                 definition.title,
                 definition.prompt,
                 task_status_name(&definition.status),
-                definition.profile,
+                definition.profile.as_deref().unwrap_or_default(),
                 definition.model,
                 definition.effort,
                 definition.approval,
@@ -175,6 +219,8 @@ impl RouterStore {
                 serde_json::to_string(&definition.acceptance)?,
                 definition.verify,
                 now,
+                definition.tier.as_str(),
+                definition.milestone,
             ],
         )?;
         self.connection.execute(
@@ -193,26 +239,35 @@ impl RouterStore {
     pub fn get_task(&self, task_id: &str) -> Result<Option<StoredTask>, StoreError> {
         let mut statement = self.connection.prepare(
             "SELECT task_id, spec_id, title, prompt, status, profile, model, effort,
-                    approval, scope, cwd, sandbox_type, writable_roots, acceptance, verify
+                    approval, scope, cwd, sandbox_type, writable_roots, acceptance, verify,
+                    tier, milestone, tier_override
              FROM tasks WHERE task_id = ?1",
         )?;
+        let tier = |value: String| {
+            Tier::parse(&value)
+                .ok_or_else(|| to_sql_error(std::io::Error::other(format!("unknown tier {value}"))))
+        };
         statement
             .query_row(params![task_id], |row| {
                 let id: String = row.get(0)?;
                 let spec_id: String = row.get(1)?;
                 let depends_on = self.dependencies_for(&id).map_err(to_sql_error)?;
                 let status: String = row.get(4)?;
+                let profile: String = row.get(5)?;
                 Ok(StoredTask {
                     spec_id,
+                    tier_override: row.get::<_, Option<String>>(17)?.map(tier).transpose()?,
                     definition: TaskDefinition {
                         id,
                         title: row.get(2)?,
                         prompt: row.get(3)?,
                         depends_on,
                         status: parse_task_status(&status).map_err(to_sql_error)?,
-                        profile: row.get(5)?,
+                        tier: tier(row.get(15)?)?,
+                        profile: (!profile.is_empty()).then_some(profile),
                         model: row.get(6)?,
                         effort: row.get(7)?,
+                        milestone: row.get(16)?,
                         approval: row.get(8)?,
                         scope: serde_json::from_str(&row.get::<_, String>(9)?)
                             .map_err(to_sql_error)?,
@@ -331,11 +386,16 @@ impl RouterStore {
     }
 
     /// Claim and record a dispatch atomically so two coordinators cannot execute it.
+    /// Claim a ready task for a run. `task` must match the stored definition;
+    /// `executable` is the same task with the routed model and effort, which
+    /// is what the run records and what a resume uses.
     pub fn begin_task_run(
         &self,
         task: &TaskDefinition,
+        executable: &TaskDefinition,
         spec_id: &str,
         receipt: &RouteReceipt,
+        route: &crate::classifier::RouteDecision,
     ) -> Result<bool, StoreError> {
         let transaction = self.connection.unchecked_transaction()?;
         // A prompt update may have invalidated a coordinator's preflight
@@ -374,8 +434,9 @@ impl RouterStore {
         self.record_event(&EventRecord {
             run_id: receipt.run_id.clone(),
             event_type: "task.started".into(),
-            payload: serde_json::json!({ "taskId": task.id, "profile": receipt.profile,
-                "model": receipt.model, "effort": receipt.effort, "definition": task }),
+            payload: serde_json::json!({ "taskId": task.id, "tier": route.tier,
+                "model": receipt.model, "effort": receipt.effort, "route": route,
+                "definition": executable }),
         })?;
         transaction.commit()?;
         Ok(true)
@@ -681,7 +742,7 @@ mod tests {
         let receipt = RouteReceipt {
             route_id: "route".to_owned(),
             run_id: "run".to_owned(),
-            profile: "standard".to_owned(),
+            profile: "estandar".to_owned(),
             model: "gpt-6.1-sol".to_owned(),
             effort: "medium".to_owned(),
             status: RouteStatus::Accepted,
@@ -706,9 +767,11 @@ mod tests {
             prompt: "Implement persistence".to_owned(),
             depends_on: vec!["T-001".to_owned()],
             status: TaskStatus::Ready,
-            profile: "standard".to_owned(),
-            model: "gpt-6.1-sol".to_owned(),
-            effort: "medium".to_owned(),
+            tier: Tier::Estandar,
+            profile: None,
+            model: String::new(),
+            effort: String::new(),
+            milestone: None,
             approval: "manual".to_owned(),
             scope: vec!["crates/router-core".to_owned()],
             cwd: ".".to_owned(),
@@ -757,9 +820,11 @@ mod tests {
             prompt: "test".to_owned(),
             depends_on: vec![],
             status: TaskStatus::Planned,
-            profile: "routine".to_owned(),
-            model: "gpt-6-luna".to_owned(),
-            effort: "medium".to_owned(),
+            tier: Tier::Economico,
+            profile: None,
+            model: String::new(),
+            effort: String::new(),
+            milestone: None,
             approval: "not_required".to_owned(),
             scope: vec![".".to_owned()],
             cwd: ".".to_owned(),
