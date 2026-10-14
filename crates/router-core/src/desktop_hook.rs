@@ -29,6 +29,114 @@ pub struct PromptSubmit {
     pub prompt: String,
 }
 
+/// Field names and JSON types of a hook input, never its values, so a failure
+/// can be diagnosed without storing the prompt.
+pub fn input_shape(text: &str) -> String {
+    let kind = |value: &Value| match value {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    };
+    match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(fields)) => fields
+            .iter()
+            .map(|(name, value)| format!("{name}:{}", kind(value)))
+            .collect::<Vec<_>>()
+            .join(", "),
+        Ok(other) => format!("JSON {}", kind(&other)),
+        Err(_) => format!("no JSON ({} bytes)", text.len()),
+    }
+}
+
+/// Where the hook keeps its binary and data: `$ROUDEX_HOME`, by default
+/// `~/.roudex`. Codex Desktop is a packaged (MSIX) app and Windows redirects
+/// what its child processes read and write under AppData to a private copy,
+/// so nothing the hook needs may live under `%LOCALAPPDATA%` or `%APPDATA%`.
+pub fn home() -> PathBuf {
+    std::env::var_os("ROUDEX_HOME")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("USERPROFILE")
+                .or_else(|| std::env::var_os("HOME"))
+                .map(|home| PathBuf::from(home).join(".roudex"))
+        })
+        .unwrap_or_else(|| PathBuf::from(".roudex"))
+}
+
+/// The copy of `router-cli` that Codex runs.
+pub fn bin_path() -> PathBuf {
+    let name = if cfg!(windows) {
+        "router-cli.exe"
+    } else {
+        "router-cli"
+    };
+    home().join("bin").join(name)
+}
+
+/// Decisions recorded by the hook, read by the desktop app.
+pub fn store_path() -> PathBuf {
+    home().join("desktop-hook.sqlite3")
+}
+
+/// Failures Codex Desktop does not show.
+pub fn log_path() -> PathBuf {
+    home().join("hook.log")
+}
+
+/// Refuse locations that packaged apps see through a private copy.
+pub fn check_outside_app_data(path: &Path) -> Result<(), String> {
+    let normalize = |path: &Path| path.to_string_lossy().replace('/', "\\").to_lowercase();
+    let target = normalize(path);
+    for variable in ["LOCALAPPDATA", "APPDATA"] {
+        if let Some(root) = std::env::var_os(variable).filter(|root| !root.is_empty()) {
+            let root = normalize(Path::new(&root));
+            if target.starts_with(&format!("{}\\", root.trim_end_matches('\\'))) {
+                return Err(format!(
+                    "{} está dentro de %{variable}%: Codex Desktop (app empaquetada) vería una \
+                     copia privada de esa carpeta. Usa una ruta fuera de AppData (ROUDEX_HOME).",
+                    path.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The managed `requirements.toml` that `v0.5.0` installed, if it is still
+/// there. Removing it needs administrator rights, so RouDex only reports it.
+pub fn legacy_managed_hook() -> Option<PathBuf> {
+    let path = PathBuf::from(std::env::var_os("ProgramData")?)
+        .join("OpenAI")
+        .join("Codex")
+        .join("requirements.toml");
+    std::fs::read_to_string(&path)
+        .ok()
+        .filter(|text| text.contains("route-prompt") || text.contains("RouDex"))
+        .map(|_| path)
+}
+
+/// Append one line to the hook log, starting over past 64 KiB.
+pub fn log_failure(path: &Path, message: &str) {
+    use std::io::Write;
+    const LIMIT: u64 = 64 * 1024;
+    let restart = std::fs::metadata(path).is_ok_and(|meta| meta.len() > LIMIT);
+    let _ = path.parent().map(std::fs::create_dir_all);
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(!restart)
+        .write(true)
+        .truncate(restart)
+        .open(path);
+    if let Ok(mut file) = file {
+        // One line per failure, even for multi-line parser errors.
+        let message = message.split_whitespace().collect::<Vec<_>>().join(" ");
+        let _ = writeln!(file, "{} {message}", now_string());
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HookAction {
@@ -611,6 +719,55 @@ mod tests {
         assert_eq!(
             uninstall_from(&mut json!({})).unwrap(),
             HookChange::default()
+        );
+    }
+
+    #[test]
+    fn input_shape_names_fields_without_values() {
+        let shape = input_shape(r#"{"session_id":"s","prompt":"secreto","input":[1],"n":2}"#);
+        assert_eq!(
+            shape,
+            "input:array, n:number, prompt:string, session_id:string"
+        );
+        assert!(!shape.contains("secreto"));
+        assert_eq!(input_shape("[]"), "JSON array");
+        assert_eq!(input_shape("hola"), "no JSON (4 bytes)");
+    }
+
+    #[test]
+    fn the_failure_log_appends_and_starts_over_when_large() {
+        let path = std::env::temp_dir().join(format!("roudex-hook-{}.log", uuid::Uuid::new_v4()));
+        log_failure(&path, "uno");
+        log_failure(&path, "dos");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text.lines().count(), 2);
+        assert!(text.lines().last().unwrap().ends_with(" dos"));
+        std::fs::write(&path, "x".repeat(70 * 1024)).unwrap();
+        log_failure(&path, "tres");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text.lines().count(), 1);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn app_data_locations_are_refused() {
+        // Reads the real variables; skip where they are not set.
+        let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+            return;
+        };
+        let inside = PathBuf::from(&local)
+            .join("RouDex")
+            .join("bin")
+            .join("router-cli.exe");
+        let error = check_outside_app_data(&inside).unwrap_err();
+        assert!(error.contains("LOCALAPPDATA"), "{error}");
+        let lower =
+            PathBuf::from(local.to_string_lossy().to_lowercase().replace('\\', "/")).join("x.exe");
+        assert!(check_outside_app_data(&lower).is_err());
+        let sibling = PathBuf::from(format!("{}Other", local.to_string_lossy())).join("x.exe");
+        assert!(check_outside_app_data(&sibling).is_ok());
+        assert!(
+            check_outside_app_data(Path::new(r"C:\Users\dev\.roudex\bin\router-cli.exe")).is_ok()
         );
     }
 

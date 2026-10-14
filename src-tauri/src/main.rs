@@ -158,11 +158,16 @@ fn dashboard_summary(state: tauri::State<'_, AppState>) -> Result<Dashboard, Str
 
 /// Codex Desktop decisions and whether the RouDex hook is in `hooks.json`.
 #[tauri::command]
-fn desktop_hook_summary(state: tauri::State<'_, AppState>) -> Result<Value, String> {
-    let summary = state
-        .chat
-        .recorder()
-        .with_store(|store| store.desktop_summary())
+fn desktop_hook_summary() -> Result<Value, String> {
+    // The hook writes to its own store outside AppData (see desktop_hook::home).
+    let store_path = desktop_hook::store_path();
+    let store = if store_path.exists() {
+        RouterStore::open(&store_path)
+    } else {
+        RouterStore::in_memory()
+    };
+    let summary = store
+        .and_then(|store| store.desktop_summary())
         .map_err(|error| error.to_string())?;
     let path = desktop_hook::hooks_path();
     let hook = match desktop_hook::read_hooks(&path) {

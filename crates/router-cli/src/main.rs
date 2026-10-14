@@ -489,45 +489,83 @@ fn hook() {
     {
         return;
     }
-    match hook_response() {
+    let mut text = String::new();
+    let response = io::stdin()
+        .read_to_string(&mut text)
+        .map_err(|error| format!("no se pudo leer la entrada: {error}"))
+        .and_then(|_| hook_response(&text));
+    match response {
         Ok(response) => println!("{response}"),
-        Err(error) => eprintln!("RouDex hook: {error}; el mensaje sigue sin contexto"),
+        Err(error) => {
+            eprintln!("RouDex hook: {error}; el mensaje sigue sin contexto");
+            // Codex Desktop does not show hook stderr; keep the reason locally.
+            desktop_hook::log_failure(
+                &desktop_hook::log_path(),
+                &format!("{error} | campos: {}", desktop_hook::input_shape(&text)),
+            );
+        }
     }
 }
 
-fn hook_response() -> Result<String, String> {
-    let mut text = String::new();
-    io::stdin()
-        .read_to_string(&mut text)
-        .map_err(|error| format!("no se pudo leer la entrada: {error}"))?;
+fn hook_response(text: &str) -> Result<String, String> {
     let input: desktop_hook::PromptSubmit =
-        serde_json::from_str(&text).map_err(|error| format!("entrada inválida: {error}"))?;
+        serde_json::from_str(text).map_err(|error| format!("entrada inválida: {error}"))?;
     let config = router_config()?;
     let rules = RiskRules::for_project(&input.cwd).map_err(|error| error.to_string())?;
     let outcome = desktop_hook::evaluate(&input, &config, &rules);
     // A store problem must not hide the decision from Codex.
-    if let Err(error) = RouterStore::open(RouterStore::default_path())
+    if let Err(error) = RouterStore::open(desktop_hook::store_path())
         .and_then(|store| store.record_desktop_prompt(&input, &outcome))
     {
-        eprintln!("RouDex hook: no se registró la decisión: {error}");
+        let message = format!("no se registró la decisión: {error}");
+        eprintln!("RouDex hook: {message}");
+        desktop_hook::log_failure(&desktop_hook::log_path(), &message);
     }
     serde_json::to_string(&outcome.response).map_err(|error| error.to_string())
 }
 
-/// Add (or replace) the RouDex hook in Codex's user `hooks.json`.
+/// Copy this binary to the RouDex home and point Codex's user `hooks.json`
+/// at that copy, replacing any earlier RouDex hook.
 fn hook_install() -> Result<(), String> {
+    let target = desktop_hook::bin_path();
+    desktop_hook::check_outside_app_data(&target)?;
+    let command = desktop_hook::hook_command(&target)?;
+    let exe = env::current_exe().map_err(|error| error.to_string())?;
+    let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    };
+    if !same(&exe, &target) {
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+        }
+        std::fs::copy(&exe, &target).map_err(|error| {
+            format!(
+                "no se pudo copiar router-cli a {}: {error}",
+                target.display()
+            )
+        })?;
+    }
     let path = desktop_hook::hooks_path();
     let mut document = desktop_hook::read_hooks(&path)?;
-    let exe = env::current_exe().map_err(|error| error.to_string())?;
-    let command = desktop_hook::hook_command(&exe)?;
     let change = desktop_hook::install_into(&mut document, &command)?;
     desktop_hook::write_hooks(&path, &document)?;
     eprintln!("Codex pedirá revisar y confiar en el hook antes de ejecutarlo.");
+    let legacy_managed = desktop_hook::legacy_managed_hook();
+    if let Some(managed) = &legacy_managed {
+        eprintln!(
+            "Aviso: {} contiene el hook administrado de RouDex v0.5.0. Renómbralo como administrador; \
+             consulta docs/desktop-hook.md.",
+            managed.display()
+        );
+    }
     write_json(&json!({
         "hooksPath": path,
         "command": command,
+        "binary": target,
         "replaced": change.removed - change.removed_legacy,
-        "removedLegacy": change.removed_legacy
+        "removedLegacy": change.removed_legacy,
+        "legacyManagedHook": legacy_managed
     }))
 }
 
