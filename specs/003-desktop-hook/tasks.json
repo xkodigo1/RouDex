@@ -2,7 +2,7 @@
   "spec_id": "003-desktop-hook",
   "title": "Codex Desktop context hook",
   "version": 2,
-  "status": "running",
+  "status": "completed",
   "planning_assumption": "Scope approved in chat on 2026-10-14: rules-only decisions, warn by default with opt-in blocking, decisions recorded in SQLite and shown in Resumen. Tasks run outside the coordinator per AGENTS.md (decision D5).",
   "execution_policy": {
     "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D5)",
@@ -15,7 +15,7 @@
     {
       "id": "H1",
       "title": "Hook de contexto",
-      "status": "running",
+      "status": "completed",
       "release_target": "v0.7.0",
       "depends_on": [],
       "task_ids": [
@@ -323,7 +323,7 @@
         "R003-T003",
         "R003-T005"
       ],
-      "status": "planned",
+      "status": "completed",
       "profile": "standard",
       "model": "claude-opus-5-5",
       "effort": "high",
@@ -356,7 +356,14 @@
       "verification_artifact": "specs/003-desktop-hook/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D5); route_id and run_id stay null.",
+        "docs/desktop-hook.md covers install, trust, ~/.roudex, block_high_risk, failures, v0.5 leftovers and uninstall.",
+        "acceptance-evidence.md covers A01-A13 with results.",
+        "A11 in the user's Codex Desktop, 2026-10-14 16:55: the reply to a risky prompt on gpt-5.6-luna starts with the '⚠ RouDex: mensaje de riesgo' line; ~/.roudex/desktop-hook.sqlite3 holds three decisions (two warn, one context).",
+        "Cargo.toml and ui/package.json at 0.7.0; cargo test --workspace: 129 passed, 0 failed in three consecutive runs.",
+        "Commit b09b477; tag and release follow the merge on the user's go-ahead."
+      ],
       "release_target": "v0.7.0"
     },
     {

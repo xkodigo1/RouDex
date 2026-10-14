@@ -15,7 +15,7 @@ Rust estable MSVC, `codex app-server` de Codex Desktop.
 | A08 turno repetido | `desktop_hook::tests::a_repeated_turn_updates_one_row_and_the_summary_counts_it_once`, `hook_cli::a_repeated_turn_is_recorded_once` | OK |
 | A09 instalar y desinstalar | `hook_cli::install_is_idempotent_and_uninstall_keeps_other_hooks`, `hook_cli::install_creates_hooks_json_and_uninstall_without_one_is_a_no_op`, `hook_cli::the_installed_command_runs_in_every_shell` | OK |
 | A10 Resumen | Fixture en el navegador (con datos y vacío, 900 px) y ventana real de Tauri con datos aislados | OK |
-| A11 Codex real | Codex Desktop del usuario, ver detalle | Contexto y registro OK; aviso visible pendiente |
+| A11 Codex real | Codex Desktop del usuario, ver detalle | OK |
 | A12 contexto del paquete | `Invoke-CommandInDesktopPackage` con el comando instalado | OK |
 | A13 registro de fallos | `hook_cli::failures_let_the_prompt_through` (4 fallos, 4 líneas, sin el texto del mensaje) | OK |
 
@@ -47,9 +47,12 @@ confiado y activado.
    - «Explica qué es un trait en Rust»: registro `economico` / `rule` /
      `context`; la sesión lleva el contexto.
    - La tarjeta de Resumen mostró los dos mensajes después de recargar.
-3. **Aviso visible (D7):** pendiente de una prueba con la versión que pide al
-   modelo repetir el aviso. El contexto que la incluye se comprobó con la
-   sonda de A12.
+3. **Aviso visible (D7), 16:55:** chat nuevo, «Responde solo "ok": prueba de
+   RouDex sobre una migración en producción», modelo `gpt-5.6-luna`. Registro
+   `fuerte` / `risk` / `warn` a las 16:55:13. La respuesta del modelo en la
+   sesión empieza con «⚠ RouDex: mensaje de riesgo (produccion, migracion). Se
+   recomienda el tier fuerte (gpt-6.1-sol high); este chat usa gpt-5.6-luna.»
+   y sigue con «ok». La tarjeta de Resumen muestra los tres mensajes.
 
 ## A12 · Detalle
 
