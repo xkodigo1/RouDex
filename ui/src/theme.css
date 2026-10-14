@@ -174,3 +174,5 @@ button.link:hover { color: var(--accent-soft); }
 /* Legacy task view keeps its own layout inside the shell. */
 .legacy { flex: 1; overflow-y: auto; }
 .legacy .shell { width: auto; padding: 24px 30px 48px; }
+.outside { align-items: center; justify-content: center; }
+.outside code { color: var(--accent-soft); }

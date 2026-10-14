@@ -88,4 +88,17 @@ function Shell() {
   </main>;
 }
 
-createRoot(document.getElementById("root")).render(<SessionProvider><Shell /></SessionProvider>);
+// The UI talks to the Rust backend through Tauri IPC; a plain browser tab on
+// the dev server has no backend, so explain that instead of failing on invoke.
+function OutsideDesktop() {
+  return <main className="app outside">
+    <div className="placeholder">
+      <h2><span className="accent">&gt;_</span> roudex</h2>
+      <p className="muted">Esta interfaz necesita la app de escritorio.</p>
+      <p className="muted small">Deja <code>pnpm --dir ui dev</code> corriendo y abre la ventana con <code>cargo run -p roudex-desktop</code>.</p>
+    </div>
+  </main>;
+}
+
+const inDesktop = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+createRoot(document.getElementById("root")).render(inDesktop ? <SessionProvider><Shell /></SessionProvider> : <OutsideDesktop />);
