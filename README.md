@@ -1,23 +1,21 @@
 # RouDex
 
-RouDex es una aplicación local-first para supervisar y ejecutar tareas de
-Codex mediante perfiles de enrutamiento y Codex App Server.
+RouDex es una aplicación local-first que enruta cada mensaje al modelo
+adecuado: las tareas simples van a modelos económicos y las complejas o
+arriesgadas a modelos fuertes. El objetivo es ahorrar cuota sin perder calidad.
 
-## Hito 1
+Se ejecuta sobre `codex app-server` (stdio). Claude será el segundo runtime.
 
-El primer hito establece una base local para:
+## Estado
 
-- recibir mensajes desde el adaptador de escritorio;
-- clasificar tareas por perfil, modelo y esfuerzo;
-- persistir tareas, ejecuciones y eventos en SQLite;
-- validar dependencias y aprobaciones;
-- iniciar y continuar ejecuciones mediante `runId`;
-- observar el estado desde una interfaz Tauri/React.
+El repositorio contiene la base técnica: cliente de App Server, persistencia
+SQLite, un coordinador de tareas y una interfaz Tauri/React de solo lectura.
+El siguiente hito (`v0.6.0`) es el chat con router. Consulta
+[ROADMAP.md](ROADMAP.md).
 
-La ejecución no requiere cuentas, sincronización remota ni credenciales dentro
-del repositorio.
+RouDex no requiere cuentas, sincronización remota ni credenciales dentro del
+repositorio.
 
 ## Instalación
 
-Consulta [docs/installation.md](docs/installation.md) para preparar el
-workspace y activar el adaptador local de mensajes.
+Consulta [docs/installation.md](docs/installation.md).

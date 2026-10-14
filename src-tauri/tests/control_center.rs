@@ -75,7 +75,7 @@ fn serialized(fixture: &Fixture) -> Value {
 }
 
 #[test]
-fn milestone_and_status_totals_count_tasks_once_despite_retries_and_missing_runs() {
+fn spec_and_status_totals_count_tasks_once_despite_retries_and_missing_runs() {
     let fixture = Fixture::new();
     let store = fixture.store();
     let spec = "002-product-roadmap";
@@ -94,16 +94,13 @@ fn milestone_and_status_totals_count_tasks_once_despite_retries_and_missing_runs
     assert_eq!(snapshot["status_counts"]["blocked"], 1);
     assert_eq!(snapshot["status_counts"]["planned"], 1);
     assert_eq!(snapshot["status_counts"]["failed"], 0);
-    let milestones = snapshot["milestones"].as_array().unwrap();
-    assert_eq!(milestones.len(), 3);
-    let h2 = milestones
-        .iter()
-        .find(|m| m["milestone_id"] == "H2")
-        .unwrap();
-    assert_eq!(h2["spec_id"], spec);
-    assert_eq!(h2["task_total"], 2);
-    assert_eq!(h2["status_counts"]["running"], 1);
-    assert_eq!(h2["status_counts"]["blocked"], 1);
+    let groups = snapshot["milestones"].as_array().unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["spec_id"], spec);
+    assert_eq!(groups[0]["milestone_id"], Value::Null);
+    assert_eq!(groups[0]["task_total"], 4);
+    assert_eq!(groups[0]["status_counts"]["running"], 1);
+    assert_eq!(groups[0]["status_counts"]["blocked"], 1);
     assert_eq!(snapshot["runs"].as_array().unwrap().len(), 3);
     assert_eq!(snapshot["runs"][0]["task_id"], Value::Null);
     assert_eq!(std::fs::read(&fixture.0).unwrap(), before);

@@ -11,13 +11,11 @@ pub use coordinator::{
     TaskRuntime,
 };
 pub use domain::{
-    DesktopPromptInput, DesktopPromptReceipt, EventRecord, RoutePromptInput, RouteReceipt,
-    RouteStatus, RunStatus, StoredRun, StoredTask, TaskApproval, TaskDefinition, TaskSandbox,
-    TaskStatus,
+    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
+    TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,
 };
 pub use persistence::{RouterStore, StoreError};
 pub use routing::{
-    classify_prompt, route_prompt, ModelRoute, RoutingConfig, RoutingConfigError, RoutingOverride,
-    TaskClass, ROUTING_CONFIG_VERSION,
+    ModelRoute, RoutingConfig, RoutingConfigError, RoutingOverride, ROUTING_CONFIG_VERSION,
 };
 pub use task_manifest::{ManifestError, TaskManifest};
