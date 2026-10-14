@@ -29,5 +29,7 @@ open source multiplataforma.
 | `v0.9.0` | Orquestador SDD | Specs y grafos de tareas ejecutados con el mismo motor de routing. |
 | `v1.0.0` | Open source | Instaladores multiplataforma, documentación y métrica de ahorro. |
 
-Cada fase termina con un tag y una release. El trabajo avanza en ramas cortas
+Cada fase termina con un tag y una release; antes del tag, la versión de
+`Cargo.toml` (`[workspace.package]`) y de `ui/package.json` sube a la de la
+fase. El trabajo avanza en ramas cortas
 con PR hacia `main`.
