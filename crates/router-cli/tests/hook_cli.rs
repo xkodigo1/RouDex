@@ -5,7 +5,6 @@
 use router_core::RouterStore;
 use serde_json::{json, Value};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -40,12 +39,7 @@ impl Sandbox {
             command.env(name, value);
         }
         let mut child = command.spawn().unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(stdin.as_bytes())
-            .unwrap();
+        feed(child.stdin.take(), stdin.as_bytes());
         child.wait_with_output().unwrap()
     }
 
@@ -295,13 +289,22 @@ fn install_creates_hooks_json_and_uninstall_without_one_is_a_no_op() {
 }
 
 /// Shells that may run a hook command; Codex does not say which one it uses.
+/// On Windows `sh` only exists with Git Bash or similar, so it is tested
+/// when present; cmd and PowerShell always are.
 fn shells(command: &str) -> Vec<Command> {
     let shell = |program: &str, args: &[&str]| {
         let mut shell = Command::new(program);
         shell.args(args).arg(command);
         shell
     };
-    let mut shells = vec![shell("sh", &["-c"])];
+    let has_sh = Command::new("sh")
+        .args(["-c", "exit 0"])
+        .status()
+        .is_ok_and(|status| status.success());
+    let mut shells = Vec::new();
+    if has_sh || !cfg!(windows) {
+        shells.push(shell("sh", &["-c"]));
+    }
     if cfg!(windows) {
         shells.push(shell("cmd", &["/d", "/c"]));
         shells.push(shell(
@@ -321,7 +324,9 @@ fn the_installed_command_runs_in_every_shell() {
         .as_str()
         .unwrap()
         .to_owned();
-    for (turn, mut shell) in shells(&command).into_iter().enumerate() {
+    let shells = shells(&command);
+    let tried = shells.len() as i64;
+    for (turn, mut shell) in shells.into_iter().enumerate() {
         let input = json!({ "session_id": "s", "turn_id": turn.to_string(),
             "cwd": sandbox.0.join("project"), "model": "gpt-6-luna", "prompt": RISKY });
         let mut child = shell
@@ -333,12 +338,7 @@ fn the_installed_command_runs_in_every_shell() {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(input.to_string().as_bytes())
-            .unwrap();
+        feed(child.stdin.take(), input.to_string().as_bytes());
         let output = child.wait_with_output().unwrap();
         let response = stdout_json(&output);
         assert!(
@@ -347,7 +347,7 @@ fn the_installed_command_runs_in_every_shell() {
             shell.get_program()
         );
     }
-    assert_eq!(sandbox.store().desktop_summary().unwrap().warned, 3);
+    assert_eq!(sandbox.store().desktop_summary().unwrap().warned, tried);
 }
 
 #[test]
@@ -380,4 +380,16 @@ fn install_refuses_app_data_and_reports_the_v05_managed_hook() {
         .unwrap()
         .ends_with("requirements.toml"));
     assert!(String::from_utf8_lossy(&installed.stderr).contains("v0.5.0"));
+}
+
+/// Feed a child's stdin. The command may exit before reading it (for example
+/// when it rejects its arguments), which closes the pipe on Unix.
+fn feed(stdin: Option<std::process::ChildStdin>, input: &[u8]) {
+    use std::io::Write;
+    match stdin.expect("child stdin").write_all(input) {
+        Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
+            panic!("write child stdin: {error}")
+        }
+        _ => {}
+    }
 }

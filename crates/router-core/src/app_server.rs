@@ -95,6 +95,16 @@ pub fn discover_codex(
         .unwrap_or_else(|| PathBuf::from("codex"))
 }
 
+/// Model, effort and policies for one `turn/start`.
+#[derive(Debug, Clone, Copy)]
+pub struct TurnSettings<'a> {
+    pub model: &'a str,
+    pub effort: &'a str,
+    pub cwd: &'a Path,
+    pub approval_policy: &'a str,
+    pub sandbox: &'a str,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppServerTurn {
     pub thread_id: String,
@@ -221,21 +231,17 @@ impl AppServerClient {
         &mut self,
         thread_id: &str,
         prompt: &str,
-        model: &str,
-        effort: &str,
-        cwd: &Path,
-        approval_policy: &str,
-        sandbox: &str,
+        settings: &TurnSettings<'_>,
     ) -> Result<AppServerTurn, AppServerError> {
         self.run_turn_params(
             json!({
                 "threadId": thread_id,
                 "input": [{ "type": "text", "text": prompt }],
-                "cwd": cwd,
-                "approvalPolicy": approval_policy,
-                "sandboxPolicy": sandbox_policy(sandbox),
-                "model": model,
-                "effort": effort
+                "cwd": settings.cwd,
+                "approvalPolicy": settings.approval_policy,
+                "sandboxPolicy": sandbox_policy(settings.sandbox),
+                "model": settings.model,
+                "effort": settings.effort
             }),
             &mut |_| Ok(()),
         )

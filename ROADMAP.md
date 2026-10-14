@@ -17,7 +17,10 @@ open source multiplataforma.
   reintentos automáticos.
 - **Permisos.** Escritura limitada a la carpeta del proyecto y aprobación de
   comandos y cambios desde la interfaz.
-- **Runtimes.** Interfaz común; Codex primero, Claude después.
+- **Runtime.** Solo Codex hasta `v1.0.0`. Otros runtimes quedan fuera de
+  alcance hasta después de la versión estable.
+- **Idioma.** Documentación pública en inglés; la interfaz, en español e
+  inglés.
 
 ## Fases
 
@@ -25,11 +28,11 @@ open source multiplataforma.
 | --- | --- | --- |
 | `v0.6.0` | Chat con router | Selector de proyecto, chat con streaming, decisión del router visible y editable antes de enviar, aprobaciones, historial de hilos, uso por modelo y estado de la ventana de límites. |
 | `v0.7.0` | Integración con Codex Desktop | Hook que solo añade contexto (tier recomendado y riesgo). El bloqueo de tareas de alto riesgo es opcional; nunca se bloquea todo. |
-| `v0.8.0` | Runtime Claude | Segundo adaptador sobre la misma interfaz. |
-| `v0.9.0` | Orquestador SDD | Specs y grafos de tareas ejecutados con el mismo motor de routing. |
-| `v1.0.0` | Open source | Instaladores multiplataforma, documentación y métrica de ahorro. |
+| `v0.8.0` | Orquestador SDD | Specs y grafos de tareas ejecutados desde la app con los mismos tiers y reglas de riesgo que el chat: cargar `tasks.json`, aprobar, despachar, seguir la ejecución y reintentar. |
+| `v0.9.0` | Beta | Windows, macOS y Linux; instaladores con `router-cli` incluido; métrica de ahorro estimado (incluido Codex Desktop, opcional); interfaz en español e inglés. |
+| `v1.0.0` | Open source | Licencia y guías de contribución, documentación pública en inglés, auditoría de datos y dependencias, y release estable con instaladores. |
 
 Cada fase termina con un tag y una release; antes del tag, la versión de
 `Cargo.toml` (`[workspace.package]`) y de `ui/package.json` sube a la de la
-fase. El trabajo avanza en ramas cortas
-con PR hacia `main`.
+fase. El trabajo avanza en ramas cortas con PR hacia `main`, y cada PR se
+fusiona con el CI en verde.
