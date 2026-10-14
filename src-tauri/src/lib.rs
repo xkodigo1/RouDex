@@ -5,6 +5,7 @@ pub fn app_name() -> &'static str {
 use rusqlite::{Connection, OpenFlags, Row};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -19,6 +20,88 @@ pub struct LocalSnapshot {
     pub approvals: Vec<Value>,
     pub errors: Vec<Value>,
     pub error_count: i64,
+    pub task_total: usize,
+    pub status_counts: BTreeMap<String, usize>,
+    pub milestones: Vec<MilestoneSnapshot>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MilestoneSnapshot {
+    pub spec_id: String,
+    // None explicitly denotes tasks without declared milestone metadata.
+    pub milestone_id: Option<String>,
+    pub task_total: usize,
+    pub status_counts: BTreeMap<String, usize>,
+}
+
+fn status_counts() -> BTreeMap<String, usize> {
+    [
+        "planned",
+        "ready",
+        "awaiting_approval",
+        "running",
+        "completed",
+        "failed",
+        "blocked",
+        "interrupted",
+    ]
+    .into_iter()
+    .map(|status| (status.into(), 0))
+    .collect()
+}
+
+// H1 storage does not persist manifest extensions. This bundled, versioned
+// metadata supplies membership only, never runtime status or execution authority.
+// Unknown specs/tasks remain explicitly unassigned; no operational import occurs.
+fn milestone_membership() -> BTreeMap<(String, String), String> {
+    let manifest: Value =
+        serde_json::from_str(include_str!("../../specs/002-product-roadmap/tasks.json"))
+            .expect("bundled roadmap must be valid JSON");
+    let spec_id = manifest["spec_id"].as_str().expect("bundled spec id");
+    let mut membership = BTreeMap::new();
+    for milestone in manifest["milestones"]
+        .as_array()
+        .expect("bundled milestones")
+    {
+        for task_id in milestone["task_ids"].as_array().expect("bundled task ids") {
+            membership.insert(
+                (
+                    spec_id.into(),
+                    task_id.as_str().expect("bundled task id").into(),
+                ),
+                milestone["id"]
+                    .as_str()
+                    .expect("bundled milestone id")
+                    .into(),
+            );
+        }
+    }
+    membership
+}
+
+fn summarize(snapshot: &mut LocalSnapshot) {
+    let membership = milestone_membership();
+    let mut groups: BTreeMap<(String, Option<String>), MilestoneSnapshot> = BTreeMap::new();
+    for task in &mut snapshot.tasks {
+        let spec_id = task["spec_id"].as_str().unwrap().to_owned();
+        let task_id = task["id"].as_str().unwrap().to_owned();
+        let status = task["status"].as_str().unwrap().to_owned();
+        let milestone_id = membership.get(&(spec_id.clone(), task_id)).cloned();
+        task["milestone_id"] = json!(milestone_id);
+        let group = groups
+            .entry((spec_id.clone(), milestone_id.clone()))
+            .or_insert_with(|| MilestoneSnapshot {
+                spec_id,
+                milestone_id,
+                task_total: 0,
+                status_counts: status_counts(),
+            });
+        group.task_total += 1;
+        *group.status_counts.entry(status.clone()).or_default() += 1;
+        *snapshot.status_counts.entry(status).or_default() += 1;
+    }
+    snapshot.task_total = snapshot.tasks.len();
+    snapshot.milestones = groups.into_values().collect();
 }
 
 #[derive(Debug, Serialize)]
@@ -30,12 +113,32 @@ pub struct RunEvents {
 
 // Observing state must never create a database, migrate it, or dispatch work.
 fn open_read_only(path: &Path) -> Result<Connection, String> {
+    if !path.is_file() {
+        return Err("store_unreadable: El estado local no es un archivo legible.".into());
+    }
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| format!("No se pudo leer el estado local: {error}"))?;
+        .map_err(|error| format!("store_unreadable: No se pudo leer el estado local: {error}"))?;
     connection
         .busy_timeout(Duration::from_secs(2))
         .map_err(|error| error.to_string())?;
     Ok(connection)
+}
+
+fn validate_snapshot_schema(connection: &Connection) -> Result<(), String> {
+    // Prepare read queries only: absent/older/corrupt schemas must never migrate.
+    for sql in [
+        "SELECT task_id, spec_id, title, status, profile, model, effort, approval FROM tasks LIMIT 0",
+        "SELECT task_id, depends_on FROM task_dependencies LIMIT 0",
+        "SELECT run_id, route_id, status, model, effort, created_at, turn_id FROM runs LIMIT 0",
+        "SELECT id, task_id, decision, reason, created_at FROM task_approvals LIMIT 0",
+        "SELECT id, run_id, event_type, payload, created_at FROM events LIMIT 0",
+    ] {
+        connection.prepare(sql).map_err(|error| match error.sqlite_error_code() {
+            Some(rusqlite::ErrorCode::PermissionDenied | rusqlite::ErrorCode::SystemIoFailure | rusqlite::ErrorCode::CannotOpen | rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => format!("store_unreadable: {error}"),
+            _ => format!("store_incompatible: El esquema local no es compatible: {error}"),
+        })?;
+    }
+    Ok(())
 }
 
 fn rows(
@@ -83,16 +186,23 @@ pub fn local_snapshot(path: &Path) -> Result<LocalSnapshot, String> {
         approvals: vec![],
         errors: vec![],
         error_count: 0,
+        task_total: 0,
+        status_counts: status_counts(),
+        milestones: vec![],
     };
     // A fresh installation has no state; an existing but unreadable/invalid store
     // is an error, not an empty successful response.
-    if !path.try_exists().map_err(|error| error.to_string())? {
+    if !path
+        .try_exists()
+        .map_err(|error| format!("store_unreadable: {error}"))?
+    {
         return Ok(snapshot);
     }
     let mut connection = open_read_only(path)?;
     let tx = connection
         .transaction()
         .map_err(|error| error.to_string())?;
+    validate_snapshot_schema(&tx)?;
     snapshot.tasks = rows(
         &tx,
         "SELECT task_id, spec_id, title, status, profile, model, effort, approval,
@@ -100,7 +210,8 @@ pub fn local_snapshot(path: &Path) -> Result<LocalSnapshot, String> {
         FROM tasks t ORDER BY spec_id, task_id",
         |row| {
             Ok(json!({
-                "id": row.get::<_, String>(0)?, "spec_id": row.get::<_, String>(1)?,
+                "id": row.get::<_, String>(0)?, "selection_key": row.get::<_, String>(0)?,
+                "spec_id": row.get::<_, String>(1)?,
                 "title": row.get::<_, String>(2)?, "status": row.get::<_, String>(3)?,
                 "profile": row.get::<_, String>(4)?, "model": row.get::<_, String>(5)?,
                 "effort": row.get::<_, String>(6)?, "approval": row.get::<_, String>(7)?,
@@ -114,7 +225,8 @@ pub fn local_snapshot(path: &Path) -> Result<LocalSnapshot, String> {
         t.task_id FROM runs r LEFT JOIN tasks t ON t.task_id = r.turn_id ORDER BY r.rowid DESC",
         |row| {
             Ok(json!({
-                "run_id": row.get::<_, String>(0)?, "route_id": row.get::<_, String>(1)?,
+                "run_id": row.get::<_, String>(0)?, "selection_key": row.get::<_, String>(0)?,
+                "route_id": row.get::<_, String>(1)?,
                 "status": row.get::<_, String>(2)?, "model": row.get::<_, String>(3)?,
                 "effort": row.get::<_, String>(4)?, "created_at": row.get::<_, String>(5)?,
                 "task_id": row.get::<_, Option<String>>(6)?
@@ -150,6 +262,7 @@ pub fn local_snapshot(path: &Path) -> Result<LocalSnapshot, String> {
         event,
     )?;
     tx.commit().map_err(|error| error.to_string())?;
+    summarize(&mut snapshot);
     snapshot.initialized = true;
     Ok(snapshot)
 }
