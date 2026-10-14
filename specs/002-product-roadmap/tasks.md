@@ -897,4 +897,3 @@ Actual verification record (2026-10-13):
 - `pnpm --dir ui build --config tests/vite.config.js --configLoader runner`: PASS, exit 0, Vite 7.3.7, 33 modules.
 - Evidence existence check: PASS, exit 0. `git diff --check`: PASS, exit 0 (Git line-ending notice only).
 - Result: evidence added, acceptance incomplete; task remains planned and H2 is not complete.
-

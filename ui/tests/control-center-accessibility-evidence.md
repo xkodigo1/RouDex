@@ -38,4 +38,3 @@ Date: 2026-10-13. Source: existing synthetic `ui/tests/ipc-fixture.html` only.
 | `git diff --check` | PASS, exit 0; Git reported only the tasks.md LF-to-CRLF notice. |
 
 Viewport coverage remains an acceptance gap. R002-T005 stays `planned`; its scope and H2 status are unchanged.
-
