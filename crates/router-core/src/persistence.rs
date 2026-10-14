@@ -120,6 +120,7 @@ impl RouterStore {
              );",
         )?;
         crate::chat::migrate(&self.connection)?;
+        crate::desktop_hook::migrate(&self.connection)?;
         Ok(())
     }
 

@@ -74,6 +74,17 @@ pub struct RouterConfig {
     pub tiers: TierTargets,
     /// Model that classifies prompts the fast rules cannot settle.
     pub classifier: ModelTarget,
+    /// Codex Desktop hook options; optional so older files keep loading.
+    #[serde(default)]
+    pub desktop_hook: DesktopHookConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct DesktopHookConfig {
+    /// Block risky Codex Desktop prompts sent with a model other than the
+    /// `fuerte` one, instead of only warning.
+    pub block_high_risk: bool,
 }
 
 impl Default for RouterConfig {
@@ -87,6 +98,7 @@ impl Default for RouterConfig {
                 fuerte: ModelTarget::new("gpt-6.1-sol", "high"),
             },
             classifier: ModelTarget::new("gpt-6-luna", "low"),
+            desktop_hook: DesktopHookConfig::default(),
         }
     }
 }
@@ -252,6 +264,27 @@ mod tests {
             RouterConfig::from_toml(&empty),
             Err(RouterConfigError::Empty(_))
         ));
+    }
+
+    #[test]
+    fn desktop_hook_section_is_optional_and_strict() {
+        let text = toml::to_string(&RouterConfig::default()).unwrap();
+        let without: String = text.split("[desktop_hook]").next().unwrap().to_owned();
+        assert!(
+            !RouterConfig::from_toml(&without)
+                .unwrap()
+                .desktop_hook
+                .block_high_risk
+        );
+        let blocking = format!("{without}\n[desktop_hook]\nblock_high_risk = true\n");
+        assert!(
+            RouterConfig::from_toml(&blocking)
+                .unwrap()
+                .desktop_hook
+                .block_high_risk
+        );
+        let typo = format!("{without}\n[desktop_hook]\nblock_risk = true\n");
+        assert!(RouterConfig::from_toml(&typo).is_err());
     }
 
     #[test]

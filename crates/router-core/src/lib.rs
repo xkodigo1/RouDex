@@ -3,6 +3,7 @@ pub mod chat;
 pub mod classifier;
 pub mod coordinator;
 pub mod dashboard;
+pub mod desktop_hook;
 pub mod domain;
 pub mod persistence;
 pub mod risk;
@@ -25,6 +26,7 @@ pub use coordinator::{
     TaskRuntime,
 };
 pub use dashboard::{Dashboard, DayUsage, ThreadSummary, TierUsage};
+pub use desktop_hook::{DesktopSummary, HookAction, HookChange, HookOutcome, PromptSubmit};
 pub use domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
     TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,
@@ -39,6 +41,6 @@ pub use session::{
 };
 pub use task_manifest::{ManifestError, TaskManifest};
 pub use tiers::{
-    CatalogModel, ModelTarget, RouterConfig, RouterConfigError, Tier, TierTargets,
-    ROUTER_CONFIG_VERSION,
+    CatalogModel, DesktopHookConfig, ModelTarget, RouterConfig, RouterConfigError, Tier,
+    TierTargets, ROUTER_CONFIG_VERSION,
 };

@@ -63,6 +63,18 @@ effort = "low"
 `router-cli models` compara esta configuración con el catálogo del runtime
 (`model/list`) e informa de modelos o esfuerzos no disponibles.
 
+## Codex Desktop
+
+`[desktop_hook]` es opcional. `block_high_risk = true` hace que el hook de
+Codex Desktop bloquee los mensajes de riesgo enviados con un modelo distinto
+del de `fuerte` en lugar de solo avisar. Consulta
+[desktop-hook.md](desktop-hook.md).
+
+```toml
+[desktop_hook]
+block_high_risk = false
+```
+
 ## Reglas de riesgo por proyecto
 
 `<proyecto>/.roudex/rules.toml` amplía las reglas por defecto (producción,
