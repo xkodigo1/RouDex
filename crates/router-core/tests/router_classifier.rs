@@ -41,7 +41,7 @@ fn model_catalog_follows_pagination_and_validates_default_tiers() {
         .list_models()
         .expect("model/list");
     let ids: Vec<_> = catalog.iter().map(|model| model.id.as_str()).collect();
-    assert_eq!(ids, ["gpt-5.6-luna", "gpt-6.1-sol"]);
+    assert_eq!(ids, ["gpt-6-luna", "gpt-6.1-sol"]);
     assert_eq!(catalog[1].efforts, ["low", "medium", "high", "xhigh"]);
     assert!(RouterConfig::default().catalog_issues(&catalog).is_empty());
 }

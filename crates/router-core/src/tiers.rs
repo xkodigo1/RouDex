@@ -82,11 +82,11 @@ impl Default for RouterConfig {
             version: ROUTER_CONFIG_VERSION,
             fallback_tier: Tier::Estandar,
             tiers: TierTargets {
-                economico: ModelTarget::new("gpt-5.6-luna", "medium"),
+                economico: ModelTarget::new("gpt-6-luna", "high"),
                 estandar: ModelTarget::new("gpt-6.1-sol", "medium"),
                 fuerte: ModelTarget::new("gpt-6.1-sol", "high"),
             },
-            classifier: ModelTarget::new("gpt-5.6-luna", "high"),
+            classifier: ModelTarget::new("gpt-6-luna", "low"),
         }
     }
 }
@@ -210,7 +210,7 @@ mod tests {
             efforts: efforts.iter().map(|e| e.to_string()).collect(),
         };
         vec![
-            entry("gpt-5.6-luna", &["low", "medium", "high"]),
+            entry("gpt-6-luna", &["low", "medium", "high"]),
             entry("gpt-6.1-sol", &["low", "medium", "high", "xhigh"]),
         ]
     }
@@ -226,7 +226,7 @@ mod tests {
     fn catalog_reports_missing_models_and_unsupported_efforts() {
         let mut config = RouterConfig::default();
         config.tiers.fuerte = ModelTarget::new("gpt-6-astra", "high");
-        config.classifier = ModelTarget::new("gpt-5.6-luna", "ultra");
+        config.classifier = ModelTarget::new("gpt-6-luna", "ultra");
         let issues = config.catalog_issues(&catalog());
         assert_eq!(issues.len(), 2, "{issues:?}");
         assert!(issues[0].starts_with("fuerte:"));
