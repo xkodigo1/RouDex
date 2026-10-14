@@ -245,13 +245,12 @@ Evidence artifact: `ui/tests/control-center-accessibility-evidence.md`. Review i
 Retained evidence:
 
 - ui/tests/control-center-accessibility-evidence.md
-- Fixture overview: PASS 21 checks; details: PASS 20 checks; cargo test offline: PASS 5/5; fixture build: PASS (33 modules). Keyboard focus observed on first fixture button only. Requested 1280x720 and 800x600 viewports and full application keyboard traversal NOT VERIFIED; no native evidence. Acceptance incomplete; status remains planned.
+- Fixture overview: PASS 21 checks; details: PASS 20 checks; cargo test offline: PASS 5/5; fixture build: PASS (33 modules). Playwright browser fixture: 1280x720 scrollWidth=1265 and 800x600 scrollWidth=785; no horizontal overflow. At 800x600, Tab traversed controls and left visible focus on Actualizar. Temporary screenshots were not retained. Browser fixture evidence only; native evidence remains outstanding. Acceptance incomplete; status remains planned.
 
 Actual verification record (2026-10-13):
 
 - Existing browser fixture: overview checks PASS (21); detail checks PASS (20). State observations: populated (4 tasks/3 runs), empty (explicit empty snapshot), stale read error (error and stale snapshot retain selection), missing store (explicit), and event error/retry (explicit failure, successful read-only retry).
-- Keyboard/focus: Tab focused the first fixture control; visible 2 px light-blue outline observed. Complete app keyboard navigation was not verified.
-- Requested viewports 1280x720 and 800x600: not verified. Available browser surface showed 2560x1344 and exposed no viewport override. Evidence artifact records this gap; no native evidence is claimed.
+- Playwright browser fixture: at 1280x720, document.documentElement.scrollWidth=1265; at 800x600, scrollWidth=785; no horizontal overflow. At 800x600, Tab traversed controls and left visible focus on Actualizar. Temporary screenshots were not retained. Browser evidence is distinct from native evidence; native checks remain outstanding.
 - `cargo test --offline -p roudex-desktop --test control_center`: PASS, exit 0, 5 passed / 0 failed.
 - `pnpm --dir ui build --config tests/vite.config.js --configLoader runner`: PASS, exit 0, Vite 7.3.7, 33 modules.
 - Evidence existence check: PASS, exit 0. `git diff --check`: PASS, exit 0 (Git line-ending notice only).

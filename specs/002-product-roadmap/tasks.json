@@ -415,7 +415,7 @@
       "run_id": null,
       "evidence": [
         "ui/tests/control-center-accessibility-evidence.md",
-        "Fixture overview: PASS 21 checks; details: PASS 20 checks; cargo test offline: PASS 5/5; fixture build: PASS (33 modules). Keyboard focus observed on first fixture button only. Requested 1280x720 and 800x600 viewports and full application keyboard traversal NOT VERIFIED; no native evidence. Acceptance incomplete; status remains planned."
+        "Fixture overview: PASS 21 checks; details: PASS 20 checks; cargo test offline: PASS 5/5; fixture build: PASS (33 modules). Playwright browser fixture: 1280x720 scrollWidth=1265 and 800x600 scrollWidth=785; no horizontal overflow. At 800x600, Tab traversed controls and left visible focus on Actualizar. Temporary screenshots were not retained. Browser fixture evidence only; native evidence remains outstanding. Acceptance incomplete; status remains planned."
       ],
       "release_target": "v0.6.0"
     },

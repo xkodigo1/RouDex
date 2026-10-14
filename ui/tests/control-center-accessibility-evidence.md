@@ -1,13 +1,13 @@
 # R002-T005 accessibility and state evidence
 
-Date: 2026-10-13. Source: existing synthetic `ui/tests/ipc-fixture.html` only.
+Date: 2026-10-13. Sources: existing synthetic `ui/tests/ipc-fixture.html` and local browser fixture check.
 
 ## Provenance and limits
 
 - Browser fixture: `http://127.0.0.1:5188/tests/ipc-fixture.html`, served on loopback from the existing fixture build. No operational store or native Tauri window was used.
-- Browser UI identified the first Tab stop as `Fixture: populated`; screenshot showed a light blue, 2 px outline with offset around the focused button. This confirms visible focus for that control only. The full application keyboard sequence was not established by this observation.
-- This browser surface did not expose a viewport override, and the visible browser screenshot was 2560×1344. Neither requested viewport (1280×720 or 800×600) was actually set or observed. Results for those dimensions are therefore **not verified**; no responsive acceptance is claimed.
-- Fixture evidence only; no native evidence or H2 completion is claimed.
+- A subsequent Playwright check used viewports 1280×720 and 800×600. At those sizes `document.documentElement.scrollWidth` was respectively 1265 and 785, both below viewport width; no horizontal overflow was observed.
+- At 800×600, Tab traversed the controls and left visible focus on the `Actualizar` button. This is browser fixture evidence, not a native Tauri keyboard check.
+- Screenshots were temporary inspection artifacts and were not retained in the repository. No native evidence or H2 completion is claimed.
 
 ## Observed fixture results
 
@@ -21,10 +21,9 @@ Date: 2026-10-13. Source: existing synthetic `ui/tests/ipc-fixture.html` only.
 
 ## Keyboard and visible focus
 
-- Sent Tab from the fixture page. Focus moved from the web area to the first fixture button, `Fixture: populated`.
-- The screenshot showed a visible light-blue outline around that focused button. This is a direct observation at the available browser size, not either requested viewport.
-- The existing fixture buttons and application controls appeared in the accessibility tree with names (for example, `Fixture: missing store`, `Actualizar`, and the labeled `Estado de task` selector). This is an accessibility-tree observation, not proof that every control is keyboard reachable.
-- Keyboard navigation across the complete application and visible focus at 1280×720 and 800×600 remain unverified.
+- Earlier browser observation: Tab focused `Fixture: populated` with a visible light-blue outline.
+- Playwright browser fixture check: at 800×600, Tab traversed the controls and left visible focus on `Actualizar`.
+- These observations cover the local browser fixture only; native Tauri keyboard traversal and focus remain unverified.
 
 ## Checks run
 
@@ -37,4 +36,4 @@ Date: 2026-10-13. Source: existing synthetic `ui/tests/ipc-fixture.html` only.
 | Evidence artifact existence check | PASS, exit 0 after writing this file. |
 | `git diff --check` | PASS, exit 0; Git reported only the tasks.md LF-to-CRLF notice. |
 
-Viewport coverage remains an acceptance gap. R002-T005 stays `planned`; its scope and H2 status are unchanged.
+Browser viewport checks are recorded for both requested sizes; keyboard focus was observed at 800×600 only, and native evidence remains outstanding. R002-T005 stays `planned`; its scope and H2 status are unchanged.
