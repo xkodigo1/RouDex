@@ -1,0 +1,1468 @@
+{
+  "spec_id": "002-product-roadmap",
+  "title": "Local-first product roadmap, H1-H9",
+  "version": 1,
+  "status": "planned",
+  "planning_assumption": "H2-H9 titles and boundaries are proposed here because the repository only defines H1. Planning is authorized; execution of future tasks is not.",
+  "milestones": [
+    {
+      "id": "H1",
+      "title": "Local task orchestration",
+      "status": "completed",
+      "task_ids": [
+        "R002-T001"
+      ]
+    },
+    {
+      "id": "H2",
+      "title": "Visual control center",
+      "status": "planned",
+      "task_ids": [
+        "R002-T002",
+        "R002-T003",
+        "R002-T004",
+        "R002-T005"
+      ]
+    },
+    {
+      "id": "H3",
+      "title": "Specification and task planning",
+      "status": "planned",
+      "task_ids": [
+        "R002-T006",
+        "R002-T007",
+        "R002-T008",
+        "R002-T009"
+      ]
+    },
+    {
+      "id": "H4",
+      "title": "Routing configuration and preview",
+      "status": "planned",
+      "task_ids": [
+        "R002-T010",
+        "R002-T011",
+        "R002-T012",
+        "R002-T013"
+      ]
+    },
+    {
+      "id": "H5",
+      "title": "Approval and execution controls",
+      "status": "planned",
+      "task_ids": [
+        "R002-T014",
+        "R002-T015",
+        "R002-T016",
+        "R002-T017"
+      ]
+    },
+    {
+      "id": "H6",
+      "title": "Interruption and recovery",
+      "status": "planned",
+      "task_ids": [
+        "R002-T018",
+        "R002-T019",
+        "R002-T020",
+        "R002-T021"
+      ]
+    },
+    {
+      "id": "H7",
+      "title": "Verification and evidence",
+      "status": "planned",
+      "task_ids": [
+        "R002-T022",
+        "R002-T023",
+        "R002-T024",
+        "R002-T025"
+      ]
+    },
+    {
+      "id": "H8",
+      "title": "Local installation and data portability",
+      "status": "planned",
+      "task_ids": [
+        "R002-T026",
+        "R002-T027",
+        "R002-T028",
+        "R002-T029"
+      ]
+    },
+    {
+      "id": "H9",
+      "title": "Product acceptance and release readiness",
+      "status": "planned",
+      "task_ids": [
+        "R002-T030",
+        "R002-T031",
+        "R002-T032",
+        "R002-T033"
+      ]
+    }
+  ],
+  "execution_policy": {
+    "coordinator": "Codex Router local task coordinator and App Server over stdio",
+    "network_access": false,
+    "future_task_approval": "manual",
+    "publication_authorized": false,
+    "framework_or_dependency_changes": "Present scope and technical decision before adding any dependency or replacing the established stack."
+  },
+  "authoring_run": {
+    "task_id": "desktop-778ce9bc-ff21-4863-8ce4-7888b91aad2e",
+    "route_id": "ef578c24-2f91-4991-a5bd-233c01de0f62",
+    "run_id": "76c470e7-a250-479b-aab1-7c2197e4640a",
+    "profile": "frontier",
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "observed_status": "running",
+    "note": "Authoring receipt only; terminal state belongs to the enclosing coordinator and does not complete any planned product task."
+  },
+  "tasks": [
+    {
+      "id": "R002-T001",
+      "milestone": "H1",
+      "title": "Retain the completed orchestration baseline",
+      "prompt": "Historical completion reference only. Inspect specification 001 and local v0.5.0 metadata if auditing; do not redispatch or rewrite H1.",
+      "depends_on": [],
+      "status": "completed",
+      "profile": "routine",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "approval": "not_required",
+      "approval_requirements": "No execution requested; this is a completed baseline reference, not a new approval.",
+      "scope": [
+        "specs/001-task-orchestration"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "readOnly",
+        "writable_roots": []
+      },
+      "acceptance": [
+        "Specification 001 records H1 as published v0.5.0 with T-001 through T-009 completed.",
+        "Historical assignment discrepancy and native smoke limitations remain visible."
+      ],
+      "verify": "git show v0.5.0:specs/001-task-orchestration/tasks.json",
+      "scenario_ids": [
+        "A01"
+      ],
+      "verification_artifact": "specs/001-task-orchestration/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "specs/001-task-orchestration/spec.md",
+        "specs/001-task-orchestration/tasks.json",
+        "specs/001-task-orchestration/acceptance-evidence.md",
+        "specs/001-task-orchestration/release-notes.md"
+      ],
+      "execution": "historical_reference"
+    },
+    {
+      "id": "R002-T002",
+      "milestone": "H2",
+      "title": "Define the control-center read model",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T002 entry in tasks.md. Extend local read-only snapshots with milestone totals, status counts and stable task/run selection keys. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T001"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "src-tauri/src/lib.rs",
+        "src-tauri/tests/control_center.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Synthetic data yields correct totals without counting retries as tasks.",
+        "Missing, unreadable and incompatible stores are distinct; reading does not create or migrate a store."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test control_center",
+      "scenario_ids": [
+        "A02",
+        "A10"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T003",
+      "milestone": "H2",
+      "title": "Build the milestone and task overview",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T003 entry in tasks.md. Create a local overview with milestone progress, status filters and stable selected-task state using the existing React stack. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T002"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/control-center-overview-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "Counts and filters match the snapshot; selection survives refresh when the task still exists.",
+        "Loading, empty, stale and error states are visible; no mutation action is introduced."
+      ],
+      "verify": "pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/control-center-overview-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A02"
+      ],
+      "verification_artifact": "ui/tests/control-center-overview-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T004",
+      "milestone": "H2",
+      "title": "Add task and run detail navigation",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T004 entry in tasks.md. Expose dependencies, profile/model/effort, approval state, run identity and ordered events for the selected task. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T003"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/control-center-details-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "Switching tasks cannot display a late response from the prior run.",
+        "Missing run identity and event-read failure have explicit states; dependency links select the correct task."
+      ],
+      "verify": "pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/control-center-details-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A02"
+      ],
+      "verification_artifact": "ui/tests/control-center-details-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T005",
+      "milestone": "H2",
+      "title": "Verify control-center accessibility and states",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T005 entry in tasks.md. Exercise all overview/detail fixture states and document keyboard, focus and viewport checks. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T004"
+      ],
+      "status": "planned",
+      "profile": "routine",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/tests",
+        "src-tauri/tests/control_center.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui",
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Keyboard navigation works with visible focus and labeled controls at 1280x720 and 800x600.",
+        "Populated, empty, stale, missing-store and error fixtures have recorded observed results; fixture evidence is not labeled native evidence."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test control_center && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/control-center-accessibility-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A02"
+      ],
+      "verification_artifact": "ui/tests/control-center-accessibility-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T006",
+      "milestone": "H3",
+      "title": "Validate an import before persisting it",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T006 entry in tasks.md. Add a non-mutating manifest preview that validates contracts and rejects cross-spec task-id collisions before an atomic import. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T001"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/task_manifest.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/tests/roadmap_planning.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Duplicate ids, missing dependencies, cycles, route conflicts and unsafe scopes are rejected before any write.",
+        "A task id owned by another spec is rejected rather than reassigned."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_planning",
+      "scenario_ids": [
+        "A03",
+        "A10"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T007",
+      "milestone": "H3",
+      "title": "Expose reviewed manifest and draft persistence",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T007 entry in tasks.md. Expose native commands for selecting a local manifest, previewing changes, importing a valid preview and saving only unexecuted drafts through the core boundary. Add the bounded persistence operation that revokes approval whenever a draft contract changes; reject updates to running or completed tasks. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T006"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "src-tauri/src",
+        "src-tauri/tests/planning_commands.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/tests/roadmap_planning.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri",
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Preview causes no task or approval mutation; import is an explicit separate action.",
+        "Reimport is idempotent and preserves existing run history; changed input invalidates the preview.",
+        "Draft save is atomic, revokes prior approval and refuses running/completed task updates; a failed save preserves the prior definition."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test planning_commands && cargo test --offline -p router-core --test roadmap_planning",
+      "scenario_ids": [
+        "A03"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T008",
+      "milestone": "H3",
+      "title": "Add a bounded task draft editor",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T008 entry in tasks.md. Add editing for unexecuted drafts with required contract fields and a preview-before-save flow. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T007",
+        "R002-T003"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/task-editor-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "Missing acceptance, verification, scope or routing fields disable submission with field errors.",
+        "Running/completed tasks cannot be rewritten; editing an approved draft invalidates the prior approval."
+      ],
+      "verify": "pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/task-editor-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A03",
+        "A05"
+      ],
+      "verification_artifact": "ui/tests/task-editor-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T009",
+      "milestone": "H3",
+      "title": "Show graph readiness and blockers",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T009 entry in tasks.md. Render a dependency list and readiness reasons from the validated task graph without introducing a graph library. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T006",
+        "R002-T004"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/task-graph-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "Each blocked task identifies its actual unmet dependency or approval; independent tasks remain eligible.",
+        "Cycles and missing dependencies render validation errors, never a ready badge."
+      ],
+      "verify": "pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/task-graph-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A03"
+      ],
+      "verification_artifact": "ui/tests/task-graph-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T010",
+      "milestone": "H4",
+      "title": "Define validated local routing overrides",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T010 entry in tasks.md. Add a versioned local routing configuration contract while retaining all existing built-in defaults. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T001"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/routing.rs",
+        "crates/router-core/src/lib.rs",
+        "crates/router-core/tests/roadmap_routing.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Invalid profile, model or effort values fail validation without overwriting the last valid configuration.",
+        "Absent configuration retains the exact built-in mapping; configuration contains no authentication data."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_routing",
+      "scenario_ids": [
+        "A04"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T011",
+      "milestone": "H4",
+      "title": "Preview a route and its resolution reason",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T011 entry in tasks.md. Expose a read-only route preview using the same resolver used by dispatch. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T010"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-cli/src/main.rs",
+        "crates/router-cli/tests/routing_preview.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-cli"
+        ]
+      },
+      "acceptance": [
+        "The preview returns profile, model, effort and whether a built-in or explicit rule won.",
+        "Preview neither creates a run nor starts an App Server turn; conflicting task overrides are rejected."
+      ],
+      "verify": "cargo test --offline -p router-cli --test routing_preview",
+      "scenario_ids": [
+        "A04"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T012",
+      "milestone": "H4",
+      "title": "Bind dispatch to an immutable routing revision",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T012 entry in tasks.md. Persist the validated routing revision with the dispatch definition and enforce it during continuation. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T010"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/coordinator.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/tests/roadmap_routing.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "A later configuration change cannot alter an already dispatched run.",
+        "An unavailable assigned model produces a blocked reason with no silent fallback; synthetic capability fixtures cover it."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_routing",
+      "scenario_ids": [
+        "A04",
+        "A07"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T013",
+      "milestone": "H4",
+      "title": "Expose routing settings and preview locally",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T013 entry in tasks.md. Add local IPC and settings controls for validating, previewing and explicitly saving routing changes. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T011",
+        "R002-T012",
+        "R002-T003"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "src-tauri/src",
+        "src-tauri/tests/routing_commands.rs",
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/routing-settings-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri",
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "The UI shows the resolved mapping before save and invalid values cannot be persisted.",
+        "Save affects future dispatch only; the selected historical run retains its original mapping."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test routing_commands && pnpm --dir ui build --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/routing-settings-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A04"
+      ],
+      "verification_artifact": "ui/tests/routing-settings-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T014",
+      "milestone": "H5",
+      "title": "Bind approvals to a task revision",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T014 entry in tasks.md. Extend explicit approval records with a contract revision so stale approvals cannot authorize changed tasks. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T006"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/domain.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/src/coordinator.rs",
+        "crates/router-core/tests/roadmap_approvals.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "A scope, prompt, verification, route or sandbox change requires a new decision.",
+        "Denial remains blocking; repeated identical decisions do not cause duplicate dispatch."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_approvals",
+      "scenario_ids": [
+        "A05"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T015",
+      "milestone": "H5",
+      "title": "Add explicit native approval and dispatch commands",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T015 entry in tasks.md. Expose separate decision and dispatch IPC commands that use the coordinator and reject stale contracts. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T014"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "src-tauri/src",
+        "src-tauri/tests/approval_commands.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Approval alone never starts execution; dispatch enforces dependencies and the current approval.",
+        "Double submission starts at most one run; IPC cannot execute arbitrary shell text or expand scope."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test approval_commands",
+      "scenario_ids": [
+        "A05",
+        "A06"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T016",
+      "milestone": "H5",
+      "title": "Build the review-and-approve interaction",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T016 entry in tasks.md. Show the concrete task contract and provide explicit approve/deny controls with pending and stale-response handling. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T015",
+        "R002-T004",
+        "R002-T008"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/approval-review-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "Scope, writable roots, model, effort and verification are visible before the decision.",
+        "Denied, changed and unapproved tasks cannot be dispatched; failed decisions remain retryable without a false success state."
+      ],
+      "verify": "pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/approval-review-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A05"
+      ],
+      "verification_artifact": "ui/tests/approval-review-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T017",
+      "milestone": "H5",
+      "title": "Add single-task execution controls",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T017 entry in tasks.md. Add an explicit run action for an eligible task and display the coordinator receipt. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T015",
+        "R002-T016",
+        "R002-T009"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "src-tauri/tests/approval_commands.rs",
+        "ui/tests/dispatch-controls-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui",
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Rapid repeated clicks yield one run; blocked receipts are shown as blocked rather than successful.",
+        "A completed task is not dispatched again; router failure never falls back to execution from the UI."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test approval_commands && pnpm --dir ui build --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/dispatch-controls-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A06"
+      ],
+      "verification_artifact": "ui/tests/dispatch-controls-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T018",
+      "milestone": "H6",
+      "title": "Define guarded interruption transitions",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T018 entry in tasks.md. Specify and persist an interruption request separately from the terminal result without treating cancellation as rollback. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T001"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/domain.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/tests/roadmap_recovery.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Only an active run can receive an interruption request; terminal runs remain immutable.",
+        "A request and terminal result racing each other produce one authoritative terminal state."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_recovery",
+      "scenario_ids": [
+        "A07"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T019",
+      "milestone": "H6",
+      "title": "Implement local App Server interruption",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T019 entry in tasks.md. Implement interruption against the locally verified App Server protocol and preserve run/thread identity. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T018"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/app_server.rs",
+        "crates/router-core/src/coordinator.rs",
+        "crates/router-core/tests/roadmap_recovery.rs",
+        "crates/router-core/tests/support/fake_app_server.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Supported interruption records the request and observed outcome; unsupported protocol blocks with an actionable reason.",
+        "Disconnect or timeout is not reported as successful cancellation; no replacement thread starts implicitly."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_recovery",
+      "scenario_ids": [
+        "A07"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T020",
+      "milestone": "H6",
+      "title": "Validate crash recovery and idempotent resume",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T020 entry in tasks.md. Harden existing continuation for crash windows using persisted identities, immutable assignments and current approval gates. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T019",
+        "R002-T012",
+        "R002-T014"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/coordinator.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/tests/roadmap_recovery.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Restart before/after terminal persistence cannot duplicate completed work or terminal events.",
+        "Missing or conflicting thread/turn identity remains blocked; resume preserves the route and run id."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_recovery",
+      "scenario_ids": [
+        "A07"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T021",
+      "milestone": "H6",
+      "title": "Expose interruption and resume controls",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T021 entry in tasks.md. Expose explicit interruption and continuation actions through the coordinator with visible state and reasons. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T020",
+        "R002-T017"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "src-tauri/src",
+        "src-tauri/tests/recovery_commands.rs",
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/recovery-controls-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri",
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "Interrupted tasks offer resume by the existing run id; completed runs cannot be restarted by this action.",
+        "The UI shows that interruption does not undo filesystem changes; denied approvals and unsupported operations stay blocked."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test recovery_commands && pnpm --dir ui build --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/recovery-controls-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A07"
+      ],
+      "verification_artifact": "ui/tests/recovery-controls-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T022",
+      "milestone": "H7",
+      "title": "Persist structured verification evidence",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T022 entry in tasks.md. Attach verification command, exit status, artifact references and task/run identity to a durable evidence record. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T001"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/src/domain.rs",
+        "crates/router-core/src/persistence.rs",
+        "crates/router-core/src/coordinator.rs",
+        "crates/router-core/tests/roadmap_evidence.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Model success text without successful verification cannot complete a task.",
+        "Failed or missing verification evidence stays failed/blocked; migration tests preserve H1 history and do not rewrite it."
+      ],
+      "verify": "cargo test --offline -p router-core --test roadmap_evidence",
+      "scenario_ids": [
+        "A08"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T023",
+      "milestone": "H7",
+      "title": "Add a bounded evidence read model",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T023 entry in tasks.md. Read verification evidence and ordered lifecycle events with explicit pagination and run isolation. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T022"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "src-tauri/src",
+        "src-tauri/tests/evidence_commands.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Large synthetic histories are bounded and counts indicate omitted records.",
+        "Switching run ids cannot return another run evidence; malformed payloads have an explicit error representation."
+      ],
+      "verify": "cargo test --offline -p roudex-desktop --test evidence_commands",
+      "scenario_ids": [
+        "A08"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T024",
+      "milestone": "H7",
+      "title": "Show verification and evidence in run details",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T024 entry in tasks.md. Extend details with command results, artifact references and the distinction between runtime completion and verified completion. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T023",
+        "R002-T004"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "ui/src",
+        "ui/tests/ipc-fixture.html",
+        "ui/tests/evidence-details-evidence.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "The UI links each result to its task/run and displays nonzero exit codes and missing artifacts.",
+        "Fixture-only, native and live-runtime evidence are visibly distinguishable."
+      ],
+      "verify": "pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'ui/tests/evidence-details-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A08"
+      ],
+      "verification_artifact": "ui/tests/evidence-details-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T025",
+      "milestone": "H7",
+      "title": "Export a sanitized local evidence bundle",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T025 entry in tasks.md. Add explicit local export of an allowlisted evidence summary without raw prompts, raw event bodies or authentication material. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T022"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve the implementation contract; each later export requires a selected local destination and separate explicit overwrite confirmation. No external send is authorized.",
+      "scope": [
+        "crates/router-cli/src/main.rs",
+        "crates/router-core/src",
+        "crates/router-cli/tests/evidence_export.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-cli",
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Export uses only reviewed fields and relative artifact references; synthetic sensitive markers and absolute paths are omitted.",
+        "Export creates no network connection and refuses to overwrite an existing file unless explicitly confirmed."
+      ],
+      "verify": "cargo test --offline -p router-cli --test evidence_export",
+      "scenario_ids": [
+        "A09"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T026",
+      "milestone": "H8",
+      "title": "Add local readiness diagnostics",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T026 entry in tasks.md. Report local runtime, storage and hook readiness without reading authentication files or changing installation. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T001"
+      ],
+      "status": "planned",
+      "profile": "routine",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-cli/src/main.rs",
+        "crates/router-cli/tests/local_diagnostics.rs",
+        "docs/installation.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-cli",
+          "docs"
+        ]
+      },
+      "acceptance": [
+        "Missing runtime, unwritable data storage and absent hook have distinct actionable diagnostics.",
+        "Diagnostics disclose no environment values or credentials and never install or dispatch anything."
+      ],
+      "verify": "cargo test --offline -p router-cli --test local_diagnostics",
+      "scenario_ids": [
+        "A10"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T027",
+      "milestone": "H8",
+      "title": "Create a consistent local backup",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T027 entry in tasks.md. Create a consistent SQLite backup at an explicitly selected local destination using the existing SQLite stack. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T022"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve implementation and use synthetic stores for verification. Backing up operational data later requires a user-selected destination; backup data is private and never a publication artifact.",
+      "scope": [
+        "crates/router-core/src/persistence.rs",
+        "crates/router-cli/src/main.rs",
+        "crates/router-cli/tests/local_backup.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core",
+          "crates/router-cli"
+        ]
+      },
+      "acceptance": [
+        "Backup made during synthetic writes opens successfully with consistent task/run/evidence references.",
+        "Source remains unchanged; destination collision fails closed and the backup excludes authentication configuration."
+      ],
+      "verify": "cargo test --offline -p router-cli --test local_backup",
+      "scenario_ids": [
+        "A11"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T028",
+      "milestone": "H8",
+      "title": "Validate restore with rollback protection",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T028 entry in tasks.md. Add preview/validate/restore with exclusive coordination, source compatibility checks and an automatic rollback copy. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T027",
+        "R002-T020"
+      ],
+      "status": "planned",
+      "profile": "deep",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve implementation using disposable databases only. An operational restore requires a separate explicit confirmation of source, destination and rollback copy before replacing any local data.",
+      "scope": [
+        "crates/router-core/src/persistence.rs",
+        "crates/router-cli/src/main.rs",
+        "crates/router-cli/tests/local_restore.rs"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core",
+          "crates/router-cli"
+        ]
+      },
+      "acceptance": [
+        "Corrupt, incompatible and busy destinations are rejected before replacement.",
+        "Injected replacement failure restores the previous state; repeated restore never dispatches tasks or resets completed history."
+      ],
+      "verify": "cargo test --offline -p router-cli --test local_restore",
+      "scenario_ids": [
+        "A11"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T029",
+      "milestone": "H8",
+      "title": "Prepare reproducible local packaging instructions",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T029 entry in tasks.md. Document and validate the existing desktop build and a local install/upgrade/uninstall checklist without adding a packaging framework. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T026",
+        "R002-T028"
+      ],
+      "status": "planned",
+      "profile": "routine",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve the documentation/configuration contract. Installing hooks, changing machine-wide settings, deleting user data or acquiring new build dependencies needs a separate explicit action.",
+      "scope": [
+        "docs/installation.md",
+        "docs/local-packaging.md",
+        "src-tauri/tauri.conf.json"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "docs",
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "Instructions use the existing Rust/Tauri/React stack and explicitly preserve local data on uninstall by default.",
+        "The checklist covers missing prerequisites and recovery; no auto-update endpoint, remote listener or automatic hook activation is added."
+      ],
+      "verify": "cargo build --workspace --offline && pnpm --dir ui build --configLoader runner && git diff --check && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'docs/local-packaging.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A10",
+        "A12"
+      ],
+      "verification_artifact": "docs/local-packaging.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T030",
+      "milestone": "H9",
+      "title": "Run the integrated product acceptance matrix",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T030 entry in tasks.md. Add integrated synthetic acceptance coverage and collect results for A02-A12 after every feature branch is complete. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T005",
+        "R002-T009",
+        "R002-T013",
+        "R002-T017",
+        "R002-T021",
+        "R002-T024",
+        "R002-T025",
+        "R002-T029"
+      ],
+      "status": "planned",
+      "profile": "frontier",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "crates/router-core/tests",
+        "crates/router-cli/tests",
+        "src-tauri/tests",
+        "ui/tests",
+        "specs/002-product-roadmap"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core",
+          "crates/router-cli",
+          "src-tauri",
+          "ui",
+          "specs/002-product-roadmap"
+        ]
+      },
+      "acceptance": [
+        "Import, preview, approval, dispatch, interruption, resume, verification and export form one verified local workflow.",
+        "Every automated scenario maps to a named test; failure injection covers rejection paths and each result has actual output."
+      ],
+      "verify": "cargo test --workspace --offline && pnpm --dir ui build --configLoader runner && pnpm --dir ui build --config tests/vite.config.js --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'specs/002-product-roadmap/acceptance-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A11",
+        "A12"
+      ],
+      "verification_artifact": "specs/002-product-roadmap/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T031",
+      "milestone": "H9",
+      "title": "Audit local boundaries and release contents",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T031 entry in tasks.md. Audit the concrete release diff and package for unintended remote surfaces, unsafe scopes, sensitive data and missing evidence; record findings without fixing implementation in this task. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T030"
+      ],
+      "status": "planned",
+      "profile": "frontier",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "approval": "manual",
+      "approval_requirements": "Approve this exact task contract before dispatch; approval does not authorize changes outside scope, dependency installation or publication.",
+      "scope": [
+        "specs/002-product-roadmap"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "specs/002-product-roadmap"
+        ]
+      },
+      "acceptance": [
+        "No new listener, remote synchronization, telemetry or authentication artifact is present.",
+        "Every finding has reproduction evidence and a disposition; unresolved critical findings block release readiness and require a separate scoped fix task."
+      ],
+      "verify": "git diff --check && cargo test --workspace --offline && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'specs/002-product-roadmap/boundary-audit.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A09",
+        "A10",
+        "A12"
+      ],
+      "verification_artifact": "specs/002-product-roadmap/boundary-audit.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T032",
+      "milestone": "H9",
+      "title": "Verify the native local product workflow",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T032 entry in tasks.md. Perform a native Tauri smoke test against disposable local data and record operator actions, runtime versions and observed results. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T030"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve this native smoke run with disposable data. Any live model task needs a separately reviewed and approved contract; no operational task, existing hook or user database may be changed.",
+      "scope": [
+        "specs/002-product-roadmap"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "specs/002-product-roadmap"
+        ]
+      },
+      "acceptance": [
+        "A native launch exercises overview, import, approval, dispatch, recovery and evidence using an approved local runtime or explicitly labeled fixture.",
+        "A browser fixture cannot satisfy native acceptance; live model execution requires its own route/run/thread/turn and verification receipt. Unavailable native/runtime access remains blocked."
+      ],
+      "verify": "cargo build --workspace --offline && pnpm --dir ui build --configLoader runner && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'specs/002-product-roadmap/native-smoke-evidence.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A12"
+      ],
+      "verification_artifact": "specs/002-product-roadmap/native-smoke-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    },
+    {
+      "id": "R002-T033",
+      "milestone": "H9",
+      "title": "Prepare the evidence-backed release handoff",
+      "prompt": "Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T033 entry in tasks.md. Prepare release notes, milestone/task evidence mapping and local packaging handoff only after acceptance and native gates pass. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.",
+      "depends_on": [
+        "R002-T031",
+        "R002-T032"
+      ],
+      "status": "planned",
+      "profile": "routine",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "approval": "manual",
+      "approval_requirements": "Approve the documentation task only. Git publication, tags, releases, uploads, remote access and machine installation remain separate explicitly authorized operations.",
+      "scope": [
+        "specs/002-product-roadmap",
+        "docs/local-packaging.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "specs/002-product-roadmap",
+          "docs"
+        ]
+      },
+      "acceptance": [
+        "H2-H9 can be marked completed only when all required task verification, manual artifacts and blocker dispositions are present.",
+        "The handoff distinguishes local readiness from publication and lists an unexecuted signed-commit/tag/release procedure with explicit publication approval."
+      ],
+      "verify": "git diff --check && powershell -NoProfile -Command \"if (-not (Test-Path -LiteralPath 'specs/002-product-roadmap/release-handoff.md')) { exit 1 }\"",
+      "scenario_ids": [
+        "A12"
+      ],
+      "verification_artifact": "specs/002-product-roadmap/release-handoff.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": []
+    }
+  ]
+}
