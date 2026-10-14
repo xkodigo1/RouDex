@@ -1,6 +1,6 @@
 # 003 · Integración con Codex Desktop
 
-- **Versión:** 1
+- **Versión:** 2
 - **Fecha:** 2026-10-14
 - **Estado:** en ejecución
 - **Release:** `v0.7.0`
@@ -24,11 +24,12 @@ Un hook `UserPromptSubmit` de Codex que, en cada mensaje de Codex Desktop:
 3. Si el mensaje tiene riesgo y el chat no usa el modelo del tier `fuerte`,
    **avisa** al usuario. Con `block_high_risk = true` en `router.toml`, en vez
    de avisar **bloquea** ese mensaje y explica a qué modelo cambiar.
-4. Registra la decisión en SQLite. El Resumen de la app muestra los mensajes de
-   Codex Desktop por tier, los avisos, los bloqueos y si el hook está instalado.
+4. Registra la decisión en `~/.roudex/desktop-hook.sqlite3`. El Resumen de la app
+   muestra los mensajes de Codex Desktop por tier, los avisos, los bloqueos y si
+   el hook está instalado.
 
-`router-cli hook-install` y `hook-uninstall` instalan y retiran el hook en el
-`hooks.json` de usuario de Codex; la instalación también retira el hook
+`router-cli hook-install` copia `router-cli` a `~/.roudex/bin` y lo instala en
+el `hooks.json` de usuario de Codex; `hook-uninstall` lo retira; la instalación también retira el hook
 bloqueante de `v0.3.x`–`v0.5.0` si sigue ahí.
 
 ## Invariantes
@@ -45,6 +46,8 @@ bloqueante de `v0.3.x`–`v0.5.0` si sigue ahí.
   modelo del chat, acción).
 - Instalar dos veces deja una sola entrada; desinstalar solo quita entradas de
   RouDex y conserva el resto de `hooks.json`.
+- Nada de lo que ejecuta o escribe el hook vive en AppData: Codex Desktop es
+  una app empaquetada y vería una copia privada (decisión D6).
 - Local-first: sin red y sin servicios remotos.
 
 ## Fuera de alcance
@@ -58,4 +61,4 @@ bloqueante de `v0.3.x`–`v0.5.0` si sigue ahí.
 
 | Hito | Release | Tareas |
 | --- | --- | --- |
-| H1 · Hook de contexto | `v0.7.0` | R003-T001 … R003-T004 |
+| H1 · Hook de contexto | `v0.7.0` | R003-T001 … R003-T005 |

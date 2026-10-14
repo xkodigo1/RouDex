@@ -22,7 +22,12 @@ pnpm --dir ui build
 
 Las ejecuciones y eventos se guardan en SQLite dentro del almacenamiento local
 del usuario (`%LOCALAPPDATA%\RouDex\router.sqlite3`). El repositorio no
-contiene esa base de datos ni credenciales.
+contiene esa base de datos ni credenciales. El hook de Codex Desktop guarda lo
+suyo aparte, en `%USERPROFILE%\.roudex\`.
+
+Abre RouDex desde una terminal normal, no desde la terminal de Codex Desktop:
+Codex es una app empaquetada y Windows daría a RouDex una copia privada de
+`%LOCALAPPDATA%`, con otros datos.
 
 ```powershell
 cargo run -p router-cli -- status

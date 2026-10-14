@@ -2539,7 +2539,7 @@ dependencies = [
 
 [[package]]
 name = "roudex-desktop"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "router-core",
  "rusqlite",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "router-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "router-core",
  "serde_json",
@@ -2560,7 +2560,7 @@ dependencies = [
 
 [[package]]
 name = "router-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "rusqlite",
  "serde",
