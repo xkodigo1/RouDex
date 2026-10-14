@@ -4,7 +4,10 @@
 use crate::app_server::AppServerConfig;
 use crate::classifier::RouteDecision;
 use crate::persistence::{now_string, RouterStore, StoreError};
-use crate::session::{ApprovalDecision, EventSink, Session, SessionError, SessionEvent};
+use crate::session::{
+    AccessMode, ApprovalDecision, EventSink, Session, SessionError, SessionEvent,
+};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -44,19 +47,43 @@ pub(crate) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
          );
          CREATE INDEX IF NOT EXISTS idx_chat_turns_thread ON chat_turns(thread_id);",
     )?;
-    // Columns added after the first release of the chat tables.
-    let has_archived: bool = connection.query_row(
-        "SELECT count(*) > 0 FROM pragma_table_info('chat_threads') WHERE name = 'archived'",
-        [],
-        |row| row.get(0),
-    )?;
-    if !has_archived {
-        connection.execute(
-            "ALTER TABLE chat_threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
-            [],
+    // Columns added after the first release of the chat tables. Threads that
+    // predate `access` were all started with workspace-write.
+    for (column, definition) in [
+        ("archived", "INTEGER NOT NULL DEFAULT 0"),
+        ("access", "TEXT NOT NULL DEFAULT 'write'"),
+    ] {
+        let exists: bool = connection.query_row(
+            "SELECT count(*) > 0 FROM pragma_table_info('chat_threads') WHERE name = ?1",
+            [column],
+            |row| row.get(0),
         )?;
+        if !exists {
+            connection.execute(
+                &format!("ALTER TABLE chat_threads ADD COLUMN {column} {definition}"),
+                [],
+            )?;
+        }
     }
     Ok(())
+}
+
+impl ToSql for AccessMode {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(self.as_str().into())
+    }
+}
+
+impl FromSql for AccessMode {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_str()? {
+            "write" => Ok(Self::Write),
+            "readOnly" => Ok(Self::ReadOnly),
+            other => Err(FromSqlError::Other(
+                format!("unknown access mode: {other}").into(),
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +91,7 @@ pub struct ChatThread {
     pub thread_id: String,
     pub cwd: String,
     pub title: String,
+    pub access: AccessMode,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -140,13 +168,15 @@ impl RouterStore {
         thread_id: &str,
         cwd: &Path,
         title: &str,
+        access: AccessMode,
     ) -> Result<(), StoreError> {
         let now = now_string();
+        // An existing thread keeps its mode; only the timestamp moves.
         self.connection.execute(
-            "INSERT INTO chat_threads (thread_id, cwd, title, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4)
+            "INSERT INTO chat_threads (thread_id, cwd, title, access, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
              ON CONFLICT(thread_id) DO UPDATE SET updated_at = excluded.updated_at",
-            params![thread_id, cwd.to_string_lossy(), title, now],
+            params![thread_id, cwd.to_string_lossy(), title, access, now],
         )?;
         Ok(())
     }
@@ -246,7 +276,7 @@ impl RouterStore {
     pub fn chat_threads(&self, cwd: Option<&Path>) -> Result<Vec<ChatThread>, StoreError> {
         let cwd = cwd.map(|path| path.to_string_lossy().into_owned());
         let mut statement = self.connection.prepare(
-            "SELECT thread_id, cwd, title, created_at, updated_at FROM chat_threads
+            "SELECT thread_id, cwd, title, access, created_at, updated_at FROM chat_threads
              WHERE ?1 IS NULL OR cwd = ?1 ORDER BY CAST(updated_at AS INTEGER) DESC, rowid DESC",
         )?;
         let threads = statement
@@ -255,8 +285,9 @@ impl RouterStore {
                     thread_id: row.get(0)?,
                     cwd: row.get(1)?,
                     title: row.get(2)?,
-                    created_at: row.get(3)?,
-                    updated_at: row.get(4)?,
+                    access: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
                 })
             })?
             .collect::<Result<_, _>>()?;
@@ -525,32 +556,43 @@ impl ChatService {
     }
 
     /// Send a prompt with an already-reviewed routing decision. Starts a new
-    /// thread when `thread_id` is `None`.
+    /// thread with `access` when `thread_id` is `None`; an existing thread
+    /// keeps the mode it was started with.
     pub fn send(
         &self,
         project: &Path,
         thread_id: Option<&str>,
         prompt: &str,
         decision: &RouteDecision,
+        access: AccessMode,
     ) -> Result<SentTurn, String> {
         let session = self.session(project).map_err(|e| e.to_string())?;
-        let thread_id = match thread_id {
+        let (thread_id, access) = match thread_id {
             Some(thread_id) => {
                 session
                     .ensure_thread(thread_id)
                     .map_err(|e| e.to_string())?;
-                thread_id.to_owned()
+                let stored = self
+                    .recorder
+                    .with_store(|store| store.chat_thread(thread_id))
+                    .map_err(|e| e.to_string())?;
+                (
+                    thread_id.to_owned(),
+                    stored.map_or(access, |thread| thread.access),
+                )
             }
             None => {
                 let thread_id = session
-                    .start_thread(project, &decision.model)
+                    .start_thread(project, &decision.model, access)
                     .map_err(|e| e.to_string())?;
                 let title: String = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
                 let title: String = title.chars().take(80).collect();
                 self.recorder
-                    .with_store(|store| store.upsert_chat_thread(&thread_id, project, &title))
+                    .with_store(|store| {
+                        store.upsert_chat_thread(&thread_id, project, &title, access)
+                    })
                     .map_err(|e| e.to_string())?;
-                thread_id
+                (thread_id, access)
             }
         };
         let turn_id = session
@@ -560,6 +602,7 @@ impl ChatService {
                 &decision.model,
                 &decision.effort,
                 project,
+                access,
             )
             .map_err(|e| e.to_string())?;
         self.recorder

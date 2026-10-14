@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Composer from "./Composer.jsx";
-import { SOURCE_LABEL, basename, clockTime, decisionFromTurn, tokens } from "./lib/format.js";
+import { ACCESS_LABEL, SOURCE_LABEL, basename, clockTime, decisionFromTurn, tokens } from "./lib/format.js";
 import { useSession } from "./lib/session.jsx";
 
 const FILTERS = [["todos", "todos"], ["curso", "en curso"], ["aprobacion", "aprobación"], ["fuerte", "fuerte"], ["archivados", "archivados"]];
@@ -143,7 +143,7 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
           aria-pressed={thread.thread_id === selected} onClick={() => onSelect(thread.thread_id)}>
           <span className="row-start"><span className={`dot tier-bg-${thread.last_tier ?? "none"}`} /><span className="ellipsis">{thread.title || "Sin título"}</span></span>
           <span className="row-between muted small">
-            <span>{basename(thread.cwd)} · {waiting.has(thread.thread_id) ? "esperando aprobación" : STATUS_LABEL[thread.last_status] ?? "sin turnos"}</span>
+            <span>{basename(thread.cwd)}{thread.access === "readOnly" ? ` · ${ACCESS_LABEL.readOnly}` : ""} · {waiting.has(thread.thread_id) ? "esperando aprobación" : STATUS_LABEL[thread.last_status] ?? "sin turnos"}</span>
             <span>{tokens(thread.tokens)}</span>
           </span>
         </button>) : <p className="muted pad">{threads.length ? "Ningún hilo coincide." : "Sin hilos todavía."}</p>}
@@ -162,6 +162,9 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
             <h2>{current.title || "Sin título"}</h2>
             <span className="muted small">{basename(current.cwd)} · {current.turns} {current.turns === 1 ? "turno" : "turnos"} · {tokens(current.tokens)} tokens{current.last_model ? ` · ${current.last_model}` : ""}</span>
           </div>}
+          <span className={`access-badge access-${current.access ?? "write"}`}
+            title={current.access === "readOnly" ? "sandbox sin escritura; cualquier cambio pide aprobación" : "puede escribir dentro del proyecto"}>
+            {ACCESS_LABEL[current.access] ?? ACCESS_LABEL.write}</span>
           <button type="button" className="ghost" onClick={() => setRenaming(current.title)}>renombrar</button>
           <button type="button" className="ghost" onClick={archive}>{current.archived ? "desarchivar" : "archivar"}</button>
         </div>

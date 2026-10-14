@@ -52,6 +52,27 @@ pub enum ApprovalDecision {
     Cancel,
 }
 
+/// What a chat thread may do in its project folder. Chosen when the thread
+/// starts and applied to every later turn of that thread.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AccessMode {
+    /// Workspace-write sandbox confined to the project, without network.
+    #[default]
+    Write,
+    /// Read-only sandbox without network: any write needs an approval.
+    ReadOnly,
+}
+
+impl AccessMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Write => "write",
+            Self::ReadOnly => "readOnly",
+        }
+    }
+}
+
 /// Events delivered to the UI, in server order.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(
@@ -216,23 +237,15 @@ impl Session {
         Ok(session)
     }
 
-    /// New thread confined to `cwd`: workspace-write without network, and
-    /// commands or file changes outside policy ask for approval.
-    pub fn start_thread(&self, cwd: &Path, model: &str) -> Result<String, SessionError> {
-        let result = self.request(
-            "thread/start",
-            json!({
-                "model": model,
-                "cwd": cwd,
-                "approvalPolicy": "on-request",
-                "sandbox": "workspace-write",
-                "config": {
-                    "sandbox_workspace_write.writable_roots": [cwd],
-                    "sandbox_workspace_write.network_access": false
-                },
-                "serviceName": "roudex-chat"
-            }),
-        )?;
+    /// New thread confined to `cwd` under `access`, without network; commands
+    /// or file changes outside policy ask for approval.
+    pub fn start_thread(
+        &self,
+        cwd: &Path,
+        model: &str,
+        access: AccessMode,
+    ) -> Result<String, SessionError> {
+        let result = self.request("thread/start", thread_start_params(cwd, model, access))?;
         let thread_id = result["thread"]["id"]
             .as_str()
             .ok_or_else(|| SessionError::Protocol("thread/start returned no thread id".into()))?
@@ -269,22 +282,11 @@ impl Session {
         model: &str,
         effort: &str,
         cwd: &Path,
+        access: AccessMode,
     ) -> Result<String, SessionError> {
         let result = self.request(
             "turn/start",
-            json!({
-                "threadId": thread_id,
-                "input": [{ "type": "text", "text": prompt }],
-                "cwd": cwd,
-                "approvalPolicy": "on-request",
-                "sandboxPolicy": {
-                    "type": "workspaceWrite",
-                    "writableRoots": [cwd],
-                    "networkAccess": false
-                },
-                "model": model,
-                "effort": effort
-            }),
+            turn_start_params(thread_id, prompt, model, effort, cwd, access),
         )?;
         result["turn"]["id"]
             .as_str()
@@ -359,6 +361,53 @@ impl Drop for Session {
             let _ = actor.join();
         }
     }
+}
+
+fn thread_start_params(cwd: &Path, model: &str, access: AccessMode) -> Value {
+    let mut params = json!({
+        "model": model,
+        "cwd": cwd,
+        "approvalPolicy": "on-request",
+        "serviceName": "roudex-chat"
+    });
+    match access {
+        AccessMode::Write => {
+            params["sandbox"] = json!("workspace-write");
+            params["config"] = json!({
+                "sandbox_workspace_write.writable_roots": [cwd],
+                "sandbox_workspace_write.network_access": false
+            });
+        }
+        AccessMode::ReadOnly => params["sandbox"] = json!("read-only"),
+    }
+    params
+}
+
+fn turn_start_params(
+    thread_id: &str,
+    prompt: &str,
+    model: &str,
+    effort: &str,
+    cwd: &Path,
+    access: AccessMode,
+) -> Value {
+    let sandbox_policy = match access {
+        AccessMode::Write => json!({
+            "type": "workspaceWrite",
+            "writableRoots": [cwd],
+            "networkAccess": false
+        }),
+        AccessMode::ReadOnly => json!({ "type": "readOnly", "networkAccess": false }),
+    };
+    json!({
+        "threadId": thread_id,
+        "input": [{ "type": "text", "text": prompt }],
+        "cwd": cwd,
+        "approvalPolicy": "on-request",
+        "sandboxPolicy": sandbox_policy,
+        "model": model,
+        "effort": effort
+    })
 }
 
 fn wait(
@@ -640,5 +689,68 @@ mod tests {
             serde_json::to_value(ApprovalDecision::AcceptForSession).unwrap(),
             "acceptForSession"
         );
+    }
+
+    #[test]
+    fn write_threads_get_a_workspace_sandbox_rooted_at_the_project() {
+        let cwd = Path::new("C:/p/api");
+        let thread = thread_start_params(cwd, "gpt-6.1-sol", AccessMode::Write);
+        assert_eq!(thread["approvalPolicy"], "on-request");
+        assert_eq!(thread["sandbox"], "workspace-write");
+        assert_eq!(
+            thread["config"]["sandbox_workspace_write.writable_roots"],
+            json!(["C:/p/api"])
+        );
+        assert_eq!(
+            thread["config"]["sandbox_workspace_write.network_access"],
+            false
+        );
+        let turn = turn_start_params("t", "hola", "gpt-6.1-sol", "medium", cwd, AccessMode::Write);
+        assert_eq!(turn["approvalPolicy"], "on-request");
+        assert_eq!(
+            turn["sandboxPolicy"],
+            json!({ "type": "workspaceWrite", "writableRoots": ["C:/p/api"], "networkAccess": false })
+        );
+        assert_eq!(turn["input"][0]["text"], "hola");
+        assert_eq!(
+            (&turn["model"], &turn["effort"]),
+            (&json!("gpt-6.1-sol"), &json!("medium"))
+        );
+    }
+
+    #[test]
+    fn read_only_threads_get_no_writable_roots() {
+        let cwd = Path::new("C:/p/api");
+        let thread = thread_start_params(cwd, "gpt-6-luna", AccessMode::ReadOnly);
+        assert_eq!(thread["approvalPolicy"], "on-request");
+        assert_eq!(thread["sandbox"], "read-only");
+        assert!(thread.get("config").is_none());
+        let turn = turn_start_params(
+            "t",
+            "explica",
+            "gpt-6-luna",
+            "high",
+            cwd,
+            AccessMode::ReadOnly,
+        );
+        assert_eq!(turn["approvalPolicy"], "on-request");
+        assert_eq!(
+            turn["sandboxPolicy"],
+            json!({ "type": "readOnly", "networkAccess": false })
+        );
+    }
+
+    #[test]
+    fn access_mode_names_match_the_ui() {
+        assert_eq!(
+            serde_json::to_value(AccessMode::ReadOnly).unwrap(),
+            "readOnly"
+        );
+        assert_eq!(
+            serde_json::from_value::<AccessMode>(json!("write")).unwrap(),
+            AccessMode::Write
+        );
+        assert_eq!(AccessMode::default(), AccessMode::Write);
+        assert_eq!(AccessMode::ReadOnly.as_str(), "readOnly");
     }
 }

@@ -34,7 +34,9 @@ pub use risk::{RiskMatch, RiskRules, RiskRulesError};
 pub use routing::{
     ModelRoute, RoutingConfig, RoutingConfigError, RoutingOverride, ROUTING_CONFIG_VERSION,
 };
-pub use session::{ApprovalDecision, ApprovalKind, EventSink, Session, SessionError, SessionEvent};
+pub use session::{
+    AccessMode, ApprovalDecision, ApprovalKind, EventSink, Session, SessionError, SessionEvent,
+};
 pub use task_manifest::{ManifestError, TaskManifest};
 pub use tiers::{
     CatalogModel, ModelTarget, RouterConfig, RouterConfigError, Tier, TierTargets,

@@ -2,6 +2,7 @@
 
 use crate::chat::{ModelUsage, TokenCounts};
 use crate::persistence::{RouterStore, StoreError};
+use crate::session::AccessMode;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -28,6 +29,7 @@ pub struct ThreadSummary {
     pub thread_id: String,
     pub cwd: String,
     pub title: String,
+    pub access: AccessMode,
     pub created_at: String,
     pub updated_at: String,
     pub archived: bool,
@@ -66,7 +68,7 @@ impl RouterStore {
     ) -> Result<Vec<ThreadSummary>, StoreError> {
         let cwd = cwd.map(|path| path.to_string_lossy().into_owned());
         let mut statement = self.connection.prepare(
-            "SELECT t.thread_id, t.cwd, t.title, t.created_at, t.updated_at, t.archived,
+            "SELECT t.thread_id, t.cwd, t.title, t.access, t.created_at, t.updated_at, t.archived,
                 count(u.turn_id), coalesce(sum(u.total_tokens), 0),
                 (SELECT status FROM chat_turns l WHERE l.thread_id = t.thread_id ORDER BY l.rowid DESC LIMIT 1),
                 (SELECT tier FROM chat_turns l WHERE l.thread_id = t.thread_id ORDER BY l.rowid DESC LIMIT 1),
@@ -83,14 +85,15 @@ impl RouterStore {
                     thread_id: row.get(0)?,
                     cwd: row.get(1)?,
                     title: row.get(2)?,
-                    created_at: row.get(3)?,
-                    updated_at: row.get(4)?,
-                    archived: row.get(5)?,
-                    turns: row.get(6)?,
-                    tokens: row.get(7)?,
-                    last_status: row.get(8)?,
-                    last_tier: row.get(9)?,
-                    last_model: row.get(10)?,
+                    access: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    archived: row.get(6)?,
+                    turns: row.get(7)?,
+                    tokens: row.get(8)?,
+                    last_status: row.get(9)?,
+                    last_tier: row.get(10)?,
+                    last_model: row.get(11)?,
                 })
             })?
             .collect::<Result<_, _>>()?;
@@ -246,7 +249,7 @@ impl RouterStore {
 mod tests {
     use crate::classifier::{DecisionSource, RouteDecision};
     use crate::tiers::Tier;
-    use crate::{RouterStore, TokenCounts};
+    use crate::{AccessMode, RouterStore, TokenCounts};
     use std::path::Path;
 
     fn decision(tier: Tier, model: &str, source: DecisionSource) -> RouteDecision {
@@ -303,10 +306,15 @@ mod tests {
     fn seeded() -> RouterStore {
         let store = RouterStore::in_memory().unwrap();
         store
-            .upsert_chat_thread("a", Path::new("C:/p/api"), "Hilo A")
+            .upsert_chat_thread("a", Path::new("C:/p/api"), "Hilo A", AccessMode::Write)
             .unwrap();
         store
-            .upsert_chat_thread("b", Path::new("C:/p/roudex"), "Hilo B")
+            .upsert_chat_thread(
+                "b",
+                Path::new("C:/p/roudex"),
+                "Hilo B",
+                AccessMode::ReadOnly,
+            )
             .unwrap();
         let sol = decision(Tier::Fuerte, "gpt-6.1-sol", DecisionSource::Risk);
         let luna = decision(Tier::Economico, "gpt-6-luna", DecisionSource::Rule);
@@ -362,6 +370,11 @@ mod tests {
         assert_eq!(api.len(), 1);
         assert_eq!((api[0].turns, api[0].tokens), (2, 1200));
         assert_eq!(api[0].last_tier.as_deref(), Some("economico"));
+        assert_eq!(api[0].access, AccessMode::Write);
+        let roudex = store
+            .thread_summaries(Some(Path::new("C:/p/roudex")), false, None)
+            .unwrap();
+        assert_eq!(roudex[0].access, AccessMode::ReadOnly);
         assert!(store.archive_chat_thread("a", true).unwrap());
         assert_eq!(store.thread_summaries(None, false, None).unwrap().len(), 1);
         assert_eq!(store.thread_summaries(None, true, None).unwrap().len(), 2);
@@ -379,7 +392,7 @@ mod tests {
         let store = RouterStore::in_memory().unwrap();
         assert_eq!(store.dashboard().unwrap().streak_days, 0);
         store
-            .upsert_chat_thread("a", Path::new("C:/p"), "A")
+            .upsert_chat_thread("a", Path::new("C:/p"), "A", AccessMode::Write)
             .unwrap();
         let luna = decision(Tier::Economico, "gpt-6-luna", DecisionSource::Rule);
         turn(&store, "a", "old", 3, &luna, 10);
@@ -389,7 +402,7 @@ mod tests {
 
 #[cfg(test)]
 mod migration_tests {
-    use crate::RouterStore;
+    use crate::{AccessMode, RouterStore};
     use std::path::Path;
 
     #[test]
@@ -411,6 +424,38 @@ mod migration_tests {
             .unwrap();
         assert_eq!(threads.len(), 1);
         assert!(!threads[0].archived);
+        assert_eq!(threads[0].access, AccessMode::Write);
+        drop(store);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn opening_a_store_with_archived_threads_adds_write_access() {
+        let path =
+            std::env::temp_dir().join(format!("roudex-migrate-{}.sqlite3", uuid::Uuid::new_v4()));
+        {
+            let old = rusqlite::Connection::open(&path).unwrap();
+            old.execute_batch(
+                "CREATE TABLE chat_threads (thread_id TEXT PRIMARY KEY, cwd TEXT NOT NULL,
+                    title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    archived INTEGER NOT NULL DEFAULT 0);
+                 INSERT INTO chat_threads VALUES ('old', 'C:/p', 'Antiguo', '1', '1', 1);",
+            )
+            .unwrap();
+        }
+        // Opening twice must not try to add the column again.
+        drop(RouterStore::open(&path).unwrap());
+        let store = RouterStore::open(&path).unwrap();
+        let threads = store
+            .thread_summaries(Some(Path::new("C:/p")), true, None)
+            .unwrap();
+        assert_eq!(threads.len(), 1);
+        assert!(threads[0].archived);
+        assert_eq!(threads[0].access, AccessMode::Write);
+        assert_eq!(
+            store.chat_thread("old").unwrap().unwrap().access,
+            AccessMode::Write
+        );
         drop(store);
         let _ = std::fs::remove_file(path);
     }

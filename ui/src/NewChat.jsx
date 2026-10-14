@@ -26,8 +26,8 @@ export default function NewChat({ project, projects, config, onProject, onStarte
     }
   }
 
-  async function send(prompt, decision) {
-    const sent = await invoke("chat_send", { project, threadId: null, prompt, decision });
+  async function send(prompt, decision, access) {
+    const sent = await invoke("chat_send", { project, threadId: null, prompt, decision, access });
     session.markStarted(sent.turnId);
     session.bump();
     onStarted(sent.threadId);
@@ -51,7 +51,7 @@ export default function NewChat({ project, projects, config, onProject, onStarte
           </form> : <button type="button" className="menu-item muted" onClick={() => setPicking(true)}>elegir carpeta…</button>}
           {error && <p className="error-line">{error}</p>}
         </div>}
-        <Composer project={project} config={config} onSend={send} compact placeholder="describe una tarea o haz una pregunta">
+        <Composer project={project} config={config} onSend={send} compact chooseAccess placeholder="describe una tarea o haz una pregunta">
           <button type="button" className="project-button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
             ▣ {project ? basename(project) : "elegir proyecto"} <span className="muted">▾</span>
           </button>
