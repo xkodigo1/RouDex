@@ -1,14 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
-import { SOURCE_LABEL, TIERS } from "./lib/format.js";
+import { ACCESS_LABEL, SOURCE_LABEL, TIERS } from "./lib/format.js";
+
+const ACCESS_MODES = Object.entries(ACCESS_LABEL);
 
 /**
  * Prompt box with the router in the loop: the first Ctrl+Enter (or "analizar")
  * asks the router; the suggestion shows above the box with tier buttons; the
- * second Ctrl+Enter (or "enviar") sends with the chosen decision.
+ * second Ctrl+Enter (or "enviar") sends with the chosen decision. With
+ * `chooseAccess` it also offers the mode of the new thread (write or read-only).
  */
-export default function Composer({ project, config, onSend, running, onStop, placeholder, compact = false, children }) {
+export default function Composer({ project, config, onSend, running, onStop, placeholder, compact = false, chooseAccess = false, children }) {
   const [draft, setDraft] = useState("");
+  const [access, setAccess] = useState("write");
   const [decision, setDecision] = useState(null);
   const [original, setOriginal] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -46,7 +50,7 @@ export default function Composer({ project, config, onSend, running, onStop, pla
     setBusy("send");
     setError(null);
     try {
-      await onSend(draft.trim(), decision);
+      await onSend(draft.trim(), decision, access);
       setDraft("");
       setDecision(null);
       setOriginal(null);
@@ -82,6 +86,11 @@ export default function Composer({ project, config, onSend, running, onStop, pla
     </label>
     <div className="composer-actions">
       {children}
+      {chooseAccess && <div className="access-modes" role="group" aria-label="Modo del hilo"
+        title="Solo lectura: sandbox sin escritura; cualquier cambio pide aprobación">
+        {ACCESS_MODES.map(([mode, label]) => <button key={mode} type="button" aria-pressed={access === mode}
+          onClick={() => setAccess(mode)}>{label}</button>)}
+      </div>}
       <span className="grow" />
       {running && <button type="button" className="ghost" onClick={onStop}>detener</button>}
       <button type="button" className="primary" disabled={!draft.trim() || !project || Boolean(busy) || running} onClick={submit}>

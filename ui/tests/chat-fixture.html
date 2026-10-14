@@ -19,10 +19,10 @@ const session = (payload) => emit("roudex://session", payload);
 let counter = 100;
 
 const threads = [
-  { thread_id: "t1", cwd: "C:\\proyectos\\api-service", title: "Corrige el cálculo de comisiones del reporte mensual", archived: false, created_at: String(now() - 900), updated_at: String(now() - 700) },
-  { thread_id: "t2", cwd: "C:\\proyectos\\roudex", title: "Agrega paginación al listado de hilos", archived: false, created_at: String(now() - 5000), updated_at: String(now() - 3600) },
-  { thread_id: "t3", cwd: "C:\\proyectos\\roudex", title: "Explica qué hace el actor de sesión", archived: false, created_at: String(now() - 12000), updated_at: String(now() - 10800) },
-  { thread_id: "t4", cwd: "C:\\proyectos\\roudex", title: "Revisa el modelo de amenazas del sandbox", archived: false, created_at: String(now() - 90000), updated_at: String(now() - 86400) },
+  { thread_id: "t1", cwd: "C:\\proyectos\\api-service", title: "Corrige el cálculo de comisiones del reporte mensual", access: "write", archived: false, created_at: String(now() - 900), updated_at: String(now() - 700) },
+  { thread_id: "t2", cwd: "C:\\proyectos\\roudex", title: "Agrega paginación al listado de hilos", access: "write", archived: false, created_at: String(now() - 5000), updated_at: String(now() - 3600) },
+  { thread_id: "t3", cwd: "C:\\proyectos\\roudex", title: "Explica qué hace el actor de sesión", access: "readOnly", archived: false, created_at: String(now() - 12000), updated_at: String(now() - 10800) },
+  { thread_id: "t4", cwd: "C:\\proyectos\\roudex", title: "Revisa el modelo de amenazas del sandbox", access: "readOnly", archived: false, created_at: String(now() - 90000), updated_at: String(now() - 86400) },
 ];
 const turn = (thread, id, prompt, tier, source, response, total, ago) => ({
   turn_id: id, thread_id: thread, prompt, tier, model: config.tiers[tier].model, effort: config.tiers[tier].effort, source,
@@ -129,7 +129,7 @@ mockIPC(async (cmd, args) => {
     case "chat_send": {
       let thread = threads.find((t) => t.thread_id === args.threadId);
       if (!thread) {
-        thread = { thread_id: `t${++counter}`, cwd: args.project, title: args.prompt.slice(0, 80), archived: false, created_at: String(now()), updated_at: String(now()) };
+        thread = { thread_id: `t${++counter}`, cwd: args.project, title: args.prompt.slice(0, 80), access: args.access ?? "write", archived: false, created_at: String(now()), updated_at: String(now()) };
         threads.push(thread);
         turns[thread.thread_id] = [];
       }

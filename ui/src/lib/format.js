@@ -8,6 +8,12 @@ export const SOURCE_LABEL = {
   manual: "manual",
 };
 
+/** Thread access modes, in the order the composer offers them. */
+export const ACCESS_LABEL = {
+  write: "escritura",
+  readOnly: "solo lectura",
+};
+
 export function tokens(count) {
   if (!count) return "0";
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;

@@ -1,6 +1,6 @@
 use router_core::{
-    project_dir, AppServerConfig, ApprovalDecision, ChatService, DecisionSource, RouteDecision,
-    RouterStore, SessionEvent, Tier,
+    project_dir, AccessMode, AppServerConfig, ApprovalDecision, ChatService, DecisionSource,
+    RouteDecision, RouterStore, SessionEvent, Tier,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -83,12 +83,24 @@ fn turns_stream_persist_text_tokens_and_rate_limits() {
     let h = Harness::new();
     let first = h
         .service
-        .send(&h.project, None, "hola   mundo", &decision())
+        .send(
+            &h.project,
+            None,
+            "hola   mundo",
+            &decision(),
+            AccessMode::Write,
+        )
         .unwrap();
     h.completed(&first.turn_id);
     let second = h
         .service
-        .send(&h.project, Some(&first.thread_id), "otra vez", &decision())
+        .send(
+            &h.project,
+            Some(&first.thread_id),
+            "otra vez",
+            &decision(),
+            AccessMode::Write,
+        )
         .unwrap();
     assert_eq!(second.thread_id, first.thread_id);
     h.completed(&second.turn_id);
@@ -115,6 +127,7 @@ fn turns_stream_persist_text_tokens_and_rate_limits() {
         .unwrap();
     assert_eq!(threads.len(), 1);
     assert_eq!(threads[0].title, "hola mundo");
+    assert_eq!(threads[0].access, AccessMode::Write);
 
     let usage = h
         .service
@@ -135,7 +148,13 @@ fn approvals_wait_for_the_user_decision() {
     let h = Harness::new();
     let sent = h
         .service
-        .send(&h.project, None, "needs approval", &decision())
+        .send(
+            &h.project,
+            None,
+            "needs approval",
+            &decision(),
+            AccessMode::Write,
+        )
         .unwrap();
     let request = h.wait_for("approval", |e| {
         matches!(e, SessionEvent::ApprovalRequested { .. })
@@ -168,7 +187,13 @@ fn unsupported_server_requests_are_refused_without_hanging() {
     let h = Harness::new();
     let sent = h
         .service
-        .send(&h.project, None, "unsupported tool", &decision())
+        .send(
+            &h.project,
+            None,
+            "unsupported tool",
+            &decision(),
+            AccessMode::Write,
+        )
         .unwrap();
     h.wait_for("refusal notice", |e| {
         matches!(e, SessionEvent::RuntimeError { .. })
@@ -187,7 +212,13 @@ fn interrupt_stops_a_running_turn() {
     let h = Harness::new();
     let sent = h
         .service
-        .send(&h.project, None, "hang please", &decision())
+        .send(
+            &h.project,
+            None,
+            "hang please",
+            &decision(),
+            AccessMode::Write,
+        )
         .unwrap();
     h.wait_for("turn start", |e| {
         matches!(e, SessionEvent::TurnStarted { .. })
@@ -205,6 +236,65 @@ fn interrupt_stops_a_running_turn() {
         .with_store(|store| store.chat_turns(&sent.thread_id))
         .unwrap();
     assert_eq!(turns[0].status, "interrupted");
+}
+
+#[test]
+fn read_only_threads_keep_their_sandbox_on_later_turns() {
+    let h = Harness::new();
+    let first = h
+        .service
+        .send(
+            &h.project,
+            None,
+            "sandbox?",
+            &decision(),
+            AccessMode::ReadOnly,
+        )
+        .unwrap();
+    h.completed(&first.turn_id);
+    // A later turn cannot widen the mode the thread started with.
+    let second = h
+        .service
+        .send(
+            &h.project,
+            Some(&first.thread_id),
+            "sandbox again",
+            &decision(),
+            AccessMode::Write,
+        )
+        .unwrap();
+    h.completed(&second.turn_id);
+
+    let turns = h
+        .service
+        .recorder()
+        .with_store(|store| store.chat_turns(&first.thread_id))
+        .unwrap();
+    let responses: Vec<_> = turns.iter().map(|turn| turn.response.as_str()).collect();
+    assert_eq!(responses, ["sandbox=readOnly", "sandbox=readOnly"]);
+    let thread = h
+        .service
+        .recorder()
+        .with_store(|store| store.chat_thread(&first.thread_id))
+        .unwrap()
+        .unwrap();
+    assert_eq!(thread.access, AccessMode::ReadOnly);
+}
+
+#[test]
+fn write_threads_run_turns_in_the_workspace_sandbox() {
+    let h = Harness::new();
+    let sent = h
+        .service
+        .send(&h.project, None, "sandbox?", &decision(), AccessMode::Write)
+        .unwrap();
+    h.completed(&sent.turn_id);
+    let turns = h
+        .service
+        .recorder()
+        .with_store(|store| store.chat_turns(&sent.thread_id))
+        .unwrap();
+    assert_eq!(turns[0].response, "sandbox=workspaceWrite");
 }
 
 #[test]

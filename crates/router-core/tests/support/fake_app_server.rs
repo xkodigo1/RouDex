@@ -250,7 +250,18 @@ impl Chat {
             }
             "thread/start" if params["serviceName"] == "roudex-chat" => {
                 assert_eq!(params["approvalPolicy"], "on-request");
-                assert_eq!(params["sandbox"], "workspace-write");
+                match params["sandbox"].as_str() {
+                    Some("workspace-write") => {
+                        let config = &params["config"];
+                        assert_eq!(
+                            config["sandbox_workspace_write.writable_roots"],
+                            json!([params["cwd"]])
+                        );
+                        assert_eq!(config["sandbox_workspace_write.network_access"], false);
+                    }
+                    Some("read-only") => assert!(params.get("config").is_none()),
+                    other => panic!("unexpected chat sandbox {other:?}"),
+                }
                 respond(
                     out,
                     json!({ "id": id, "result": { "thread": { "id": "chat-thread" } } }),
@@ -270,7 +281,12 @@ impl Chat {
             }
             "turn/start" if params["threadId"] == "chat-thread" => {
                 assert_eq!(params["approvalPolicy"], "on-request");
-                assert_eq!(params["sandboxPolicy"]["type"], "workspaceWrite");
+                let sandbox = params["sandboxPolicy"]["type"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned();
+                assert!(matches!(sandbox.as_str(), "workspaceWrite" | "readOnly"));
+                assert_eq!(params["sandboxPolicy"]["networkAccess"], false);
                 self.turns += 1;
                 let turn_id = format!("chat-turn-{}", self.turns);
                 let prompt = params["input"][0]["text"]
@@ -303,6 +319,8 @@ impl Chat {
                     );
                 } else if prompt.contains("hang") {
                     self.running = Some(turn_id);
+                } else if prompt.contains("sandbox") {
+                    self.complete(out, &turn_id, &format!("sandbox={sandbox}"), "completed");
                 } else {
                     self.complete(out, &turn_id, &format!("echo: {prompt}"), "completed");
                 }

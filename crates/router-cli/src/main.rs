@@ -3,7 +3,7 @@ use router_core::{
     RoutingConfig, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest,
     TaskRuntime,
 };
-use router_core::{ApprovalDecision, ChatService, SessionEvent};
+use router_core::{AccessMode, ApprovalDecision, ChatService, SessionEvent};
 use serde_json::{json, Value};
 use std::env;
 use std::io::{self, Read};
@@ -118,7 +118,7 @@ fn chat(args: Vec<String>) -> Result<(), String> {
             let _ = events.send(event);
         }),
     );
-    let sent = service.send(&project, None, prompt.trim(), &decision)?;
+    let sent = service.send(&project, None, prompt.trim(), &decision, AccessMode::Write)?;
     write_json(&json!({ "sent": sent }))?;
     for event in received {
         write_json(&serde_json::to_value(&event).map_err(|error| error.to_string())?)?;

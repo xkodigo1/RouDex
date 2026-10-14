@@ -118,6 +118,8 @@ button.link:hover { color: var(--accent-soft); }
 .thread-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .thread-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 22px; border-bottom: 1px solid var(--line); }
 .thread-title { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.access-badge { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.access-badge.access-readOnly { border-color: #2C5A41; color: var(--good); }
 .rename { display: flex; gap: 8px; flex: 1; }
 .rename input { flex: 1; }
 .transcript { flex: 1; overflow-y: auto; padding: 20px 22px; background: var(--bg-deep); display: flex; flex-direction: column; gap: 18px; font-size: 13px; line-height: 1.65; }
@@ -155,6 +157,11 @@ button.link:hover { color: var(--accent-soft); }
 .prompt-mark { color: var(--accent); font-size: 14px; line-height: 22px; }
 .prompt textarea { flex: 1; resize: none; border: none; outline: none; background: transparent; color: var(--text); font-family: inherit; font-size: 14px; line-height: 22px; }
 .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.access-modes { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.access-modes button { min-height: 34px; padding: 0 10px; border: none; background: transparent; color: var(--muted); font-size: 12px; }
+.access-modes button + button { border-left: 1px solid var(--line-strong); }
+.access-modes button[aria-pressed="true"] { background: #2A1F0E; color: var(--accent-soft); }
+.access-modes button:focus-visible { outline-offset: -2px; }
 
 /* New chat */
 .new-chat { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }

@@ -1,7 +1,7 @@
 use router_core::{
-    escalate_local, project_dir, route_local, AppServerClient, AppServerConfig, ApprovalDecision,
-    ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision, RouterConfig, RouterStore,
-    SentTurn, ThreadSummary,
+    escalate_local, project_dir, route_local, AccessMode, AppServerClient, AppServerConfig,
+    ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision, RouterConfig,
+    RouterStore, SentTurn, ThreadSummary,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -71,6 +71,8 @@ async fn router_models(project: String) -> Result<Value, String> {
 }
 
 /// Send a prompt with the decision the user reviewed (possibly overridden).
+/// `access` picks the mode of a new thread (write when omitted); an existing
+/// thread keeps its own.
 #[tauri::command]
 async fn chat_send(
     state: tauri::State<'_, AppState>,
@@ -78,11 +80,18 @@ async fn chat_send(
     thread_id: Option<String>,
     prompt: String,
     decision: RouteDecision,
+    access: Option<AccessMode>,
 ) -> Result<SentTurn, String> {
     let chat = state.chat.clone();
     blocking(move || {
         let project = project_dir(Path::new(&project))?;
-        chat.send(&project, thread_id.as_deref(), &prompt, &decision)
+        chat.send(
+            &project,
+            thread_id.as_deref(),
+            &prompt,
+            &decision,
+            access.unwrap_or_default(),
+        )
     })
     .await
 }
