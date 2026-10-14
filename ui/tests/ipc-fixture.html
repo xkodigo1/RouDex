@@ -61,6 +61,9 @@ mockIPC(async (cmd, args) => {
   }
   throw new Error(`Unexpected command: ${cmd}`);
 });
+localStorage.setItem("roudex.view", JSON.stringify("tareas"));
+localStorage.removeItem("roudex.project");
+localStorage.removeItem("roudex.recentProjects");
 await import("../src/main.jsx");
 // Browser-executed acceptance checks against the rendered React UI and IPC mock.
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -116,7 +119,7 @@ document.getElementById("verify").onclick = async () => {
     check("Empty snapshot clears selection", root().textContent.includes("No hay tasks registradas.") && root().textContent.includes("No hay task seleccionada.") && root().querySelectorAll("progress").length === 0);
     await refresh("missing");
     check("Missing store explicit", root().textContent.includes("Aún no existe estado local"));
-    check("Read-only IPC commands only", commands.every((cmd) => ["local_snapshot", "local_run_events"].includes(cmd)));
+    check("Read-only IPC commands only", commands.every((cmd) => ["local_snapshot", "local_run_events", "router_config", "chat_projects"].includes(cmd) || cmd.startsWith("plugin:event|")));
     await refresh("populated");
     output.textContent += `\n${results.length} checks passed. Synthetic browser evidence only; no native runtime claim.`;
   } catch (error) { output.textContent += `\nFAIL: ${error.message}`; }
@@ -179,7 +182,7 @@ document.getElementById("verify-details").onclick = async () => {
     check("Empty event history explicit", events().textContent.includes("0 de 0 eventos"));
     await refresh("mismatched"); await waitFor(() => events().querySelector('[role="alert"]'));
     check("Wrong-run IPC response rejected", events().textContent.includes("no corresponde") && !events().querySelector(".event-list"));
-    check("Read-only IPC commands only", commands.every((cmd) => ["local_snapshot", "local_run_events"].includes(cmd)));
+    check("Read-only IPC commands only", commands.every((cmd) => ["local_snapshot", "local_run_events", "router_config", "chat_projects"].includes(cmd) || cmd.startsWith("plugin:event|")));
     await refresh("populated"); await selectTask("FIXTURE-B"); await waitEvents("fixture-retry-b");
     output.textContent += `\n${results.length} detail checks passed. Synthetic browser evidence only; no native runtime claim.`;
   } catch (error) { output.textContent += `\nFAIL: ${error.message}`; }

@@ -1,6 +1,7 @@
 use router_core::{
     escalate_local, project_dir, route_local, AppServerClient, AppServerConfig, ApprovalDecision,
-    ChatService, ChatThread, ChatTurn, RouteDecision, RouterConfig, RouterStore, SentTurn,
+    ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision, RouterConfig, RouterStore,
+    SentTurn, ThreadSummary,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -42,6 +43,12 @@ async fn router_decide(project: String, prompt: String) -> Result<RouteDecision,
 #[tauri::command]
 fn router_escalate(decision: RouteDecision) -> Result<RouteDecision, String> {
     escalate_local(&decision)
+}
+
+/// Active router configuration (tier targets), without starting a runtime.
+#[tauri::command]
+fn router_config() -> Result<RouterConfig, String> {
+    RouterConfig::load_or_default(&RouterConfig::default_path()).map_err(|error| error.to_string())
 }
 
 /// Runtime catalog and problems with the configured tiers.
@@ -130,6 +137,71 @@ fn chat_turns(
         .map_err(|error| error.to_string())
 }
 
+/// Everything the summary screen shows, from the local store.
+#[tauri::command]
+fn dashboard_summary(state: tauri::State<'_, AppState>) -> Result<Dashboard, String> {
+    state
+        .chat
+        .recorder()
+        .with_store(|store| store.dashboard())
+        .map_err(|error| error.to_string())
+}
+
+/// Threads for the thread list; all projects when `project` is omitted.
+#[tauri::command]
+fn thread_list(
+    state: tauri::State<'_, AppState>,
+    project: Option<String>,
+    include_archived: Option<bool>,
+) -> Result<Vec<ThreadSummary>, String> {
+    let project = project
+        .map(|path| project_dir(Path::new(&path)))
+        .transpose()?;
+    state
+        .chat
+        .recorder()
+        .with_store(|store| {
+            store.thread_summaries(project.as_deref(), include_archived.unwrap_or(false), None)
+        })
+        .map_err(|error| error.to_string())
+}
+
+/// Project folders that already have threads, most recent first.
+#[tauri::command]
+fn chat_projects(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    state
+        .chat
+        .recorder()
+        .with_store(|store| store.chat_projects())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn thread_rename(
+    state: tauri::State<'_, AppState>,
+    thread_id: String,
+    title: String,
+) -> Result<bool, String> {
+    state
+        .chat
+        .recorder()
+        .with_store(|store| store.rename_chat_thread(&thread_id, &title))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn thread_archive(
+    state: tauri::State<'_, AppState>,
+    thread_id: String,
+    archived: bool,
+) -> Result<bool, String> {
+    state
+        .chat
+        .recorder()
+        .with_store(|store| store.archive_chat_thread(&thread_id, archived))
+        .map_err(|error| error.to_string())
+}
+
 /// Token usage per model plus the latest rate-limit snapshot. Reads the
 /// limits from the runtime only when no snapshot was seen yet.
 #[tauri::command]
@@ -174,13 +246,19 @@ fn main() {
             local_run_events,
             router_decide,
             router_escalate,
+            router_config,
             router_models,
             chat_send,
             chat_approval,
             chat_interrupt,
             chat_threads,
             chat_turns,
-            usage_summary
+            usage_summary,
+            dashboard_summary,
+            thread_list,
+            chat_projects,
+            thread_rename,
+            thread_archive
         ])
         .run(tauri::generate_context!())
         .expect("error while running desktop application");
