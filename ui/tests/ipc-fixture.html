@@ -7,6 +7,7 @@
   <button id="slow">Fixture: loading</button><button id="reordered">Fixture: reordered</button>
   <button id="removed">Fixture: removed</button><button id="missing">Fixture: missing store</button>
   <button id="verify">Run overview checks</button>
+  <button id="verify-details">Run detail checks</button>
 </nav>
 <pre id="verification" aria-live="polite"></pre>
 <div id="root"></div>
@@ -24,12 +25,12 @@ const tasks = [
   {id:"FIXTURE-B", title:"Failed check", status:"failed", milestone_id:"H2", dependencies:"FIXTURE-A"},
   {id:"FIXTURE-C", title:"Completed baseline", status:"completed", milestone_id:"H1"},
   {id:"FIXTURE-D", title:"Unassigned task", status:"planned", milestone_id:null},
-].map((task) => ({...task, selection_key:task.id, spec_id:"fixture", model:"fixture-model", profile:"standard", effort:"medium", approval:"manual"}));
+].map((task) => ({...task, selection_key:task.id, spec_id:"fixture", model:"fixture-model", profile:"standard", effort:"medium", approval:task.id === "FIXTURE-C" ? "not_required" : "manual"}));
 const runs = [
   {run_id:"fixture-run-a", route_id:"fixture-route-a", task_id:"FIXTURE-A", status:"interrupted", model:"fixture-model", effort:"medium", created_at:"100"},
   {run_id:"fixture-run-b", route_id:"fixture-route-b", task_id:"FIXTURE-B", status:"failed", model:"fixture-model", effort:"medium", created_at:"99"},
   {run_id:"fixture-retry-b", route_id:"fixture-route-b", task_id:"FIXTURE-B", status:"failed", model:"fixture-model", effort:"medium", created_at:"101"},
-].map((run) => ({...run, selection_key:run.run_id}));
+].reverse().map((run) => ({...run, selection_key:run.run_id}));
 const counts = (items) => Object.fromEntries(statuses.map((status) => [status, items.filter((task) => task.status === status).length]));
 mockIPC(async (cmd, args) => {
   commands.push(cmd);
@@ -44,12 +45,19 @@ mockIPC(async (cmd, args) => {
     });
     return {state_path:"fixture.sqlite3", initialized:requestedMode !== "missing", tasks:selected,
       task_total:selected.length, status_counts:counts(selected), milestones,
-      runs:selected.length ? runs : [], approvals:[], errors:[], error_count:0};
+      runs:selected.length ? runs : [], approvals:[
+        {id:1,task_id:"FIXTURE-A",decision:"approved",latest:true,reason:"Synthetic review",created_at:"98"},
+        {id:2,task_id:"FIXTURE-B",decision:"denied",latest:true,reason:"Synthetic denial",created_at:"99"},
+      ], errors:[], error_count:0};
   }
   if (cmd === "local_run_events") {
-    if (mode === "event-error") throw new Error("Fixture: events unavailable");
+    const requestedMode = mode;
+    if (requestedMode === "event-error") throw new Error("Fixture: events unavailable");
     await new Promise((resolve) => setTimeout(resolve, args.runId === "fixture-run-a" ? 1200 : 50));
-    return {run_id:args.runId, total:1, events:[{id:1, run_id:args.runId, event_type:"fixture.event", created_at:"102", payload:{text:args.runId}}]};
+    if (requestedMode === "late-error" && args.runId === "fixture-run-a") throw new Error("Fixture: delayed prior-run error");
+    const runId = requestedMode === "mismatched" ? "fixture-wrong-run" : args.runId;
+    const events = requestedMode === "no-events" ? [] : [3,1,2].map((id) => ({id, run_id:runId, event_type:`fixture.event.${id}`, created_at:String(102+id), payload:{text:runId}}));
+    return {run_id:runId, total:events.length, events};
   }
   throw new Error(`Unexpected command: ${cmd}`);
 });
@@ -113,6 +121,69 @@ document.getElementById("verify").onclick = async () => {
     output.textContent += `\n${results.length} checks passed. Synthetic browser evidence only; no native runtime claim.`;
   } catch (error) { output.textContent += `\nFAIL: ${error.message}`; }
   finally { document.getElementById("verify").disabled = false; }
+};
+
+document.getElementById("verify-details").onclick = async () => {
+  const output = document.getElementById("verification");
+  const results = [];
+  output.textContent = "";
+  const check = (name, pass) => { if (!pass) throw new Error(name); results.push(`PASS: ${name}`); output.textContent = results.join("\n"); };
+  const detail = () => root().querySelector(".task-details");
+  const events = () => root().querySelector('[aria-labelledby="events-title"]');
+  const selectTask = async (id) => {
+    [...root().querySelectorAll(".task-button")].find((button) => button.textContent.startsWith(`${id} ·`)).click();
+    await pause(30);
+  };
+  const waitEvents = async (id) => {
+    await waitFor(() => events().querySelectorAll(".event-list li").length === 3 && events().querySelector("code").textContent === id);
+  };
+  for (const id of ["verify", "verify-details"]) document.getElementById(id).disabled = true;
+  try {
+    await refresh("populated"); await filter("all");
+    await selectTask("FIXTURE-B"); await waitEvents("fixture-retry-b");
+    check("Selected task exposes route assignment", detail().textContent.includes("standard / fixture-model / medium"));
+    check("Approval decision and reason visible", detail().textContent.includes("manual · denied") && detail().textContent.includes("Synthetic denial"));
+    check("Latest task run and route identity visible", detail().textContent.includes("fixture-retry-b") && detail().textContent.includes("fixture-route-b"));
+    check("Events ordered by persisted id", [...events().querySelectorAll("summary b")].map((element) => element.textContent).join(",") === "fixture.event.1,fixture.event.2,fixture.event.3");
+    await filter("failed");
+    detail().querySelector(".dependency-list button").click(); await pause(30);
+    check("Dependency link selects exact task outside filter", root().querySelector(".task-selection").textContent.includes("FIXTURE-A") && root().textContent.includes("fuera del filtro"));
+    check("Approved state visible", detail().textContent.includes("manual · approved"));
+    await filter("all");
+    await selectTask("FIXTURE-B"); await waitEvents("fixture-retry-b");
+    check("Switch clears prior-run loading and identity", !events().textContent.includes("fixture-run-a"));
+    await pause(1400);
+    check("Late prior-run success cannot contaminate selected task", events().querySelector("code").textContent === "fixture-retry-b" && !events().textContent.includes("fixture-run-a"));
+    mode = "late-error";
+    await selectTask("FIXTURE-A");
+    check("Event loading explicit", events().textContent.includes("Leyendo eventos…"));
+    await selectTask("FIXTURE-B"); await waitEvents("fixture-retry-b"); await pause(1400);
+    check("Late prior-run failure cannot contaminate selected task", !events().querySelector('[role="alert"]') && !events().textContent.includes("delayed prior-run error"));
+    mode = "event-error";
+    await selectTask("FIXTURE-C");
+    check("Missing run identity explicit, prior events cleared", detail().textContent.includes("Sin identidad de ejecución") && events().textContent.includes("Sin identidad de ejecución") && !events().querySelector(".event-list"));
+    check("Approval not required and no dependencies explicit", detail().textContent.includes("No requerida") && detail().textContent.includes("Sin dependencias"));
+    await selectTask("FIXTURE-D");
+    check("Unreviewed task approval remains pending", detail().textContent.includes("manual · Pendiente"));
+    await selectTask("FIXTURE-B"); await waitFor(() => events().querySelector('[role="alert"]'));
+    check("Event-read failure explicit", events().textContent.includes("events unavailable") && !events().querySelector(".event-list"));
+    mode = "populated";
+    events().querySelector("button").click(); await waitEvents("fixture-retry-b");
+    check("Read-only event retry recovers", !events().querySelector('[role="alert"]'));
+    [...root().querySelectorAll(".run-button")].find((button) => button.textContent.includes("fixture-run-b")).click();
+    await waitEvents("fixture-run-b");
+    check("Historical run navigation retains task and changes run", detail().textContent.includes("fixture-run-b") && root().querySelector(".task-selection").textContent.includes("FIXTURE-B"));
+    await refresh("reordered");
+    check("Refresh preserves explicit historical run", events().querySelector("code").textContent === "fixture-run-b");
+    await refresh("no-events"); await waitFor(() => events().textContent.includes("No hay eventos registrados."));
+    check("Empty event history explicit", events().textContent.includes("0 de 0 eventos"));
+    await refresh("mismatched"); await waitFor(() => events().querySelector('[role="alert"]'));
+    check("Wrong-run IPC response rejected", events().textContent.includes("no corresponde") && !events().querySelector(".event-list"));
+    check("Read-only IPC commands only", commands.every((cmd) => ["local_snapshot", "local_run_events"].includes(cmd)));
+    await refresh("populated"); await selectTask("FIXTURE-B"); await waitEvents("fixture-retry-b");
+    output.textContent += `\n${results.length} detail checks passed. Synthetic browser evidence only; no native runtime claim.`;
+  } catch (error) { output.textContent += `\nFAIL: ${error.message}`; }
+  finally { for (const id of ["verify", "verify-details"]) document.getElementById(id).disabled = false; }
 };
 </script>
 </body></html>

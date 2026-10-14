@@ -26,16 +26,43 @@ function EventList({ events, total }) {
   </>;
 }
 
+function RunEvents({ run, revision }) {
+  const [activity, setActivity] = useState(null);
+  const [error, setError] = useState(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setActivity(null);
+    setError(null);
+    if (run) {
+      invoke("local_run_events", { runId: run.run_id }).then((value) => {
+        if (!active) return;
+        if (value.run_id !== run.run_id || value.events.some((event) => event.run_id !== run.run_id)) {
+          throw new Error("La respuesta de eventos no corresponde a esta ejecución.");
+        }
+        setActivity({ ...value, events: [...value.events].sort((a, b) => a.id - b.id) });
+      }).catch((value) => { if (active) setError(String(value)); });
+    }
+    return () => { active = false; };
+  }, [run?.run_id, revision, retry]);
+  return <section className="card panel" aria-labelledby="events-title"><h3 id="events-title">Eventos de la ejecución</h3>
+    {run ? <><code className="identifier">{run.run_id}</code><p className="muted">Route: {run.route_id}</p>
+      <p><Badge value={run.status} /> <span className="muted">{run.model} · {run.effort}</span></p>
+      {error ? <><p className="error-banner" role="alert">No se pudieron leer los eventos: {error}</p>
+        <button type="button" onClick={() => setRetry((value) => value + 1)}>Reintentar lectura de eventos</button></>
+        : activity ? <EventList events={activity.events} total={activity.total} /> : <p role="status">Leyendo eventos…</p>}</>
+      : <p className="empty-state">Sin identidad de ejecución. Esta task no tiene una ejecución registrada.</p>}
+  </section>;
+}
+
 function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState(null);
-  const [selectedRun, setSelectedRun] = useState("");
+  const [runSelection, setRunSelection] = useState(null);
   const [selectedTask, setSelectedTask] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activity, setActivity] = useState(null);
-  const [eventError, setEventError] = useState(null);
   const [refresh, setRefresh] = useState(0);
   const refreshAction = useRef(null);
 
@@ -54,8 +81,6 @@ function App() {
         setError(null);
         setSelectedTask((previous) => value.tasks.some((task) => task.selection_key === previous)
           ? previous : value.tasks[0]?.selection_key ?? "");
-        setSelectedRun((previous) => value.runs.some((run) => run.run_id === previous)
-          ? previous : value.runs[0]?.run_id ?? "");
       } catch (value) {
         if (active) setError(String(value));
       } finally {
@@ -69,23 +94,28 @@ function App() {
     return () => { active = false; clearInterval(timer); refreshAction.current = null; };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    setActivity((previous) => previous?.run_id === selectedRun ? previous : null);
-    setEventError(null);
-    if (selectedRun) {
-      invoke("local_run_events", { runId: selectedRun })
-        .then((value) => { if (active) setActivity(value); })
-        .catch((value) => { if (active) setEventError(String(value)); });
-    }
-    return () => { active = false; };
-  }, [selectedRun, snapshot, refresh]);
-
   const tasks = snapshot?.tasks ?? [];
   const runs = snapshot?.runs ?? [];
   const approvals = snapshot?.approvals ?? [];
   const visibleTasks = tasks.filter((task) => statusFilter === "all" || task.status === statusFilter);
   const currentTask = tasks.find((task) => task.selection_key === selectedTask);
+  const taskRuns = runs.filter((run) => currentTask ? run.task_id === currentTask.id : !run.task_id);
+  const currentRun = (runSelection?.taskKey === selectedTask
+    ? taskRuns.find((run) => run.run_id === runSelection.runId) : null)
+    ?? (currentTask ? taskRuns[0] : null);
+  const selectedRun = currentRun?.run_id ?? "";
+  const currentApproval = approvals.find((approval) => approval.task_id === currentTask?.id && approval.latest);
+  const dependencies = currentTask?.dependencies?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
+  function selectTask(task) {
+    setSelectedTask(task.selection_key);
+    setRunSelection(null);
+  }
+  function selectRun(run) {
+    const task = tasks.find((item) => item.id === run.task_id);
+    const taskKey = task?.selection_key ?? "";
+    setSelectedTask(taskKey);
+    setRunSelection({ taskKey, runId: run.run_id });
+  }
   const pendingApprovals = tasks.filter((task) => task.approval !== "not_required"
     && ["ready", "awaiting_approval"].includes(task.status)
     && !approvals.some((approval) => approval.task_id === task.id && approval.latest));
@@ -133,30 +163,39 @@ function App() {
         <span className="muted">{visibleTasks.length} de {snapshot?.task_total ?? 0} tasks</span>
       </div>
       {visibleTasks.length ? <div className="table-scroll"><table><thead><tr><th>Task / especificación</th><th>Estado</th><th>Modelo / esfuerzo</th><th>Dependencias</th><th>Aprobación</th></tr></thead><tbody>
-        {visibleTasks.map((task) => <tr key={task.selection_key}><td><button type="button" className="task-button" aria-pressed={selectedTask === task.selection_key} onClick={() => setSelectedTask(task.selection_key)}>{task.id} · {task.title}</button><small>{task.spec_id} · {task.milestone_id ?? "Sin hito asignado"}</small></td><td><Badge value={task.status} /></td><td>{task.model}<small>{task.profile} · {task.effort}</small></td><td>{task.dependencies ?? "—"}</td><td>{task.approval === "not_required" ? "No requerida" : approvals.find((a) => a.task_id === task.id && a.latest)?.decision ?? "Pendiente"}</td></tr>)}
+        {visibleTasks.map((task) => <tr key={task.selection_key}><td><button type="button" className="task-button" aria-pressed={selectedTask === task.selection_key} onClick={() => selectTask(task)}>{task.id} · {task.title}</button><small>{task.spec_id} · {task.milestone_id ?? "Sin hito asignado"}</small></td><td><Badge value={task.status} /></td><td>{task.model}<small>{task.profile} · {task.effort}</small></td><td>{task.dependencies ?? "—"}</td><td>{task.approval === "not_required" ? "No requerida" : approvals.find((a) => a.task_id === task.id && a.latest)?.decision ?? "Pendiente"}</td></tr>)}
       </tbody></table></div> : <p className="empty-state">{!snapshot ? "Esperando estado local." : tasks.length ? "No hay tasks para este estado." : "No hay tasks registradas."}</p>}
       <div className="task-selection" aria-live="polite">
         {currentTask ? <><b>Task seleccionada: {currentTask.id} · {currentTask.title}</b><p><Badge value={currentTask.status} /> <span className="muted">{currentTask.spec_id} · {currentTask.milestone_id ?? "Sin hito asignado"}</span></p>
           {!visibleTasks.includes(currentTask) && <p className="muted">La task seleccionada está fuera del filtro actual.</p>}</>
           : <p className="muted">No hay task seleccionada.</p>}
       </div>
+      {currentTask && <section className="task-details" aria-labelledby="task-details-title">
+        <h3 id="task-details-title">Detalle de task</h3>
+        <dl>
+          <dt>Perfil / modelo / esfuerzo</dt><dd>{currentTask.profile} / {currentTask.model} / {currentTask.effort}</dd>
+          <dt>Aprobación</dt><dd>{currentTask.approval} · {currentTask.approval === "not_required" ? "No requerida" : currentApproval?.decision ?? "Pendiente"}
+            {currentApproval?.reason && <p>{currentApproval.reason}</p>}</dd>
+          <dt>Dependencias</dt><dd>{dependencies.length ? <ul className="dependency-list">{dependencies.map((id) => {
+            const dependency = tasks.find((task) => task.id === id);
+            return <li key={id}>{dependency ? <><button type="button" onClick={() => selectTask(dependency)}>{id}</button> <Badge value={dependency.status} /></>
+              : <span>{id} · No disponible en el estado local</span>}</li>;
+          })}</ul> : "Sin dependencias"}</dd>
+          <dt>Identidad de ejecución</dt><dd>{currentRun ? <><code className="identifier">{currentRun.run_id}</code><span>Route: {currentRun.route_id}</span></>
+            : "Sin identidad de ejecución. Esta task no tiene una ejecución registrada."}</dd>
+        </dl>
+      </section>}
     </section>
     <div className="content-grid">
       <section className="card panel" aria-labelledby="runs-title"><h3 id="runs-title">Ejecuciones</h3>
         {runs.length ? <ul className="run-list">{runs.map((run) => <li key={run.run_id}>
-          <button type="button" className="run-button" aria-pressed={selectedRun === run.run_id} onClick={() => setSelectedRun(run.run_id)}>
+          <button type="button" className="run-button" aria-pressed={selectedRun === run.run_id} onClick={() => selectRun(run)}>
             <b>{run.task_id ?? "Entrada de mensaje"}</b> <Badge value={run.status} /><code className="identifier">{run.run_id}</code>
             <span className="muted">{run.model} · {run.effort} · {localTime(run.created_at)}</span>
           </button>
         </li>)}</ul> : <p className="empty-state">No hay ejecuciones registradas.</p>}
       </section>
-      <section className="card panel" aria-labelledby="events-title"><h3 id="events-title">Eventos de la ejecución</h3>
-        {selectedRun ? <><code className="identifier">{selectedRun}</code><p className="muted">Route: {runs.find((run) => run.run_id === selectedRun)?.route_id}</p>
-          {eventError ? <p className="error-banner" role="alert">{eventError}</p>
-            : activity?.run_id === selectedRun ? <EventList events={activity.events} total={activity.total} />
-            : <p role="status">Leyendo eventos…</p>}</>
-          : <p className="empty-state">Selecciona una ejecución para inspeccionar sus eventos.</p>}
-      </section>
+      <RunEvents key={`${selectedTask}:${selectedRun}`} run={currentRun} revision={`${updated}:${refresh}`} />
     </div>
     <section className="card panel section-panel" aria-labelledby="approvals-title"><h3 id="approvals-title">Historial de aprobaciones</h3>
       {approvals.length ? <div className="table-scroll"><table><thead><tr><th>Task</th><th>Decisión</th><th>Vigencia</th><th>Motivo</th><th>Fecha registrada</th></tr></thead><tbody>

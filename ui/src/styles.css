@@ -77,4 +77,10 @@ select:focus-visible { outline: 2px solid #9ec8ff; outline-offset: 3px; }
 .task-button[aria-pressed="true"] { border-color: #9ec8ff; background: #1c3048; }
 .task-selection { border-top: 1px solid #303b4d; margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
 .task-selection p { margin-top: 10px; }
+.task-details { border-top: 1px solid #303b4d; margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
+.task-details dl { display: grid; grid-template-columns: minmax(140px, 1fr) 3fr; gap: 12px 20px; }
+.task-details dt { color: #91a9c7; font-size: 13px; }
+.task-details dd { margin: 0; }
+.dependency-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+@media (max-width: 600px) { .task-details dl { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .desk-heading { align-items: flex-start; flex-direction: column; } .topbar { gap: 16px; flex-wrap: wrap; } .panel { padding: 16px; } }
