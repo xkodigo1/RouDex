@@ -37,6 +37,64 @@ fn main() {
                 json!({ "id": id, "result": { "serverInfo": { "name": "fake" } } }),
             ),
             "initialized" => {}
+            "model/list" => {
+                let entry = |id: &str, efforts: &[&str]| {
+                    json!({ "id": id, "model": id, "displayName": id, "hidden": false,
+                        "defaultReasoningEffort": "medium", "description": "",
+                        "isDefault": false,
+                        "supportedReasoningEfforts": efforts.iter()
+                            .map(|e| json!({ "reasoningEffort": e, "description": "" }))
+                            .collect::<Vec<_>>() })
+                };
+                let first_page = message["params"]["cursor"].is_null();
+                let result = if first_page {
+                    json!({ "data": [entry("gpt-5.6-luna", &["low", "medium", "high"])],
+                        "nextCursor": "page-2" })
+                } else {
+                    json!({ "data": [entry("gpt-6.1-sol", &["low", "medium", "high", "xhigh"])],
+                        "nextCursor": null })
+                };
+                respond(&mut stdout, json!({ "id": id, "result": result }));
+            }
+            "thread/start" if message["params"]["ephemeral"] == true => {
+                assert_eq!(message["params"]["sandbox"], "read-only");
+                assert_eq!(message["params"]["approvalPolicy"], "never");
+                assert!(message["params"]["developerInstructions"].is_string());
+                respond(
+                    &mut stdout,
+                    json!({ "id": id, "result": { "thread": { "id": "classifier-thread" } } }),
+                );
+            }
+            "turn/start" if message["params"]["threadId"] == "classifier-thread" => {
+                assert!(message["params"]["outputSchema"].is_object());
+                assert_eq!(message["params"]["sandboxPolicy"]["type"], "readOnly");
+                respond(
+                    &mut stdout,
+                    json!({ "id": id, "result": { "turn": { "id": "classifier-turn" } } }),
+                );
+                let text = if scenario == "classify-garbage" {
+                    "no es json"
+                } else {
+                    "{\"tier\":\"fuerte\",\"reason\":\"fake classification\"}"
+                };
+                respond(
+                    &mut stdout,
+                    json!({ "method": "item/agentMessage/delta", "params": {
+                        "threadId": "classifier-thread", "turnId": "classifier-turn", "delta": text
+                    }}),
+                );
+                respond(
+                    &mut stdout,
+                    json!({ "method": "turn/completed", "params": {
+                        "threadId": "classifier-thread",
+                        "turn": { "id": "classifier-turn",
+                            "status": if scenario == "classify-failed" { "failed" } else { "completed" },
+                            "error": if scenario == "classify-failed" {
+                                json!({ "message": "usage limit reached" })
+                            } else { Value::Null } }
+                    }}),
+                );
+            }
             "thread/start" => {
                 assert_eq!(message["params"]["model"], "gpt-6.1-sol");
                 assert_eq!(message["params"]["sandbox"], "workspace-write");

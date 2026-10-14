@@ -1,10 +1,12 @@
 use router_core::{
-    AppServerConfig, LocalTaskRuntime, RouterStore, RoutingConfig, RuntimeTurn, TaskApproval,
-    TaskCoordinator, TaskDefinition, TaskManifest, TaskRuntime,
+    AppServerClassifier, AppServerClient, AppServerConfig, Classification, LocalTaskRuntime,
+    ModelClassifier, ModelTarget, RiskRules, Router, RouterConfig, RouterStore, RoutingConfig,
+    RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest, TaskRuntime,
 };
 use serde_json::{json, Value};
 use std::env;
 use std::io::{self, Read};
+use std::path::PathBuf;
 
 fn main() {
     if let Err(error) = run() {
@@ -34,6 +36,8 @@ fn run() -> Result<(), String> {
         return Err("un worker activo no puede invocar el ciclo del coordinador".to_owned());
     }
     match command.as_deref() {
+        Some("route") => route(checked_args(args.collect(), 1, 1, "route <projectDir>")?),
+        Some("models") => models(checked_args(args.collect(), 0, 1, "models [projectDir]")?),
         Some("route-preview") => route_preview(args.collect()),
         Some("continue-run") => {
             continue_run(checked_args(args.collect(), 1, 1, "continue-run <runId>")?)
@@ -68,6 +72,70 @@ fn run() -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+/// Starts the runtime only when the fast rules cannot settle the prompt.
+struct LazyClassifier {
+    cwd: PathBuf,
+    inner: Option<AppServerClassifier>,
+}
+
+impl ModelClassifier for LazyClassifier {
+    fn classify(&mut self, prompt: &str, target: &ModelTarget) -> Result<Classification, String> {
+        if self.inner.is_none() {
+            let client = AppServerClient::start(&AppServerConfig::local(&self.cwd))
+                .map_err(|error| error.to_string())?;
+            self.inner = Some(AppServerClassifier::new(client, &self.cwd));
+        }
+        self.inner
+            .as_mut()
+            .expect("classifier")
+            .classify(prompt, target)
+    }
+}
+
+fn project_dir(arg: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(arg);
+    if !path.is_dir() {
+        return Err(format!("no existe la carpeta del proyecto: {arg}"));
+    }
+    Ok(path)
+}
+
+fn router_config() -> Result<RouterConfig, String> {
+    RouterConfig::load_or_default(&RouterConfig::default_path()).map_err(|error| error.to_string())
+}
+
+/// Route a prompt read from stdin and print the decision; nothing is executed.
+fn route(args: Vec<String>) -> Result<(), String> {
+    let cwd = project_dir(&args[0])?;
+    let config = router_config()?;
+    let rules = RiskRules::for_project(&cwd).map_err(|error| error.to_string())?;
+    let mut prompt = String::new();
+    io::stdin()
+        .read_to_string(&mut prompt)
+        .map_err(|error| format!("could not read prompt: {error}"))?;
+    let mut classifier = LazyClassifier { cwd, inner: None };
+    let decision = Router::new(&config, &rules).decide(prompt.trim(), &mut classifier);
+    write_json(&serde_json::to_value(decision).map_err(|error| error.to_string())?)
+}
+
+/// Runtime model catalog and validation of the configured tiers.
+fn models(args: Vec<String>) -> Result<(), String> {
+    let cwd = match args.first() {
+        Some(arg) => project_dir(arg)?,
+        None => env::current_dir().map_err(|error| error.to_string())?,
+    };
+    let config = router_config()?;
+    let catalog = AppServerClient::start(&AppServerConfig::local(&cwd))
+        .and_then(|mut client| client.list_models())
+        .map_err(|error| format!("no se pudo leer el catálogo del runtime: {error}"))?;
+    write_json(&json!({
+        "configPath": RouterConfig::default_path(),
+        "config": config,
+        "issues": config.catalog_issues(&catalog),
+        "catalog": catalog,
+    }))
 }
 
 fn checked_args(
@@ -402,6 +470,6 @@ fn write_json(value: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
+        "Usage: router-cli <route <projectDir> (prompt on stdin)|models [projectDir]|route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
     );
 }
