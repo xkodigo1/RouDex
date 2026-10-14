@@ -177,17 +177,28 @@ pub fn evaluate(input: &PromptSubmit, config: &RouterConfig, rules: &RiskRules) 
         _ => HookAction::Context,
     };
     let chat_model = input.model.as_deref().unwrap_or("un modelo desconocido");
+    let warning = format!(
+        "RouDex: mensaje de riesgo ({}). Se recomienda el tier fuerte ({} {}); este chat usa {chat_model}.",
+        describe(&decision.risk),
+        strong.model,
+        strong.effort
+    );
+    let mut additional = context(&decision, config);
+    if action == HookAction::Warn {
+        // Codex Desktop does not show a hook's systemMessage, so the model
+        // repeats the warning where the user reads it.
+        additional.push_str(&format!(
+            " Empieza tu respuesta con esta línea, tal cual, y luego atiende el mensaje con normalidad: «⚠ {warning}»"
+        ));
+    }
     let context = json!({
         "hookEventName": "UserPromptSubmit",
-        "additionalContext": context(&decision, config),
+        "additionalContext": additional,
     });
     let response = match action {
         HookAction::Context => json!({ "hookSpecificOutput": context }),
         HookAction::Warn => json!({
-            "systemMessage": format!(
-                "RouDex: mensaje de riesgo ({}). Se recomienda el tier fuerte ({} {}); este chat usa {chat_model}.",
-                describe(&decision.risk), strong.model, strong.effort
-            ),
+            "systemMessage": warning,
             "hookSpecificOutput": context,
         }),
         HookAction::Block => json!({
@@ -510,6 +521,8 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(context.contains("tier fuerte"), "{context}");
+        // Codex Desktop hides systemMessage: the model must repeat the warning.
+        assert!(context.contains(&format!("«⚠ {message}»")), "{context}");
         assert_eq!(
             outcome.response["hookSpecificOutput"]["hookEventName"],
             "UserPromptSubmit"
@@ -561,6 +574,10 @@ mod tests {
         assert!(
             context.contains("tier economico (gpt-6-luna high)"),
             "{context}"
+        );
+        assert!(
+            !context.contains('⚠'),
+            "only warnings ask for a visible line"
         );
     }
 
