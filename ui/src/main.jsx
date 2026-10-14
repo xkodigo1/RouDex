@@ -32,6 +32,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState(null);
   const [selectedRun, setSelectedRun] = useState("");
+  const [selectedTask, setSelectedTask] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [activity, setActivity] = useState(null);
   const [eventError, setEventError] = useState(null);
   const [refresh, setRefresh] = useState(0);
@@ -50,6 +52,8 @@ function App() {
         setSnapshot(value);
         setUpdated(new Date().toLocaleTimeString());
         setError(null);
+        setSelectedTask((previous) => value.tasks.some((task) => task.selection_key === previous)
+          ? previous : value.tasks[0]?.selection_key ?? "");
         setSelectedRun((previous) => value.runs.some((run) => run.run_id === previous)
           ? previous : value.runs[0]?.run_id ?? "");
       } catch (value) {
@@ -80,6 +84,8 @@ function App() {
   const tasks = snapshot?.tasks ?? [];
   const runs = snapshot?.runs ?? [];
   const approvals = snapshot?.approvals ?? [];
+  const visibleTasks = tasks.filter((task) => statusFilter === "all" || task.status === statusFilter);
+  const currentTask = tasks.find((task) => task.selection_key === selectedTask);
   const pendingApprovals = tasks.filter((task) => task.approval !== "not_required"
     && ["ready", "awaiting_approval"].includes(task.status)
     && !approvals.some((approval) => approval.task_id === task.id && approval.latest));
@@ -96,20 +102,44 @@ function App() {
       </button>
     </section>
     <p className="muted" role="status">{error ? "Sin conexión al estado local. Los datos anteriores pueden estar desactualizados."
-      : loading && !snapshot ? "Leyendo estado local…"
+      : loading ? "Leyendo estado local…"
       : snapshot?.initialized ? `Última lectura: ${updated} · actualización cada 5 segundos`
       : "Aún no existe estado local. Carga una especificación desde el CLI para comenzar."}</p>
     {error && <p className="error-banner" role="alert">No se pudo leer SQLite: {error}</p>}
     <section className="metrics" aria-label="Estado local">
-      <article className="card metric-card"><span className="card-label">TASKS</span><strong>{snapshot ? tasks.length : "—"}</strong><span className="muted">{tasks.filter((task) => task.status === "running").length} en ejecución</span></article>
+      <article className="card metric-card"><span className="card-label">TASKS</span><strong>{snapshot ? snapshot.task_total : "—"}</strong><span className="muted">{snapshot?.status_counts.running ?? 0} en ejecución</span></article>
       <article className="card metric-card"><span className="card-label">EJECUCIONES</span><strong>{snapshot ? runs.length : "—"}</strong><span className="muted">persistidas localmente</span></article>
       <article className="card metric-card"><span className="card-label">APROBACIONES PENDIENTES</span><strong>{snapshot ? pendingApprovals.length : "—"}</strong><span className="muted">Las decisiones se registran desde el CLI.</span></article>
     </section>
+    <section className="card panel section-panel" aria-labelledby="milestones-title">
+      <h3 id="milestones-title">Progreso por hito</h3>
+      {snapshot?.milestones.length ? <ul className="milestone-list">{snapshot.milestones.map((milestone) => {
+        const completed = milestone.status_counts.completed ?? 0;
+        return <li key={JSON.stringify([milestone.spec_id, milestone.milestone_id])}>
+          <b>{milestone.spec_id} · {milestone.milestone_id ?? "Sin hito asignado"}</b>
+          <span>{completed} / {milestone.task_total} completadas</span>
+          <progress aria-label={`${milestone.spec_id} · ${milestone.milestone_id ?? "Sin hito asignado"}`} value={completed} max={milestone.task_total || 1} />
+        </li>;
+      })}</ul> : <p className="empty-state">{snapshot ? "No hay hitos con tasks registradas." : "Esperando estado local."}</p>}
+    </section>
     <section className="card panel section-panel" aria-labelledby="tasks-title">
       <h3 id="tasks-title">Tasks</h3>
-      {tasks.length ? <div className="table-scroll"><table><thead><tr><th>Task / especificación</th><th>Estado</th><th>Modelo / esfuerzo</th><th>Dependencias</th><th>Aprobación</th></tr></thead><tbody>
-        {tasks.map((task) => <tr key={task.id}><td><b>{task.id} · {task.title}</b><small>{task.spec_id}</small></td><td><Badge value={task.status} /></td><td>{task.model}<small>{task.profile} · {task.effort}</small></td><td>{task.dependencies ?? "—"}</td><td>{task.approval === "not_required" ? "No requerida" : approvals.find((a) => a.task_id === task.id && a.latest)?.decision ?? "Pendiente"}</td></tr>)}
-      </tbody></table></div> : <p className="empty-state">{snapshot ? "No hay tasks registradas." : "Esperando estado local."}</p>}
+      <div className="task-filter"><label htmlFor="task-status">Estado de task</label>
+        <select id="task-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="all">Todos ({snapshot?.task_total ?? 0})</option>
+          {Object.entries(snapshot?.status_counts ?? {}).map(([status, count]) => <option key={status} value={status}>{status} ({count})</option>)}
+          {statusFilter !== "all" && !(statusFilter in (snapshot?.status_counts ?? {})) && <option value={statusFilter}>{statusFilter} (0)</option>}
+        </select>
+        <span className="muted">{visibleTasks.length} de {snapshot?.task_total ?? 0} tasks</span>
+      </div>
+      {visibleTasks.length ? <div className="table-scroll"><table><thead><tr><th>Task / especificación</th><th>Estado</th><th>Modelo / esfuerzo</th><th>Dependencias</th><th>Aprobación</th></tr></thead><tbody>
+        {visibleTasks.map((task) => <tr key={task.selection_key}><td><button type="button" className="task-button" aria-pressed={selectedTask === task.selection_key} onClick={() => setSelectedTask(task.selection_key)}>{task.id} · {task.title}</button><small>{task.spec_id} · {task.milestone_id ?? "Sin hito asignado"}</small></td><td><Badge value={task.status} /></td><td>{task.model}<small>{task.profile} · {task.effort}</small></td><td>{task.dependencies ?? "—"}</td><td>{task.approval === "not_required" ? "No requerida" : approvals.find((a) => a.task_id === task.id && a.latest)?.decision ?? "Pendiente"}</td></tr>)}
+      </tbody></table></div> : <p className="empty-state">{!snapshot ? "Esperando estado local." : tasks.length ? "No hay tasks para este estado." : "No hay tasks registradas."}</p>}
+      <div className="task-selection" aria-live="polite">
+        {currentTask ? <><b>Task seleccionada: {currentTask.id} · {currentTask.title}</b><p><Badge value={currentTask.status} /> <span className="muted">{currentTask.spec_id} · {currentTask.milestone_id ?? "Sin hito asignado"}</span></p>
+          {!visibleTasks.includes(currentTask) && <p className="muted">La task seleccionada está fuera del filtro actual.</p>}</>
+          : <p className="muted">No hay task seleccionada.</p>}
+      </div>
     </section>
     <div className="content-grid">
       <section className="card panel" aria-labelledby="runs-title"><h3 id="runs-title">Ejecuciones</h3>

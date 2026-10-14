@@ -66,4 +66,15 @@ button:focus-visible, summary:focus-visible { outline: 2px solid #9ec8ff; outlin
 .event-list summary span { display: block; margin-top: 5px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflow: auto; font-size: 12px; color: #c7d4e5; }
 .error-banner { border: 1px solid #914848; background: #361d24; color: #ffc1c1; padding: 14px; margin: 14px 0; overflow-wrap: anywhere; }
+.milestone-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.milestone-list li { display: grid; gap: 10px; overflow-wrap: anywhere; }
+.milestone-list span { color: #91a9c7; font-size: 13px; }
+progress { width: 100%; accent-color: #93ddb4; }
+.task-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+select { max-width: 100%; border: 1px solid #486384; border-radius: 8px; padding: 8px; color: #e6edf3; background: #151e2d; }
+select:focus-visible { outline: 2px solid #9ec8ff; outline-offset: 3px; }
+.task-button { text-align: left; color: #c7d4e5; }
+.task-button[aria-pressed="true"] { border-color: #9ec8ff; background: #1c3048; }
+.task-selection { border-top: 1px solid #303b4d; margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
+.task-selection p { margin-top: 10px; }
 @media (max-width: 600px) { .desk-heading { align-items: flex-start; flex-direction: column; } .topbar { gap: 16px; flex-wrap: wrap; } .panel { padding: 16px; } }

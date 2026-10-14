@@ -4,41 +4,115 @@
 <nav aria-label="Fixture controls">
   <button id="populated">Fixture: populated</button><button id="empty">Fixture: empty</button>
   <button id="read-error">Fixture: read error</button><button id="event-error">Fixture: event error</button>
+  <button id="slow">Fixture: loading</button><button id="reordered">Fixture: reordered</button>
+  <button id="removed">Fixture: removed</button><button id="missing">Fixture: missing store</button>
+  <button id="verify">Run overview checks</button>
 </nav>
+<pre id="verification" aria-live="polite"></pre>
 <div id="root"></div>
 <script type="module">
-// Development-only browser fixture, excluded from Vite's production entrypoint.
-// Uses Tauri's existing IPC mock, synthetic ids and no real local database.
+// Development-only synthetic fixture, excluded from the production entrypoint.
 import { mockIPC } from "@tauri-apps/api/mocks";
 let mode = "populated";
-for (const id of ["populated", "empty", "read-error", "event-error"]) {
+const commands = [];
+for (const id of ["populated", "empty", "read-error", "event-error", "slow", "reordered", "removed", "missing"]) {
   document.getElementById(id).onclick = () => { mode = id; };
 }
+const statuses = ["planned", "ready", "awaiting_approval", "running", "completed", "failed", "blocked", "interrupted"];
 const tasks = [
-  {id:"FIXTURE-A", spec_id:"fixture", title:"Needs approval", status:"awaiting_approval", model:"fixture-model", profile:"standard", effort:"medium", approval:"manual"},
-  {id:"FIXTURE-B", spec_id:"fixture", title:"Failed check", status:"failed", model:"fixture-model", profile:"standard", effort:"medium", approval:"manual", dependencies:"FIXTURE-A"},
-];
+  {id:"FIXTURE-A", title:"Needs approval", status:"awaiting_approval", milestone_id:"H2"},
+  {id:"FIXTURE-B", title:"Failed check", status:"failed", milestone_id:"H2", dependencies:"FIXTURE-A"},
+  {id:"FIXTURE-C", title:"Completed baseline", status:"completed", milestone_id:"H1"},
+  {id:"FIXTURE-D", title:"Unassigned task", status:"planned", milestone_id:null},
+].map((task) => ({...task, selection_key:task.id, spec_id:"fixture", model:"fixture-model", profile:"standard", effort:"medium", approval:"manual"}));
 const runs = [
   {run_id:"fixture-run-a", route_id:"fixture-route-a", task_id:"FIXTURE-A", status:"interrupted", model:"fixture-model", effort:"medium", created_at:"100"},
   {run_id:"fixture-run-b", route_id:"fixture-route-b", task_id:"FIXTURE-B", status:"failed", model:"fixture-model", effort:"medium", created_at:"99"},
-];
+  {run_id:"fixture-retry-b", route_id:"fixture-route-b", task_id:"FIXTURE-B", status:"failed", model:"fixture-model", effort:"medium", created_at:"101"},
+].map((run) => ({...run, selection_key:run.run_id}));
+const counts = (items) => Object.fromEntries(statuses.map((status) => [status, items.filter((task) => task.status === status).length]));
 mockIPC(async (cmd, args) => {
+  commands.push(cmd);
   if (cmd === "local_snapshot") {
-    if (mode === "read-error") throw new Error("Fixture: database unavailable");
-    return {state_path:"fixture.sqlite3", initialized:true, tasks:mode === "empty" ? [] : tasks,
-      runs:mode === "empty" ? [] : runs,
-      approvals:mode === "empty" ? [] : [{id:1, task_id:"FIXTURE-B", decision:"approved", latest:true, reason:"Fixture approval", created_at:"98"}],
-      errors:mode === "empty" ? [] : [{id:20, run_id:"fixture-run-b", event_type:"verification.failed", created_at:"101", payload:{reason:"Fixture check failed"}}],
-      error_count:mode === "empty" ? 0 : 1};
+    const requestedMode = mode;
+    if (requestedMode === "read-error") throw new Error("Fixture: database unavailable");
+    if (requestedMode === "slow") await new Promise((resolve) => setTimeout(resolve, 1800));
+    const selected = ["empty", "missing"].includes(requestedMode) ? [] : requestedMode === "removed" ? tasks.filter((task) => task.id !== "FIXTURE-B") : requestedMode === "reordered" ? [...tasks].reverse() : tasks;
+    const milestones = [...new Set(selected.map((task) => task.milestone_id))].map((milestone_id) => {
+      const members = selected.filter((task) => task.milestone_id === milestone_id);
+      return {spec_id:"fixture", milestone_id, task_total:members.length, status_counts:counts(members)};
+    });
+    return {state_path:"fixture.sqlite3", initialized:requestedMode !== "missing", tasks:selected,
+      task_total:selected.length, status_counts:counts(selected), milestones,
+      runs:selected.length ? runs : [], approvals:[], errors:[], error_count:0};
   }
   if (cmd === "local_run_events") {
     if (mode === "event-error") throw new Error("Fixture: events unavailable");
-    // First run is deliberately slower to exercise switching during a request.
     await new Promise((resolve) => setTimeout(resolve, args.runId === "fixture-run-a" ? 1200 : 50));
     return {run_id:args.runId, total:1, events:[{id:1, run_id:args.runId, event_type:"fixture.event", created_at:"102", payload:{text:args.runId}}]};
   }
   throw new Error(`Unexpected command: ${cmd}`);
 });
 await import("../src/main.jsx");
+// Browser-executed acceptance checks against the rendered React UI and IPC mock.
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const root = () => document.getElementById("root");
+const waitFor = async (check) => {
+  for (let i = 0; i < 100; i++) { if (check()) return; await pause(50); }
+  throw new Error("Timed out waiting for rendered state");
+};
+const refresh = async (nextMode) => {
+  await waitFor(() => root().querySelector(".desk-heading button:not(:disabled)"));
+  mode = nextMode;
+  root().querySelector(".desk-heading button").click();
+  await pause(80);
+  await waitFor(() => root().querySelector(".desk-heading button:not(:disabled)"));
+};
+const filter = async (status) => {
+  const select = root().querySelector("select");
+  select.value = status;
+  select.dispatchEvent(new Event("change", {bubbles:true}));
+  await pause(80);
+};
+document.getElementById("verify").onclick = async () => {
+  const output = document.getElementById("verification");
+  const results = [];
+  const check = (name, pass) => { if (!pass) throw new Error(name); results.push(`PASS: ${name}`); output.textContent = results.join("\n"); };
+  document.getElementById("verify").disabled = true;
+  try {
+    await refresh("populated"); await filter("all");
+    check("Four tasks, three runs including retry", root().querySelector(".metric-card strong").textContent === "4" && root().querySelectorAll(".task-button").length === 4 && root().querySelectorAll(".run-list li").length === 3);
+    check("Milestone totals and completed progress", JSON.stringify([...root().querySelectorAll("progress")].map((p) => [p.value,p.max])) === "[[0,2],[1,1],[0,1]]");
+    check("Unassigned milestone visible", root().querySelector(".milestone-list").textContent.includes("Sin hito asignado"));
+    for (const status of statuses) {
+      await filter(status);
+      check(`Filter ${status}`, root().querySelectorAll(".task-button").length === tasks.filter((task) => task.status === status).length);
+    }
+    check("Empty filter message", root().textContent.includes("No hay tasks para este estado."));
+    await filter("all");
+    [...root().querySelectorAll(".task-button")].find((button) => button.textContent.includes("FIXTURE-B")).click(); await pause(80);
+    await refresh("reordered");
+    check("Selection survives reordered refresh", root().querySelector('.task-button[aria-pressed="true"]').textContent.includes("FIXTURE-B"));
+    await filter("completed");
+    check("Filter retains hidden selection", root().querySelector(".task-selection").textContent.includes("FIXTURE-B") && root().textContent.includes("fuera del filtro"));
+    await refresh("read-error");
+    check("Error and stale data visible; selection retained", root().querySelector('[role="alert"]').textContent.includes("database unavailable") && root().textContent.includes("desactualizados") && root().querySelector(".task-selection").textContent.includes("FIXTURE-B"));
+    await refresh("populated");
+    check("Error recovery", !root().querySelector('[role="alert"]'));
+    mode = "slow"; root().querySelector(".desk-heading button").click(); await pause(80);
+    check("Loading visible with retained snapshot", root().textContent.includes("Leyendo estado local…") && root().querySelector(".desk-heading button").disabled && root().querySelector(".task-selection").textContent.includes("FIXTURE-B"));
+    await waitFor(() => root().querySelector(".desk-heading button:not(:disabled)"));
+    await filter("all"); await refresh("removed");
+    check("Removed selection falls back deterministically", root().querySelector('.task-button[aria-pressed="true"]').textContent.includes("FIXTURE-A"));
+    await refresh("empty");
+    check("Empty snapshot clears selection", root().textContent.includes("No hay tasks registradas.") && root().textContent.includes("No hay task seleccionada.") && root().querySelectorAll("progress").length === 0);
+    await refresh("missing");
+    check("Missing store explicit", root().textContent.includes("Aún no existe estado local"));
+    check("Read-only IPC commands only", commands.every((cmd) => ["local_snapshot", "local_run_events"].includes(cmd)));
+    await refresh("populated");
+    output.textContent += `\n${results.length} checks passed. Synthetic browser evidence only; no native runtime claim.`;
+  } catch (error) { output.textContent += `\nFAIL: ${error.message}`; }
+  finally { document.getElementById("verify").disabled = false; }
+};
 </script>
 </body></html>
