@@ -7,9 +7,9 @@ pub mod desktop_hook;
 pub mod domain;
 pub mod persistence;
 pub mod risk;
-pub mod routing;
 pub mod session;
 pub mod task_manifest;
+pub mod task_route;
 pub mod tiers;
 
 pub use app_server::{
@@ -35,13 +35,11 @@ pub use domain::{
 };
 pub use persistence::{RouterStore, StoreError};
 pub use risk::{RiskMatch, RiskRules, RiskRulesError};
-pub use routing::{
-    ModelRoute, RoutingConfig, RoutingConfigError, RoutingOverride, ROUTING_CONFIG_VERSION,
-};
 pub use session::{
     AccessMode, ApprovalDecision, ApprovalKind, EventSink, Session, SessionError, SessionEvent,
 };
-pub use task_manifest::{ManifestError, RouteConflict, TaskManifest};
+pub use task_manifest::{ManifestError, Milestone, TaskManifest};
+pub use task_route::resolve_task_route;
 pub use tiers::{
     CatalogModel, DesktopHookConfig, ModelTarget, RouterConfig, RouterConfigError, Tier,
     TierTargets, ROUTER_CONFIG_VERSION,

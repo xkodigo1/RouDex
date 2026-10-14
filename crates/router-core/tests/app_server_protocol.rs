@@ -1,5 +1,5 @@
 use router_core::{
-    AppServerClient, AppServerConfig, TaskDefinition, TaskSandbox, TaskStatus, TurnSettings,
+    AppServerClient, AppServerConfig, TaskDefinition, TaskSandbox, TaskStatus, Tier, TurnSettings,
 };
 use serde_json::Value;
 use std::fs;
@@ -24,9 +24,11 @@ fn verification_passes_a_deterministic_isolated_cargo_target_per_task() {
         prompt: "Verify locally".into(),
         depends_on: vec![],
         status: TaskStatus::Running,
-        profile: "deep".into(),
+        tier: Tier::Fuerte,
+        profile: None,
         model: "gpt-6.1-sol".into(),
         effort: "high".into(),
+        milestone: None,
         approval: "not_required".into(),
         scope: vec![".".into()],
         cwd: cwd.to_string_lossy().into_owned(),

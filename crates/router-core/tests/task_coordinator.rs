@@ -1,6 +1,7 @@
 use router_core::{
-    AppServerConfig, CoordinatorError, EventRecord, LocalTaskRuntime, RouteReceipt, RouteStatus,
-    RouterStore, TaskApproval, TaskCoordinator, TaskDefinition, TaskSandbox, TaskStatus,
+    resolve_task_route, AppServerConfig, CoordinatorError, EventRecord, LocalTaskRuntime,
+    RiskRules, RouteReceipt, RouteStatus, RouterConfig, RouterStore, TaskApproval, TaskCoordinator,
+    TaskDefinition, TaskSandbox, TaskStatus, Tier,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -25,9 +26,11 @@ impl Fixture {
             prompt: "Perform the local task".into(),
             depends_on: vec![],
             status: TaskStatus::Planned,
-            profile: "deep".into(),
-            model: "gpt-6.1-sol".into(),
-            effort: "high".into(),
+            tier: Tier::Fuerte,
+            profile: None,
+            model: String::new(),
+            effort: String::new(),
+            milestone: None,
             approval: "not_required".into(),
             scope: vec![".".into()],
             cwd: self.cwd.to_string_lossy().into_owned(),
@@ -81,6 +84,7 @@ fn stdio_dispatch_persists_route_turn_deltas_and_independent_verification() {
         let store = RouterStore::open(&db).unwrap();
         store.upsert_task("spec", &fixture.task("T-004")).unwrap();
         TaskCoordinator::new(&store)
+            .with_router(RouterConfig::default())
             .dispatch_task("T-004", &mut fixture.runtime("success"))
             .unwrap()
     };
@@ -95,7 +99,7 @@ fn stdio_dispatch_persists_route_turn_deltas_and_independent_verification() {
             run.model.as_str(),
             run.effort.as_str()
         ),
-        ("deep", "gpt-6.1-sol", "high")
+        ("fuerte", "gpt-6.1-sol", "high")
     );
     assert_eq!(run.status, "completed");
     assert_eq!(
@@ -158,6 +162,7 @@ fn stdio_dispatch_persists_route_turn_deltas_and_independent_verification() {
         "T-004"
     );
     let replay = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task("T-004", &mut fixture.runtime("success"))
         .unwrap();
     assert_eq!(replay.run_id.as_deref(), Some(run_id.as_str()));
@@ -177,6 +182,7 @@ fn batch_rechecks_dependencies_and_never_constructs_unapproved_runtime() {
     store.upsert_task("spec", &manual).unwrap();
     let mut factories = Vec::new();
     let receipts = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_ready_tasks_with_runtime("spec", |task| {
             factories.push(task.id.clone());
             Ok(fixture.runtime("success"))
@@ -195,6 +201,7 @@ fn batch_rechecks_dependencies_and_never_constructs_unapproved_runtime() {
         .any(|r| r.task_id == "M-manual" && r.status == TaskStatus::AwaitingApproval));
     assert_eq!(store.count_runs().unwrap(), 2);
     assert!(TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_ready_tasks_with_runtime("spec", |_| {
             panic!("completed and unapproved tasks must not construct runtimes");
             #[allow(unreachable_code)]
@@ -213,6 +220,7 @@ fn missing_dependency_prevents_runtime_and_route_creation() {
     task.depends_on = vec!["missing".into()];
     store.upsert_task("spec", &task).unwrap();
     let receipt = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task(&task.id, &mut fixture.runtime("success"))
         .unwrap();
     assert_eq!(receipt.status, TaskStatus::Blocked);
@@ -221,15 +229,20 @@ fn missing_dependency_prevents_runtime_and_route_creation() {
 }
 
 #[test]
-fn route_conflict_is_recorded_without_constructing_runtime() {
+fn invalid_project_risk_rules_block_without_constructing_runtime() {
     let fixture = Fixture::new();
+    fs::create_dir_all(fixture.cwd.join(".roudex")).unwrap();
+    fs::write(
+        fixture.cwd.join(".roudex").join("rules.toml"),
+        "keywords = 3",
+    )
+    .unwrap();
     let store = RouterStore::in_memory().unwrap();
-    let mut task = fixture.task("T-004");
-    task.effort = "low".into();
-    store.upsert_task("spec", &task).unwrap();
+    store.upsert_task("spec", &fixture.task("T-004")).unwrap();
     let receipts = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_ready_tasks_with_runtime::<LocalTaskRuntime, _>("spec", |_| {
-            panic!("invalid route")
+            panic!("an unroutable task must not start a runtime")
         })
         .unwrap();
     assert_eq!(receipts[0].status, TaskStatus::Blocked);
@@ -237,7 +250,116 @@ fn route_conflict_is_recorded_without_constructing_runtime() {
         .events_for_run(receipts[0].run_id.as_ref().unwrap())
         .unwrap();
     assert_eq!(events[0].event_type, "task.blocked");
+    assert!(events[0].payload["reason"]
+        .as_str()
+        .unwrap()
+        .contains("rules.toml"));
     assert!(!fixture.log_path().exists());
+}
+
+/// Model, effort and route the coordinator recorded when the task started.
+fn started(store: &RouterStore, run_id: &str) -> Value {
+    store
+        .events_for_run(run_id)
+        .unwrap()
+        .into_iter()
+        .find(|event| event.event_type == "task.started")
+        .expect("task.started")
+        .payload
+}
+
+#[test]
+fn runs_record_the_model_router_toml_had_at_dispatch() {
+    let fixture = Fixture::new();
+    let store = RouterStore::in_memory().unwrap();
+    let mut first = fixture.task("T-001");
+    first.tier = Tier::Estandar;
+    let mut second = fixture.task("T-002");
+    second.tier = Tier::Estandar;
+    store.upsert_task("spec", &first).unwrap();
+    store.upsert_task("spec", &second).unwrap();
+
+    let before = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
+        .dispatch_task("T-001", &mut fixture.runtime("success"))
+        .unwrap();
+    let mut edited = RouterConfig::default();
+    edited.tiers.estandar.model = "gpt-6-astra".into();
+    edited.tiers.estandar.effort = "low".into();
+    let after = TaskCoordinator::new(&store)
+        .with_router(edited)
+        .dispatch_task("T-002", &mut fixture.runtime("success"))
+        .unwrap();
+
+    let route = |receipt: &router_core::TaskExecutionReceipt| {
+        let run = store
+            .get_run(receipt.run_id.as_ref().unwrap())
+            .unwrap()
+            .unwrap();
+        (run.profile, run.model, run.effort)
+    };
+    assert_eq!(
+        route(&before),
+        ("estandar".into(), "gpt-6.1-sol".into(), "medium".into())
+    );
+    assert_eq!(
+        route(&after),
+        ("estandar".into(), "gpt-6-astra".into(), "low".into())
+    );
+    let payload = started(&store, after.run_id.as_ref().unwrap());
+    assert_eq!(payload["definition"]["model"], "gpt-6-astra");
+    assert_eq!(payload["route"]["source"], "spec");
+    // The stored task still names no model: the next dispatch routes again.
+    assert!(store
+        .get_task("T-002")
+        .unwrap()
+        .unwrap()
+        .definition
+        .model
+        .is_empty());
+}
+
+#[test]
+fn risk_forces_fuerte_and_a_manual_tier_wins_on_the_record() {
+    let fixture = Fixture::new();
+    let store = RouterStore::in_memory().unwrap();
+    let mut risky = fixture.task("T-001");
+    risky.tier = Tier::Economico;
+    risky.prompt = "Aplica la migración de la base de datos en producción".into();
+    let mut manual = risky.clone();
+    manual.id = "T-002".into();
+    store.upsert_task("spec", &risky).unwrap();
+    store.upsert_task("spec", &manual).unwrap();
+    assert!(store
+        .set_task_tier_override("T-002", Some(Tier::Economico))
+        .unwrap());
+
+    // The fake app server only accepts the fuerte model; the tier and its
+    // source are what this test checks.
+    let mut config = RouterConfig::default();
+    config.tiers.economico = config.tiers.fuerte.clone();
+    let coordinator = TaskCoordinator::new(&store).with_router(config);
+    let forced = coordinator
+        .dispatch_task("T-001", &mut fixture.runtime("success"))
+        .unwrap();
+    let forced = started(&store, forced.run_id.as_ref().unwrap());
+    assert_eq!(forced["tier"], "fuerte");
+    assert_eq!(forced["route"]["source"], "risk");
+    assert!(forced["route"]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("migracion"));
+
+    let chosen = coordinator
+        .dispatch_task("T-002", &mut fixture.runtime("success"))
+        .unwrap();
+    assert_eq!(chosen.status, TaskStatus::Completed);
+    let chosen = started(&store, chosen.run_id.as_ref().unwrap());
+    assert_eq!(chosen["tier"], "economico");
+    assert_eq!(chosen["route"]["source"], "manual");
+    assert!(!chosen["route"]["risk"].as_array().unwrap().is_empty());
+    // A finished task keeps the tier it ran with.
+    assert!(!store.set_task_tier_override("T-002", None).unwrap());
 }
 
 #[test]
@@ -248,6 +370,7 @@ fn runtime_factory_failure_is_persisted_and_does_not_abort_independent_tasks() {
         store.upsert_task("spec", &fixture.task(id)).unwrap();
     }
     let receipts = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_ready_tasks_with_runtime("spec", |task| {
             if task.id == "A-fails" {
                 Err(CoordinatorError::Runtime("missing executable".into()))
@@ -277,6 +400,7 @@ fn protocol_errors_and_verification_failure_never_complete_tasks() {
         let store = RouterStore::in_memory().unwrap();
         store.upsert_task("spec", &fixture.task("T-004")).unwrap();
         let receipt = TaskCoordinator::new(&store)
+            .with_router(RouterConfig::default())
             .dispatch_task("T-004", &mut fixture.runtime(scenario))
             .unwrap();
         assert_eq!(receipt.status, expected, "{scenario}");
@@ -306,7 +430,7 @@ fn approval_unblocks_dispatch_without_starting_an_early_worker() {
     let mut task = fixture.task("T-004");
     task.approval = "manual".into();
     store.upsert_task("spec", &task).unwrap();
-    let coordinator = TaskCoordinator::new(&store);
+    let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
     let pending = coordinator
         .dispatch_task(&task.id, &mut fixture.runtime("success"))
         .unwrap();
@@ -340,7 +464,7 @@ fn resume_reuses_run_and_thread_and_is_idempotent_after_completion() {
         let fixture = Fixture::new();
         let store = RouterStore::in_memory().unwrap();
         store.upsert_task("spec", &fixture.task("T-004")).unwrap();
-        let coordinator = TaskCoordinator::new(&store);
+        let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
         let interrupted = coordinator
             .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
             .unwrap();
@@ -396,7 +520,7 @@ fn superseded_interrupted_run_cannot_resume_or_change_the_current_run() {
     let fixture = Fixture::new();
     let store = RouterStore::in_memory().unwrap();
     store.upsert_task("spec", &fixture.task("T-004")).unwrap();
-    let coordinator = TaskCoordinator::new(&store);
+    let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
     let first = coordinator
         .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
         .unwrap();
@@ -431,13 +555,11 @@ fn resume_uses_the_immutable_assignment_when_the_manifest_changes() {
     let store = RouterStore::in_memory().unwrap();
     let mut task = fixture.task("T-004");
     store.upsert_task("spec", &task).unwrap();
-    let coordinator = TaskCoordinator::new(&store);
+    let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
     let first = coordinator
         .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
         .unwrap();
-    task.profile = "routine".into();
-    task.model = "gpt-6-luna".into();
-    task.effort = "medium".into();
+    task.tier = Tier::Economico;
     task.prompt = "An unrelated new instruction".into();
     task.verify = "An unrelated new verification".into();
     store.upsert_task("spec", &task).unwrap();
@@ -474,7 +596,7 @@ fn durable_terminal_evidence_prevents_replay_after_a_crash() {
         let fixture = Fixture::new();
         let store = RouterStore::in_memory().unwrap();
         store.upsert_task("spec", &fixture.task("T-004")).unwrap();
-        let coordinator = TaskCoordinator::new(&store);
+        let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
         let interrupted = coordinator
             .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
             .unwrap();
@@ -518,7 +640,7 @@ fn denial_stays_blocked_until_an_explicit_approval() {
     let mut task = fixture.task("T-004");
     task.approval = "manual".into();
     store.upsert_task("spec", &task).unwrap();
-    let coordinator = TaskCoordinator::new(&store);
+    let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
     coordinator
         .dispatch_task(&task.id, &mut fixture.runtime("success"))
         .unwrap();
@@ -577,6 +699,7 @@ fn denial_stays_blocked_until_an_explicit_approval() {
         })
         .unwrap();
     let done = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task(&task.id, &mut fixture.runtime("success"))
         .unwrap();
     assert_eq!(done.status, TaskStatus::Completed);
@@ -600,7 +723,7 @@ fn resume_claim_rechecks_revoked_approval_dependencies_and_latest_run() {
             .unwrap()
     };
     approve("approved");
-    let coordinator = TaskCoordinator::new(&store);
+    let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
     let first = coordinator
         .dispatch_task(&task.id, &mut fixture.runtime("disconnect"))
         .unwrap();
@@ -645,18 +768,26 @@ fn missing_recovery_identity_is_durably_blocked_without_starting_runtime() {
         let mut task = fixture.task("T-004");
         task.status = TaskStatus::Ready;
         store.upsert_task("spec", &task).unwrap();
+        let route =
+            resolve_task_route(&task, None, &RouterConfig::default(), &RiskRules::default());
         assert!(store
             .begin_task_run(
                 &task,
+                &TaskDefinition {
+                    model: route.model.clone(),
+                    effort: route.effort.clone(),
+                    ..task.clone()
+                },
                 "spec",
                 &RouteReceipt {
                     route_id: "route".into(),
                     run_id: "run".into(),
-                    profile: task.profile.clone(),
-                    model: task.model.clone(),
-                    effort: task.effort.clone(),
+                    profile: route.tier.as_str().into(),
+                    model: route.model.clone(),
+                    effort: route.effort.clone(),
                     status: RouteStatus::Accepted,
-                }
+                },
+                &route,
             )
             .unwrap());
         if missing != "thread" {
@@ -674,7 +805,7 @@ fn missing_recovery_identity_is_durably_blocked_without_starting_runtime() {
                 .execute("DELETE FROM events WHERE event_type = 'task.started'", [])
                 .unwrap();
         }
-        let coordinator = TaskCoordinator::new(&store);
+        let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
         coordinator
             .recover_running_task(&task.id, "worker crashed")
             .unwrap();
@@ -711,6 +842,7 @@ fn terminal_notifications_are_idempotent_for_each_thread_and_turn_after_reopen()
     let store = RouterStore::open(&db).unwrap();
     store.upsert_task("spec", &fixture.task("T-004")).unwrap();
     let receipt = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
         .unwrap();
     let run_id = receipt.run_id.unwrap();
@@ -758,6 +890,7 @@ fn terminal_state_and_audit_event_roll_back_together_on_database_failure() {
     let store = RouterStore::open(&db).unwrap();
     store.upsert_task("spec", &fixture.task("T-004")).unwrap();
     let receipt = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
         .unwrap();
     let run_id = receipt.run_id.unwrap();
@@ -782,7 +915,7 @@ fn terminal_state_and_audit_event_roll_back_together_on_database_failure() {
     );
     assert_eq!(store.get_run(&run_id).unwrap().unwrap().status, "running");
     fault.execute_batch("DROP TRIGGER fail_audit").unwrap();
-    let coordinator = TaskCoordinator::new(&store);
+    let coordinator = TaskCoordinator::new(&store).with_router(RouterConfig::default());
     coordinator
         .recover_running_task("T-004", "audit storage restored")
         .unwrap();
@@ -802,6 +935,7 @@ fn concurrent_resume_claims_allow_only_one_coordinator_to_start() {
     let store = RouterStore::open(&db).unwrap();
     store.upsert_task("spec", &fixture.task("T-004")).unwrap();
     let interrupted = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task("T-004", &mut fixture.runtime("disconnect"))
         .unwrap();
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
@@ -850,6 +984,7 @@ fn approval_decision_and_state_roll_back_together_on_database_failure() {
     task.approval = "manual".into();
     store.upsert_task("spec", &task).unwrap();
     TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
         .dispatch_task(&task.id, &mut fixture.runtime("success"))
         .unwrap();
     let fault = rusqlite::Connection::open(&db).unwrap();
@@ -918,6 +1053,7 @@ fn invalid_runtime_identity_or_status_fails_without_verification() {
         let store = RouterStore::in_memory().unwrap();
         store.upsert_task("spec", &fixture.task("T-004")).unwrap();
         let result = TaskCoordinator::new(&store)
+            .with_router(RouterConfig::default())
             .dispatch_task("T-004", &mut InvalidRuntime(scenario))
             .unwrap();
         assert_eq!(result.status, TaskStatus::Failed, "{scenario}");

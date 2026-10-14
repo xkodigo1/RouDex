@@ -1,16 +1,33 @@
 use crate::domain::{TaskDefinition, TaskStatus};
-use crate::routing::resolve_profile;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use thiserror::Error;
 
+/// A spec's executable contract (`specs/<slug>/tasks.json`). Fields the
+/// coordinator does not use, such as scenarios or evidence, are ignored.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskManifest {
     pub spec_id: String,
     pub title: String,
+    /// Revision of the spec, not a format version.
     pub version: u32,
+    #[serde(default)]
+    pub milestones: Vec<Milestone>,
     pub tasks: Vec<TaskDefinition>,
+    /// Notes from loading, such as legacy profiles translated to tiers.
+    #[serde(skip)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Milestone {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub task_ids: Vec<String>,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -27,34 +44,35 @@ pub enum ManifestError {
     MissingDependency { task_id: String, dependency: String },
     #[error("dependency cycle includes task {0}")]
     DependencyCycle(String),
-    #[error("task {task_id} uses unknown profile {profile}")]
-    UnknownProfile { task_id: String, profile: String },
-    // Boxed: six strings would make every Result carrying this error large.
-    #[error("task {} profile {} resolves to {}/{}, not {}/{}", .0.task_id, .0.profile, .0.expected_model, .0.expected_effort, .0.model, .0.effort)]
-    RouteConflict(Box<RouteConflict>),
     #[error("task {task_id} requires a title, prompt, cwd, acceptance and verify command")]
     MissingExecutionContract { task_id: String },
+    #[error("task {task_id} uses sandbox {kind}; RouDex only runs readOnly or workspaceWrite inside the project")]
+    UnsafeSandbox { task_id: String, kind: String },
+    #[error("task {task_id} needs writable roots for a workspaceWrite sandbox")]
+    MissingWritableRoots { task_id: String },
+    #[error("milestone {milestone} of task {task_id} is not in the manifest")]
+    UnknownMilestone { task_id: String, milestone: String },
+    #[error("milestone {milestone} lists missing task {task_id}")]
+    MilestoneTask { milestone: String, task_id: String },
     #[error("could not read manifest: {0}")]
     Io(String),
     #[error("could not parse manifest: {0}")]
     Parse(String),
 }
 
-/// A task whose declared model or effort differs from its profile's route.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RouteConflict {
-    pub task_id: String,
-    pub profile: String,
-    pub expected_model: String,
-    pub expected_effort: String,
-    pub model: String,
-    pub effort: String,
-}
-
 impl TaskManifest {
     pub fn from_json(contents: &str) -> Result<Self, ManifestError> {
-        let manifest: Self = serde_json::from_str(contents)
+        let value: Value = serde_json::from_str(contents)
             .map_err(|error| ManifestError::Parse(error.to_string()))?;
+        let warnings = legacy_warnings(&value);
+        let mut manifest: Self = serde_json::from_value(value)
+            .map_err(|error| ManifestError::Parse(error.to_string()))?;
+        // A manifest never chooses the model: router.toml does at dispatch.
+        for task in &mut manifest.tasks {
+            task.model.clear();
+            task.effort.clear();
+        }
+        manifest.warnings = warnings;
         manifest.validate()?;
         Ok(manifest)
     }
@@ -91,23 +109,24 @@ impl TaskManifest {
                     task_id: task.id.clone(),
                 });
             }
-            let route =
-                resolve_profile(&task.profile).ok_or_else(|| ManifestError::UnknownProfile {
-                    task_id: task.id.clone(),
-                    profile: task.profile.clone(),
-                })?;
-            if route.model != task.model || route.effort != task.effort {
-                return Err(ManifestError::RouteConflict(Box::new(RouteConflict {
-                    task_id: task.id.clone(),
-                    profile: task.profile.clone(),
-                    expected_model: route.model.to_owned(),
-                    expected_effort: route.effort.to_owned(),
-                    model: task.model.clone(),
-                    effort: task.effort.clone(),
-                })));
+            match task.sandbox.kind.as_str() {
+                "readOnly" => {}
+                "workspaceWrite" if task.sandbox.writable_roots.is_empty() => {
+                    return Err(ManifestError::MissingWritableRoots {
+                        task_id: task.id.clone(),
+                    });
+                }
+                "workspaceWrite" => {}
+                kind => {
+                    return Err(ManifestError::UnsafeSandbox {
+                        task_id: task.id.clone(),
+                        kind: kind.to_owned(),
+                    });
+                }
             }
         }
 
+        let milestones: HashSet<&str> = self.milestones.iter().map(|m| m.id.as_str()).collect();
         for task in &self.tasks {
             for dependency in &task.depends_on {
                 if dependency == &task.id || !by_id.contains_key(dependency) {
@@ -116,6 +135,26 @@ impl TaskManifest {
                         dependency: dependency.clone(),
                     });
                 }
+            }
+            if let Some(milestone) = &task.milestone {
+                if !milestones.is_empty() && !milestones.contains(milestone.as_str()) {
+                    return Err(ManifestError::UnknownMilestone {
+                        task_id: task.id.clone(),
+                        milestone: milestone.clone(),
+                    });
+                }
+            }
+        }
+        for milestone in &self.milestones {
+            if let Some(missing) = milestone
+                .task_ids
+                .iter()
+                .find(|id| !by_id.contains_key(*id))
+            {
+                return Err(ManifestError::MilestoneTask {
+                    milestone: milestone.id.clone(),
+                    task_id: missing.clone(),
+                });
             }
         }
 
@@ -142,6 +181,33 @@ impl TaskManifest {
     }
 }
 
+/// Explain what loading a manifest written before tiers changes.
+fn legacy_warnings(value: &Value) -> Vec<String> {
+    let Some(tasks) = value["tasks"].as_array() else {
+        return Vec::new();
+    };
+    let mut warnings = Vec::new();
+    for task in tasks {
+        let id = task["id"].as_str().unwrap_or("?");
+        if task.get("tier").is_none() {
+            if let Some(profile) = task["profile"].as_str() {
+                if let Some(tier) = crate::domain::tier_for_profile(profile) {
+                    warnings.push(format!(
+                        "{id}: el perfil {profile} se traduce al tier {tier}"
+                    ));
+                }
+            }
+        }
+        let declared = |field: &str| task[field].as_str().is_some_and(|value| !value.is_empty());
+        if declared("model") || declared("effort") {
+            warnings.push(format!(
+                "{id}: se ignoran el modelo y el esfuerzo declarados; los decide router.toml"
+            ));
+        }
+    }
+    warnings
+}
+
 fn visit_task(
     task: &TaskDefinition,
     by_id: &HashMap<String, &TaskDefinition>,
@@ -166,6 +232,8 @@ fn visit_task(
 mod tests {
     use super::*;
     use crate::domain::TaskSandbox;
+    use crate::tiers::Tier;
+    use serde_json::json;
 
     fn task(id: &str, depends_on: Vec<&str>) -> TaskDefinition {
         TaskDefinition {
@@ -178,9 +246,11 @@ mod tests {
             } else {
                 TaskStatus::Planned
             },
-            profile: "routine".to_owned(),
-            model: "gpt-6-luna".to_owned(),
-            effort: "medium".to_owned(),
+            tier: Tier::Economico,
+            profile: None,
+            model: String::new(),
+            effort: String::new(),
+            milestone: None,
             approval: "manual".to_owned(),
             scope: vec!["crates/router-core".to_owned()],
             cwd: ".".to_owned(),
@@ -198,8 +268,29 @@ mod tests {
             spec_id: "spec".to_owned(),
             title: "Spec".to_owned(),
             version: 1,
+            milestones: Vec::new(),
             tasks,
+            warnings: Vec::new(),
         }
+    }
+
+    fn task_json(extra: Value) -> Value {
+        let mut task = json!({
+            "id": "T-1", "title": "Title", "prompt": "Do it", "depends_on": [],
+            "status": "planned", "approval": "not_required", "scope": ["src"], "cwd": ".",
+            "sandbox": { "type": "workspaceWrite", "writable_roots": ["src"] },
+            "acceptance": ["works"], "verify": "cargo test"
+        });
+        for (key, value) in extra.as_object().unwrap() {
+            task[key] = value.clone();
+        }
+        task
+    }
+
+    fn load(tasks: Vec<Value>) -> Result<TaskManifest, ManifestError> {
+        TaskManifest::from_json(
+            &json!({ "spec_id": "s", "title": "S", "version": 3, "tasks": tasks }).to_string(),
+        )
     }
 
     #[test]
@@ -229,12 +320,106 @@ mod tests {
     }
 
     #[test]
-    fn rejects_route_conflicts() {
-        let mut invalid = task("T-001", vec![]);
-        invalid.model = "gpt-6.1-sol".to_owned();
+    fn tasks_declare_a_tier_and_never_a_model() {
+        let loaded = load(vec![task_json(
+            json!({ "tier": "fuerte", "model": "gpt-6-astra", "effort": "high" }),
+        )])
+        .unwrap();
+        let task = &loaded.tasks[0];
+        assert_eq!(task.tier, Tier::Fuerte);
+        assert!(task.model.is_empty() && task.effort.is_empty());
+        assert_eq!(loaded.warnings.len(), 1, "{:?}", loaded.warnings);
+        assert!(loaded.warnings[0].contains("router.toml"));
+        assert_eq!(loaded.version, 3, "version is the spec revision");
+    }
+
+    #[test]
+    fn legacy_profiles_map_to_tiers_with_a_warning() {
+        let cases = [
+            ("micro", Tier::Economico),
+            ("routine", Tier::Economico),
+            ("standard", Tier::Estandar),
+            ("deep", Tier::Fuerte),
+            ("frontier", Tier::Fuerte),
+        ];
+        for (profile, tier) in cases {
+            let loaded = load(vec![task_json(json!({ "profile": profile }))]).unwrap();
+            assert_eq!(loaded.tasks[0].tier, tier, "{profile}");
+            assert_eq!(loaded.tasks[0].profile.as_deref(), Some(profile));
+            assert!(loaded.warnings[0].contains(&format!("tier {tier}")));
+        }
+        // An explicit tier wins over a profile and needs no translation.
+        let both = load(vec![task_json(
+            json!({ "tier": "economico", "profile": "deep" }),
+        )])
+        .unwrap();
+        assert_eq!(both.tasks[0].tier, Tier::Economico);
+        assert!(both.warnings.is_empty());
+    }
+
+    #[test]
+    fn unknown_tiers_profiles_and_missing_tiers_are_rejected() {
+        for extra in [
+            json!({ "tier": "premium" }),
+            json!({ "profile": "turbo" }),
+            json!({}),
+        ] {
+            let error = load(vec![task_json(extra.clone())]).unwrap_err();
+            assert!(matches!(error, ManifestError::Parse(_)), "{extra}: {error}");
+        }
+    }
+
+    #[test]
+    fn sandboxes_stay_inside_the_project() {
+        let danger = load(vec![task_json(json!({ "tier": "fuerte",
+            "sandbox": { "type": "dangerFullAccess", "writable_roots": [] } }))]);
+        assert!(matches!(danger, Err(ManifestError::UnsafeSandbox { .. })));
+        let no_roots = load(vec![task_json(json!({ "tier": "fuerte",
+            "sandbox": { "type": "workspaceWrite", "writable_roots": [] } }))]);
         assert!(matches!(
-            manifest(vec![invalid]).validate(),
-            Err(ManifestError::RouteConflict(_))
+            no_roots,
+            Err(ManifestError::MissingWritableRoots { .. })
         ));
+        let read_only = load(vec![task_json(json!({ "tier": "fuerte",
+            "sandbox": { "type": "readOnly", "writable_roots": [] } }))]);
+        assert!(read_only.is_ok());
+    }
+
+    #[test]
+    fn milestones_must_match_their_tasks() {
+        let with = |milestones: Value, milestone: &str| {
+            TaskManifest::from_json(
+                &json!({ "spec_id": "s", "title": "S", "version": 1, "milestones": milestones,
+                    "tasks": [task_json(json!({ "tier": "estandar", "milestone": milestone }))] })
+                .to_string(),
+            )
+        };
+        let ok = with(json!([{ "id": "H1", "task_ids": ["T-1"] }]), "H1").unwrap();
+        assert_eq!(ok.tasks[0].milestone.as_deref(), Some("H1"));
+        assert!(matches!(
+            with(json!([{ "id": "H1", "task_ids": ["T-1"] }]), "H9"),
+            Err(ManifestError::UnknownMilestone { .. })
+        ));
+        assert!(matches!(
+            with(json!([{ "id": "H1", "task_ids": ["T-7"] }]), "H1"),
+            Err(ManifestError::MilestoneTask { .. })
+        ));
+    }
+
+    #[test]
+    fn the_repository_specs_load() {
+        let hook =
+            TaskManifest::from_json(include_str!("../../../specs/003-desktop-hook/tasks.json"))
+                .unwrap();
+        assert_eq!(hook.tasks.len(), 5);
+        assert!(hook.tasks.iter().all(|task| task.tier == Tier::Estandar));
+        assert!(!hook.warnings.is_empty());
+        let orchestrator = TaskManifest::from_json(include_str!(
+            "../../../specs/004-sdd-orchestrator/tasks.json"
+        ))
+        .unwrap();
+        assert_eq!(orchestrator.tasks.len(), 7);
+        assert_eq!(orchestrator.milestones[0].task_ids.len(), 7);
+        assert!(orchestrator.warnings.is_empty());
     }
 }

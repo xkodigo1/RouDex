@@ -19,6 +19,8 @@ pub enum DecisionSource {
     Fallback,
     /// The user escalated or overrode the decision.
     Manual,
+    /// A spec task: the tier its manifest declares.
+    Spec,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

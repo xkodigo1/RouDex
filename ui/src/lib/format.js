@@ -6,6 +6,7 @@ export const SOURCE_LABEL = {
   model: "clasificador",
   fallback: "respaldo",
   manual: "manual",
+  spec: "spec",
 };
 
 /** Thread access modes, in the order the composer offers them. */

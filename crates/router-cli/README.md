@@ -10,7 +10,6 @@ hook-uninstall
 chat <projectDir>             (prompt on stdin)
 route <projectDir>            (prompt on stdin)
 models [projectDir]
-route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]
 spec-load <manifest.json>
 task-list <specId>
 task-status <taskId>
@@ -47,14 +46,14 @@ and points the RouDex entry in `$CODEX_HOME/hooks.json` at it;
 `hook-uninstall` removes that entry. See
 [docs/desktop-hook.md](../../docs/desktop-hook.md).
 
-`route-preview` resolves a legacy coordinator profile without opening the local
-store or starting a runtime.
-
-The task commands drive the spec-driven task coordinator, which is frozen until
-the SDD phase of the [roadmap](../../ROADMAP.md):
+The task commands drive the spec-driven task coordinator. Each task declares a
+tier (`economico`, `estandar` or `fuerte`); at dispatch the coordinator turns it
+into a model and effort with `router.toml`, and a risk rule match forces
+`fuerte`. Manifests written before tiers still load: their `profile` maps to a
+tier and `spec-load` reports it in `warnings`.
 
 - `spec-load` validates a JSON task manifest before importing it and returns
-  `specId`, `taskCount` and `readyTaskIds`. `task-plan` remains an alias.
+  `specId`, `taskCount`, `readyTaskIds` and `warnings`. `task-plan` remains an alias.
 - `task-approve` records an approval or denial (default `approved`).
 - `task-run` / `task-dispatch` execute eligible tasks through `codex app-server`.
   Approval and dependency gates stay active; dispatch never grants approval.
