@@ -2,6 +2,7 @@ pub mod app_server;
 pub mod chat;
 pub mod classifier;
 pub mod coordinator;
+pub mod dashboard;
 pub mod domain;
 pub mod persistence;
 pub mod risk;
@@ -23,6 +24,7 @@ pub use coordinator::{
     CoordinatorError, LocalTaskRuntime, RuntimeTurn, TaskCoordinator, TaskExecutionReceipt,
     TaskRuntime,
 };
+pub use dashboard::{Dashboard, DayUsage, ThreadSummary, TierUsage};
 pub use domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
     TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,

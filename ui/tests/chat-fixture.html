@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>RouDex app fixture</title></head>
+<body>
+<div id="root"></div>
+<script type="module">
+// Development-only synthetic backend for the desktop app. It mimics the Tauri
+// commands and streams roudex://session events; nothing reaches a runtime.
+import { mockIPC } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
+
+const now = () => Math.floor(Date.now() / 1000);
+const config = { version: 1, fallback_tier: "estandar",
+  tiers: { economico: { model: "gpt-6-luna", effort: "high" }, estandar: { model: "gpt-6.1-sol", effort: "medium" },
+    fuerte: { model: "gpt-6.1-sol", effort: "high" } }, classifier: { model: "gpt-6-luna", effort: "low" } };
+let limits = { planType: "plus", primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: now() + 5400 },
+  secondary: { usedPercent: 12, windowDurationMins: 10080, resetsAt: now() + 4 * 86400 } };
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const session = (payload) => emit("roudex://session", payload);
+let counter = 100;
+
+const threads = [
+  { thread_id: "t1", cwd: "C:\\proyectos\\api-service", title: "Corrige el cálculo de comisiones del reporte mensual", archived: false, created_at: String(now() - 900), updated_at: String(now() - 700) },
+  { thread_id: "t2", cwd: "C:\\proyectos\\roudex", title: "Agrega paginación al listado de hilos", archived: false, created_at: String(now() - 5000), updated_at: String(now() - 3600) },
+  { thread_id: "t3", cwd: "C:\\proyectos\\roudex", title: "Explica qué hace el actor de sesión", archived: false, created_at: String(now() - 12000), updated_at: String(now() - 10800) },
+  { thread_id: "t4", cwd: "C:\\proyectos\\roudex", title: "Revisa el modelo de amenazas del sandbox", archived: false, created_at: String(now() - 90000), updated_at: String(now() - 86400) },
+];
+const turn = (thread, id, prompt, tier, source, response, total, ago) => ({
+  turn_id: id, thread_id: thread, prompt, tier, model: config.tiers[tier].model, effort: config.tiers[tier].effort, source,
+  reason: source === "risk" ? "regla de riesgo: comisiones (proyecto)" : source === "rule" ? "mensaje corto de tipo «explica»" : "Implementación habitual en código existente.",
+  status: "completed", response, error: null, tokens: { input: total - 300, cached_input: Math.round(total * 0.6), output: 300, reasoning: 40, total },
+  created_at: String(now() - ago), completed_at: String(now() - ago + 60) });
+const turns = {
+  t1: [turn("t1", "u1", "Corrige el cálculo de comisiones del reporte mensual; está sumando dos veces los reembolsos", "fuerte", "risk",
+    "El reembolso se resta en fees.rs y otra vez en monthly_report.rs. Dejé la resta solo en el agregado mensual y añadí un test con un reembolso parcial.", 84000, 900)],
+  t2: [turn("t2", "u2", "Agrega paginación al listado de hilos", "estandar", "model", "Añadí paginación por cursor y un test de la consulta.", 41000, 3700)],
+  t3: [turn("t3", "u3", "Explica qué hace el actor de sesión", "economico", "rule", "El actor recibe comandos de la UI y mensajes del servidor por un solo canal…", 20000, 10900)],
+  t4: [turn("t4", "u4", "Revisa el modelo de amenazas del sandbox", "fuerte", "model", "Tres riesgos principales: …", 132000, 86500)],
+};
+
+function summaries(includeArchived) {
+  return threads.filter((t) => includeArchived || !t.archived).map((t) => {
+    const list = turns[t.thread_id] ?? [];
+    const last = list.at(-1);
+    return { ...t, turns: list.length, tokens: list.reduce((s, x) => s + x.tokens.total, 0),
+      last_status: last?.status ?? null, last_tier: last?.tier ?? null, last_model: last?.model ?? null };
+  }).sort((a, b) => Number(b.updated_at) - Number(a.updated_at));
+}
+
+function dashboard() {
+  const all = Object.values(turns).flat();
+  const days = [];
+  let seed = 7;
+  const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  for (let ago = 364; ago >= 0; ago--) {
+    const date = new Date(Date.now() - ago * 86400000);
+    const weekend = date.getDay() === 0 || date.getDay() === 6;
+    const r = rand();
+    if (r < (weekend ? 0.65 : 0.22)) continue;
+    const ramp = Math.min(1, (365 - ago) / 365 + 0.25);
+    const pad = (n) => String(n).padStart(2, "0");
+    days.push({ date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`, tokens: Math.round((r * r * 420 + 20) * ramp) * 1000, turns: 1 + Math.round(r * 9) });
+  }
+  const total = days.reduce((s, d) => s + d.tokens, 0);
+  return {
+    days, year: { input: Math.round(total * 0.9), cached_input: Math.round(total * 0.57), output: Math.round(total * 0.1), reasoning: 0, total },
+    today_tokens: days.at(-1)?.tokens ?? 0, today_turns: days.at(-1)?.turns ?? 0, today_threads: 3, total_turns: 1248, streak_days: 9,
+    models: [
+      { model: "gpt-6.1-sol", turns: 520, tokens: { total: Math.round(total * 0.61) } },
+      { model: "gpt-6-luna", turns: 690, tokens: { total: Math.round(total * 0.29) } },
+      { model: "gpt-6-astra", turns: 38, tokens: { total: Math.round(total * 0.1) } },
+    ],
+    tiers: [
+      { tier: "economico", turns: 724, by_source: [["rule", 512], ["model", 212]] },
+      { tier: "estandar", turns: 374, by_source: [["model", 374]] },
+      { tier: "fuerte", turns: 150, by_source: [["risk", 112], ["manual", 38]] },
+    ],
+    recent: summaries(false).slice(0, 5),
+  };
+}
+
+function decide(prompt) {
+  const text = prompt.toLowerCase();
+  if (/(producci[oó]n|pago|comisi)/.test(text)) return { tier: "fuerte", ...config.tiers.fuerte, source: "risk", reason: "regla de riesgo: produccion", risk: [{ kind: "keyword", value: "produccion" }] };
+  if (/^(explica|resume|traduce)/.test(text)) return { tier: "economico", ...config.tiers.economico, source: "rule", reason: "mensaje corto de tipo «explica»", risk: [] };
+  return { tier: "estandar", ...config.tiers.estandar, source: "model", reason: "test acotado en código existente", risk: [] };
+}
+
+async function stream(threadId, record) {
+  await wait(150);
+  session({ type: "turnStarted", threadId, turnId: record.turn_id });
+  if (/aprob|test/i.test(record.prompt)) {
+    session({ type: "agentDelta", threadId, turnId: record.turn_id, delta: "Agrego el caso de diciembre con dos festivos y verifico el corte del día 15" });
+    session({ type: "itemStarted", threadId, turnId: record.turn_id, item: { id: "cmd-" + record.turn_id, type: "commandExecution", command: "cargo test -p reports holidays" } });
+    session({ type: "approvalRequested", requestId: 900 + counter, kind: "command", threadId, turnId: record.turn_id,
+      itemId: "cmd-" + record.turn_id, command: "cargo test -p reports holidays", cwd: "C:\\proyectos\\api-service", reason: "fuera de la política del sandbox: necesita escribir en target/ compartido" });
+    record.pending = true;
+    return;
+  }
+  await finish(threadId, record, "Listo. Revisé el código y propongo:\n1. Ajustar el componente.\n2. Agregar tests.");
+}
+
+async function finish(threadId, record, answer) {
+  for (const word of answer.split(/(?<= )/)) {
+    session({ type: "agentDelta", threadId, turnId: record.turn_id, delta: word });
+    await wait(25);
+  }
+  record.response = (record.response || "") + answer;
+  record.status = "completed";
+  record.tokens = { input: 19800, cached_input: 11000, output: 240, reasoning: 30, total: 20040 };
+  limits = { ...limits, primary: { ...limits.primary, usedPercent: limits.primary.usedPercent + 2 } };
+  session({ type: "rateLimits", snapshot: limits });
+  session({ type: "turnCompleted", threadId, turnId: record.turn_id, status: "completed", error: null });
+}
+
+mockIPC(async (cmd, args) => {
+  switch (cmd) {
+    case "router_config": return config;
+    case "router_decide": await wait(400); return decide(args.prompt);
+    case "router_escalate": return { ...args.decision, tier: "fuerte", ...config.tiers.fuerte, source: "manual", reason: `escalado manual desde ${args.decision.tier}` };
+    case "chat_projects": return [...new Set(threads.map((t) => t.cwd))];
+    case "thread_list":
+      if (args.project !== undefined && args.project !== null && !String(args.project).includes("proyectos")) throw new Error("carpeta de proyecto inválida: no existe");
+      return summaries(Boolean(args.includeArchived));
+    case "chat_turns": return turns[args.threadId] ?? [];
+    case "dashboard_summary": return dashboard();
+    case "usage_summary": return { models: [], rateLimits: limits };
+    case "thread_rename": { const t = threads.find((x) => x.thread_id === args.threadId); if (t) t.title = args.title.trim(); return Boolean(t); }
+    case "thread_archive": { const t = threads.find((x) => x.thread_id === args.threadId); if (t) t.archived = args.archived; return Boolean(t); }
+    case "chat_send": {
+      let thread = threads.find((t) => t.thread_id === args.threadId);
+      if (!thread) {
+        thread = { thread_id: `t${++counter}`, cwd: args.project, title: args.prompt.slice(0, 80), archived: false, created_at: String(now()), updated_at: String(now()) };
+        threads.push(thread);
+        turns[thread.thread_id] = [];
+      }
+      thread.updated_at = String(now());
+      const record = { turn_id: `u${++counter}`, thread_id: thread.thread_id, prompt: args.prompt, ...args.decision, status: "running",
+        response: "", error: null, tokens: { input: 0, cached_input: 0, output: 0, reasoning: 0, total: 0 }, created_at: String(now()), completed_at: null };
+      delete record.risk;
+      turns[thread.thread_id].push(record);
+      stream(thread.thread_id, record);
+      return { threadId: thread.thread_id, turnId: record.turn_id };
+    }
+    case "chat_approval": {
+      const record = Object.values(turns).flat().find((t) => t.pending);
+      if (record) {
+        record.pending = false;
+        session({ type: "itemCompleted", threadId: record.thread_id, turnId: record.turn_id,
+          item: { id: "cmd-" + record.turn_id, type: "commandExecution", command: "cargo test -p reports holidays",
+            status: args.decision.startsWith("accept") ? "completed" : "declined", exitCode: args.decision.startsWith("accept") ? 0 : null } });
+        finish(record.thread_id, record, `\nDecisión: ${args.decision}.`);
+      }
+      return null;
+    }
+    case "chat_interrupt": return null;
+    case "local_snapshot": return { state_path: "fixture.sqlite3", initialized: false, tasks: [], task_total: 0, status_counts: {}, milestones: [], runs: [], approvals: [], errors: [], error_count: 0 };
+    default: throw new Error(`Unexpected command: ${cmd}`);
+  }
+}, { shouldMockEvents: true });
+
+localStorage.setItem("roudex.project", JSON.stringify("C:\\proyectos\\api-service"));
+localStorage.setItem("roudex.view", JSON.stringify(new URLSearchParams(location.search).get("view") ?? "resumen"));
+await import("../src/main.jsx");
+</script>
+</body></html>

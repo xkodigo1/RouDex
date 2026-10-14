@@ -43,7 +43,20 @@ pub(crate) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
              completed_at TEXT
          );
          CREATE INDEX IF NOT EXISTS idx_chat_turns_thread ON chat_turns(thread_id);",
-    )
+    )?;
+    // Columns added after the first release of the chat tables.
+    let has_archived: bool = connection.query_row(
+        "SELECT count(*) > 0 FROM pragma_table_info('chat_threads') WHERE name = 'archived'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_archived {
+        connection.execute(
+            "ALTER TABLE chat_threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
