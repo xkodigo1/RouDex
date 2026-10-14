@@ -12,7 +12,9 @@ pub mod session;
 pub mod task_manifest;
 pub mod tiers;
 
-pub use app_server::{AppServerClient, AppServerConfig, AppServerError, AppServerTurn};
+pub use app_server::{
+    AppServerClient, AppServerConfig, AppServerError, AppServerTurn, TurnSettings,
+};
 pub use chat::{
     project_dir, ChatRecorder, ChatService, ChatThread, ChatTurn, ConfigFactory, ModelUsage,
     SentTurn, TokenCounts,
@@ -39,7 +41,7 @@ pub use routing::{
 pub use session::{
     AccessMode, ApprovalDecision, ApprovalKind, EventSink, Session, SessionError, SessionEvent,
 };
-pub use task_manifest::{ManifestError, TaskManifest};
+pub use task_manifest::{ManifestError, RouteConflict, TaskManifest};
 pub use tiers::{
     CatalogModel, DesktopHookConfig, ModelTarget, RouterConfig, RouterConfigError, Tier,
     TierTargets, ROUTER_CONFIG_VERSION,

@@ -295,13 +295,22 @@ fn install_creates_hooks_json_and_uninstall_without_one_is_a_no_op() {
 }
 
 /// Shells that may run a hook command; Codex does not say which one it uses.
+/// On Windows `sh` only exists with Git Bash or similar, so it is tested
+/// when present; cmd and PowerShell always are.
 fn shells(command: &str) -> Vec<Command> {
     let shell = |program: &str, args: &[&str]| {
         let mut shell = Command::new(program);
         shell.args(args).arg(command);
         shell
     };
-    let mut shells = vec![shell("sh", &["-c"])];
+    let has_sh = Command::new("sh")
+        .args(["-c", "exit 0"])
+        .status()
+        .is_ok_and(|status| status.success());
+    let mut shells = Vec::new();
+    if has_sh || !cfg!(windows) {
+        shells.push(shell("sh", &["-c"]));
+    }
     if cfg!(windows) {
         shells.push(shell("cmd", &["/d", "/c"]));
         shells.push(shell(
@@ -321,7 +330,9 @@ fn the_installed_command_runs_in_every_shell() {
         .as_str()
         .unwrap()
         .to_owned();
-    for (turn, mut shell) in shells(&command).into_iter().enumerate() {
+    let shells = shells(&command);
+    let tried = shells.len() as i64;
+    for (turn, mut shell) in shells.into_iter().enumerate() {
         let input = json!({ "session_id": "s", "turn_id": turn.to_string(),
             "cwd": sandbox.0.join("project"), "model": "gpt-6-luna", "prompt": RISKY });
         let mut child = shell
@@ -347,7 +358,7 @@ fn the_installed_command_runs_in_every_shell() {
             shell.get_program()
         );
     }
-    assert_eq!(sandbox.store().desktop_summary().unwrap().warned, 3);
+    assert_eq!(sandbox.store().desktop_summary().unwrap().warned, tried);
 }
 
 #[test]

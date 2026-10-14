@@ -1,4 +1,6 @@
-use router_core::{AppServerClient, AppServerConfig, TaskDefinition, TaskSandbox, TaskStatus};
+use router_core::{
+    AppServerClient, AppServerConfig, TaskDefinition, TaskSandbox, TaskStatus, TurnSettings,
+};
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -87,26 +89,25 @@ fn app_server_stdio_receives_assigned_model_and_effort() {
         active_task_id: Some("T-004".to_owned()),
     };
 
-    (|| {
+    {
         let mut client = AppServerClient::start(&config).expect("start fake app server");
         let thread_id = client
             .start_thread("gpt-6.1-sol", &cwd, "never", "workspace-write")
             .expect("start thread");
+        let settings = TurnSettings {
+            model: "gpt-6.1-sol",
+            effort: "high",
+            cwd: &cwd,
+            approval_policy: "never",
+            sandbox: "workspace-write",
+        };
         let turn = client
-            .run_turn(
-                &thread_id,
-                "run the protocol test",
-                "gpt-6.1-sol",
-                "high",
-                &cwd,
-                "never",
-                "workspace-write",
-            )
+            .run_turn(&thread_id, "run the protocol test", &settings)
             .expect("run turn");
         assert_eq!(thread_id, "fake-thread");
         assert_eq!(turn.turn_id, "fake-turn");
         assert_eq!(turn.status, "completed");
         assert_eq!(turn.text, "fake completion");
-    })();
+    }
     let _ = fs::remove_dir_all(&cwd);
 }

@@ -29,21 +29,26 @@ pub enum ManifestError {
     DependencyCycle(String),
     #[error("task {task_id} uses unknown profile {profile}")]
     UnknownProfile { task_id: String, profile: String },
-    #[error("task {task_id} profile {profile} resolves to {expected_model}/{expected_effort}, not {model}/{effort}")]
-    RouteConflict {
-        task_id: String,
-        profile: String,
-        expected_model: String,
-        expected_effort: String,
-        model: String,
-        effort: String,
-    },
+    // Boxed: six strings would make every Result carrying this error large.
+    #[error("task {} profile {} resolves to {}/{}, not {}/{}", .0.task_id, .0.profile, .0.expected_model, .0.expected_effort, .0.model, .0.effort)]
+    RouteConflict(Box<RouteConflict>),
     #[error("task {task_id} requires a title, prompt, cwd, acceptance and verify command")]
     MissingExecutionContract { task_id: String },
     #[error("could not read manifest: {0}")]
     Io(String),
     #[error("could not parse manifest: {0}")]
     Parse(String),
+}
+
+/// A task whose declared model or effort differs from its profile's route.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteConflict {
+    pub task_id: String,
+    pub profile: String,
+    pub expected_model: String,
+    pub expected_effort: String,
+    pub model: String,
+    pub effort: String,
 }
 
 impl TaskManifest {
@@ -92,14 +97,14 @@ impl TaskManifest {
                     profile: task.profile.clone(),
                 })?;
             if route.model != task.model || route.effort != task.effort {
-                return Err(ManifestError::RouteConflict {
+                return Err(ManifestError::RouteConflict(Box::new(RouteConflict {
                     task_id: task.id.clone(),
                     profile: task.profile.clone(),
                     expected_model: route.model.to_owned(),
                     expected_effort: route.effort.to_owned(),
                     model: task.model.clone(),
                     effort: task.effort.clone(),
-                });
+                })));
             }
         }
 
@@ -229,7 +234,7 @@ mod tests {
         invalid.model = "gpt-6.1-sol".to_owned();
         assert!(matches!(
             manifest(vec![invalid]).validate(),
-            Err(ManifestError::RouteConflict { .. })
+            Err(ManifestError::RouteConflict(_))
         ));
     }
 }
