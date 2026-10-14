@@ -15,7 +15,9 @@ Rust estable MSVC, `codex app-server` de Codex Desktop.
 | A08 turno repetido | `desktop_hook::tests::a_repeated_turn_updates_one_row_and_the_summary_counts_it_once`, `hook_cli::a_repeated_turn_is_recorded_once` | OK |
 | A09 instalar y desinstalar | `hook_cli::install_is_idempotent_and_uninstall_keeps_other_hooks`, `hook_cli::install_creates_hooks_json_and_uninstall_without_one_is_a_no_op`, `hook_cli::the_installed_command_runs_in_every_shell` | OK |
 | A10 Resumen | Fixture en el navegador (con datos y vacío, 900 px) y ventana real de Tauri con datos aislados | OK |
-| A11 Codex real | Pendiente: requiere instalar y confiar en el hook en el Codex del usuario | Pendiente |
+| A11 Codex real | Codex Desktop del usuario, ver detalle | OK |
+| A12 contexto del paquete | `Invoke-CommandInDesktopPackage` con el comando instalado | OK |
+| A13 registro de fallos | `hook_cli::failures_let_the_prompt_through` (4 fallos, 4 líneas, sin el texto del mensaje) | OK |
 
 ## A10 · Detalle
 
@@ -31,3 +33,34 @@ Rust estable MSVC, `codex app-server` de Codex Desktop.
 
 `router-cli hook` en release: 62–82 ms por llamada, contando el arranque del
 proceso (5 ejecuciones).
+
+## A11 · Codex Desktop real (2026-10-14)
+
+Codex Desktop `26.1007.9446.0`, `codex-cli 0.162.0-alpha.17.2`, hook de usuario
+confiado y activado.
+
+1. **Primera prueba (16:10–16:15):** sin contexto ni registro. Ver A12.
+2. **Tras mover el hook a `~/.roudex` (16:23–16:24):**
+   - «Responde solo "ok": … migración en producción», modelo `gpt-5.6-luna`:
+     registro `fuerte` / `risk` / `warn`; la sesión lleva el contexto de RouDex
+     como mensaje `developer`. Codex Desktop no mostró el `systemMessage`.
+   - «Explica qué es un trait en Rust»: registro `economico` / `rule` /
+     `context`; la sesión lleva el contexto.
+   - La tarjeta de Resumen mostró los dos mensajes después de recargar.
+3. **Aviso visible (D7), 16:55:** chat nuevo, «Responde solo "ok": prueba de
+   RouDex sobre una migración en producción», modelo `gpt-5.6-luna`. Registro
+   `fuerte` / `risk` / `warn` a las 16:55:13. La respuesta del modelo en la
+   sesión empieza con «⚠ RouDex: mensaje de riesgo (produccion, migracion). Se
+   recomienda el tier fuerte (gpt-6.1-sol high); este chat usa gpt-5.6-luna.»
+   y sigue con «ok». La tarjeta de Resumen muestra los tres mensajes.
+
+## A12 · Detalle
+
+`Invoke-CommandInDesktopPackage -PackageFamilyName OpenAI.Codex_2p2nqsd0c76g0`
+ejecutando el comando de `hooks.json` con `cmd /c`:
+
+- **Antes:** `%LOCALAPPDATA%\RouDex\bin\router-cli.exe` resolvía a un binario de
+  2,8 MB del 13 de octubre (`v0.5.0`), en la copia privada del paquete. Salida:
+  la ayuda antigua, código 0.
+- **Después:** `~/.roudex/bin/router-cli.exe hook` devuelve el aviso de RouDex,
+  con la línea `⚠ RouDex: …` en el contexto, y crea la base en la carpeta real.

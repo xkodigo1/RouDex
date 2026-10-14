@@ -48,3 +48,35 @@ no el mensaje.
 `AGENTS.md` pide no usar RouDex para construir RouDex hasta que sea estable.
 Las tareas se implementan directamente y se registran con `route_id` y
 `run_id` nulos.
+
+## D6 · El hook vive fuera de AppData
+
+*Sustituye la ubicación de D3 (la base de datos) y de D4 (el ejecutable).*
+
+Codex Desktop es una app empaquetada (MSIX). Para los procesos que lanza,
+Windows sustituye `%LOCALAPPDATA%` y `%APPDATA%` por una copia privada del
+paquete. En la prueba real, la ruta del hook resolvía a un `router-cli` de
+`v0.5.0` que quedó en esa copia: imprimía su ayuda, salía con 0 y Codex no
+recibía contexto. Las escrituras también habrían ido a la copia.
+
+- `hook-install` copia `router-cli` a `~/.roudex/bin` (`ROUDEX_HOME`) y apunta
+  `hooks.json` ahí; rechaza rutas dentro de AppData.
+- El hook registra en `~/.roudex/desktop-hook.sqlite3`; la app lee de ahí.
+- `router.toml` se sigue leyendo de `%LOCALAPPDATA%\RouDex`: la lectura cae al
+  archivo real mientras el paquete no tenga su propia copia.
+- Descartado: mover todos los datos de RouDex fuera de AppData. Es un cambio
+  mayor que no hace falta para el hook.
+
+## D7 · El aviso lo repite el modelo
+
+Codex Desktop no muestra el `systemMessage` de un hook. En modo aviso, el
+contexto pide al modelo que empiece su respuesta con la línea `⚠ RouDex: …`.
+`systemMessage` se mantiene para Codex CLI.
+
+- Descartado: bloquear para que el aviso se vea. Contradice D2.
+
+## D8 · Registro de fallos
+
+Codex Desktop no muestra el stderr de los hooks. Cada fallo se escribe también
+en `~/.roudex/hook.log` con el error y los nombres y tipos de los campos
+recibidos, nunca sus valores. El archivo se reinicia al pasar de 64 KiB.

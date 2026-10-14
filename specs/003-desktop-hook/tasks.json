@@ -1,8 +1,8 @@
 {
   "spec_id": "003-desktop-hook",
   "title": "Codex Desktop context hook",
-  "version": 1,
-  "status": "running",
+  "version": 2,
+  "status": "completed",
   "planning_assumption": "Scope approved in chat on 2026-10-14: rules-only decisions, warn by default with opt-in blocking, decisions recorded in SQLite and shown in Resumen. Tasks run outside the coordinator per AGENTS.md (decision D5).",
   "execution_policy": {
     "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D5)",
@@ -15,14 +15,15 @@
     {
       "id": "H1",
       "title": "Hook de contexto",
-      "status": "running",
+      "status": "completed",
       "release_target": "v0.7.0",
       "depends_on": [],
       "task_ids": [
         "R003-T001",
         "R003-T002",
         "R003-T003",
-        "R003-T004"
+        "R003-T004",
+        "R003-T005"
       ],
       "release_gate_task": "R003-T004",
       "exit_criteria": [
@@ -146,6 +147,26 @@
         "R003-T004"
       ],
       "verification": "specs/003-desktop-hook/acceptance-evidence.md"
+    },
+    {
+      "id": "A12",
+      "precondition": "Hook installed; Codex Desktop is a packaged (MSIX) app that sees a private copy of %LOCALAPPDATA%.",
+      "action": "Run the installed hook command inside the Codex Desktop package context.",
+      "observable_result": "The command runs the current router-cli from ~/.roudex/bin, prints the RouDex response and records the decision in the real ~/.roudex store.",
+      "task_ids": [
+        "R003-T005"
+      ],
+      "verification": "Invoke-CommandInDesktopPackage probe; hook_cli install tests; acceptance-evidence.md"
+    },
+    {
+      "id": "A13",
+      "precondition": "The hook fails (invalid input or configuration).",
+      "action": "Run the hook.",
+      "observable_result": "~/.roudex/hook.log gets one line with the error and the input field names, never the prompt; the prompt still passes.",
+      "task_ids": [
+        "R003-T005"
+      ],
+      "verification": "cargo test -p router-cli --test hook_cli"
     }
   ],
   "tasks": [
@@ -299,9 +320,10 @@
       "prompt": "Document install, trust, configuration and removal; run the native check with the user's Codex; record acceptance evidence; bump the workspace and UI versions to 0.7.0. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
       "depends_on": [
         "R003-T002",
-        "R003-T003"
+        "R003-T003",
+        "R003-T005"
       ],
-      "status": "planned",
+      "status": "completed",
       "profile": "standard",
       "model": "claude-opus-5-5",
       "effort": "high",
@@ -324,7 +346,7 @@
       },
       "acceptance": [
         "docs/desktop-hook.md covers install, trust, block_high_risk and uninstall.",
-        "acceptance-evidence.md covers A01-A11.",
+        "acceptance-evidence.md covers A01-A13.",
         "Manifests at 0.7.0 and cargo test --workspace passes."
       ],
       "verify": "cargo test --workspace",
@@ -334,9 +356,77 @@
       "verification_artifact": "specs/003-desktop-hook/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D5); route_id and run_id stay null.",
+        "docs/desktop-hook.md covers install, trust, ~/.roudex, block_high_risk, failures, v0.5 leftovers and uninstall.",
+        "acceptance-evidence.md covers A01-A13 with results.",
+        "A11 in the user's Codex Desktop, 2026-10-14 16:55: the reply to a risky prompt on gpt-5.6-luna starts with the '⚠ RouDex: mensaje de riesgo' line; ~/.roudex/desktop-hook.sqlite3 holds three decisions (two warn, one context).",
+        "Cargo.toml and ui/package.json at 0.7.0; cargo test --workspace: 129 passed, 0 failed in three consecutive runs.",
+        "Commit b09b477; tag and release follow the merge on the user's go-ahead."
+      ],
+      "release_target": "v0.7.0"
+    },
+    {
+      "id": "R003-T005",
+      "milestone": "H1",
+      "title": "Run the hook outside AppData and make the warning visible",
+      "prompt": "Move the hook binary, store and failure log to ROUDEX_HOME (~/.roudex), refuse AppData install locations, report the v0.5 managed hook, repeat the warning through the model context because Codex Desktop hides systemMessage, and reload the Resumen card on focus. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R003-T002",
+        "R003-T003"
+      ],
+      "status": "completed",
+      "profile": "standard",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "approval": "not_required",
+      "approval_requirements": "The user asked in chat to make the hook work in Codex Desktop; this covers implementation and local verification only.",
+      "scope": [
+        "crates/router-core",
+        "crates/router-cli",
+        "src-tauri/src",
+        "ui/src"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates",
+          "src-tauri",
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "A12 and A13 hold.",
+        "hook-install refuses ROUDEX_HOME under AppData and reports the v0.5 managed hook.",
+        "Warned prompts carry the visible warning line in additionalContext."
+      ],
+      "verify": "cargo test -p router-cli --test hook_cli",
+      "scenario_ids": [
+        "A12",
+        "A13"
+      ],
+      "verification_artifact": "specs/003-desktop-hook/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D5); route_id and run_id stay null.",
+        "Root cause, from an Invoke-CommandInDesktopPackage probe: inside the Codex package, %LOCALAPPDATA%\\RouDex\\bin\\router-cli.exe resolved to a 2.8 MB v0.5 binary in the package's private copy, which printed its usage and exited 0.",
+        "Same probe after the fix: ~/.roudex/bin/router-cli.exe hook prints the RouDex warning and writes the store in the real home.",
+        "Codex Desktop, 2026-10-14 16:23-16:24: two prompts recorded in ~/.roudex/desktop-hook.sqlite3 (risk -> warn, explain -> economico) and both sessions carry the RouDex developer context.",
+        "cargo test -p router-core desktop_hook: 16 passed; cargo test -p router-cli --test hook_cli: 9 passed.",
+        "Commits 300a08d and 48374e6."
+      ],
       "release_target": "v0.7.0"
     }
   ],
-  "revision_history": []
+  "revision_history": [
+    {
+      "version": 2,
+      "date": "2026-10-14",
+      "reason": "The real Codex Desktop check showed the hook ran a stale binary from the MSIX private copy of %LOCALAPPDATA% and that Desktop hides systemMessage. Adds R003-T005 and scenarios A12-A13; decisions D6-D8.",
+      "previous_contract": "Version 1 placed the hook store under %LOCALAPPDATA%\\RouDex and installed the command from the running router-cli path; D6 supersedes those locations.",
+      "status_policy": "No existing task id, outcome, status or evidence changed. R003-T004 gained a dependency on R003-T005."
+    }
+  ]
 }

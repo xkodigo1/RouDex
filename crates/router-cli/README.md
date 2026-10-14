@@ -40,8 +40,11 @@ any configured tier that the catalog does not support. See
 `hook` is the Codex `UserPromptSubmit` hook: it routes the prompt with the risk
 and fast rules only, prints the hook response (context, a warning, or a block
 when `[desktop_hook] block_high_risk = true`), records the decision without the
-prompt text, and always exits 0. `hook-install` and `hook-uninstall` manage the
-RouDex entry in `$CODEX_HOME/hooks.json`. See
+prompt text in `~/.roudex/desktop-hook.sqlite3`, logs failures to
+`~/.roudex/hook.log`, and always exits 0. `hook-install` copies `router-cli` to
+`~/.roudex/bin` (outside AppData, which Codex Desktop sees as a private copy)
+and points the RouDex entry in `$CODEX_HOME/hooks.json` at it;
+`hook-uninstall` removes that entry. See
 [docs/desktop-hook.md](../../docs/desktop-hook.md).
 
 `route-preview` resolves a legacy coordinator profile without opening the local

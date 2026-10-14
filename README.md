@@ -8,7 +8,7 @@ Se ejecuta sobre `codex app-server` (stdio). Claude será el segundo runtime.
 
 ## Estado
 
-El hito `v0.7.0` (integración con Codex Desktop) está en curso. La app de
+La versión actual es `v0.7.0` (integración con Codex Desktop). La app de
 escritorio tiene tres pantallas:
 
 - **Resumen**: tokens del año y de hoy, calendario de actividad por día,

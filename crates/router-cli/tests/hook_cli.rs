@@ -1,5 +1,6 @@
 //! `router-cli hook`, `hook-install` and `hook-uninstall` against the built
-//! binary, with isolated `LOCALAPPDATA` and `CODEX_HOME`.
+//! binary, with isolated `LOCALAPPDATA`, `APPDATA`, `ProgramData`,
+//! `CODEX_HOME` and `ROUDEX_HOME`.
 
 use router_core::RouterStore;
 use serde_json::{json, Value};
@@ -25,8 +26,11 @@ impl Sandbox {
         let mut command = Command::new(env!("CARGO_BIN_EXE_router-cli"));
         command
             .args(args)
-            .env("LOCALAPPDATA", &self.0)
+            .env("LOCALAPPDATA", self.0.join("appdata"))
+            .env("APPDATA", self.0.join("roaming"))
+            .env("ProgramData", self.0.join("programdata"))
             .env("CODEX_HOME", self.0.join("codex"))
+            .env("ROUDEX_HOME", self.home())
             .env_remove("ROUDEX_ROUTER_INTERNAL")
             .env_remove("ROUDEX_ACTIVE_TASK_ID")
             .stdin(Stdio::piped())
@@ -59,13 +63,21 @@ impl Sandbox {
         self.run(&["hook"], &input.to_string(), &[])
     }
 
-    fn router_toml(&self, contents: &str) {
-        fs::create_dir_all(self.0.join("RouDex")).unwrap();
-        fs::write(self.0.join("RouDex").join("router.toml"), contents).unwrap();
+    fn home(&self) -> PathBuf {
+        self.0.join("home")
     }
 
+    fn router_toml(&self, contents: &str) {
+        let dir = self.0.join("appdata").join("RouDex");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("router.toml"), contents).unwrap();
+    }
+
+    /// The hook store lives in ROUDEX_HOME, outside AppData.
     fn store(&self) -> RouterStore {
-        RouterStore::open(self.0.join("RouDex").join("router.sqlite3")).unwrap()
+        let path = self.home().join("desktop-hook.sqlite3");
+        assert!(path.exists(), "the hook store is in ROUDEX_HOME");
+        RouterStore::open(path).unwrap()
     }
 
     fn hooks_json(&self) -> PathBuf {
@@ -171,6 +183,12 @@ fn failures_let_the_prompt_through() {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("router configuration"));
+    // Codex Desktop hides stderr, so every failure also lands in hook.log,
+    // with the field names but never the prompt.
+    let log = fs::read_to_string(sandbox.home().join("hook.log")).unwrap();
+    assert_eq!(log.lines().count(), 4, "{log}");
+    assert!(log.contains("missing field `session_id`") && log.contains("campos: prompt:string"));
+    assert!(!log.contains("sin sesión") && !log.contains("migración"));
 }
 
 #[test]
@@ -185,7 +203,8 @@ fn roudex_internal_turns_are_ignored() {
     );
     assert!(output.status.success());
     assert!(output.stdout.is_empty() && output.stderr.is_empty());
-    assert!(!sandbox.0.join("RouDex").join("router.sqlite3").exists());
+    assert!(!sandbox.home().join("desktop-hook.sqlite3").exists());
+    assert!(!sandbox.home().join("hook.log").exists());
 }
 
 fn hooks(path: &Path) -> Value {
@@ -226,10 +245,20 @@ fn install_is_idempotent_and_uninstall_keeps_other_hooks() {
     assert_eq!(groups.len(), 2);
     assert_eq!(groups[0]["hooks"][0]["command"], "notify.exe");
     let command = groups[1]["hooks"][0]["command"].as_str().unwrap();
+    let binary = sandbox.home().join("bin").join(if cfg!(windows) {
+        "router-cli.exe"
+    } else {
+        "router-cli"
+    });
     assert!(
-        command.contains("router-cli") && command.ends_with(" hook"),
-        "{command}"
+        binary.exists(),
+        "hook-install copies router-cli to ROUDEX_HOME"
     );
+    assert_eq!(
+        command,
+        format!("{} hook", binary.to_string_lossy().replace('\\', "/"))
+    );
+    assert!(first["legacyManagedHook"].is_null());
     assert_eq!(
         document["hooks"]["Stop"][0]["hooks"][0]["command"],
         "beep.exe"
@@ -296,7 +325,8 @@ fn the_installed_command_runs_in_every_shell() {
         let input = json!({ "session_id": "s", "turn_id": turn.to_string(),
             "cwd": sandbox.0.join("project"), "model": "gpt-6-luna", "prompt": RISKY });
         let mut child = shell
-            .env("LOCALAPPDATA", &sandbox.0)
+            .env("ROUDEX_HOME", sandbox.home())
+            .env("LOCALAPPDATA", sandbox.0.join("appdata"))
             .env_remove("ROUDEX_ROUTER_INTERNAL")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -318,4 +348,36 @@ fn the_installed_command_runs_in_every_shell() {
         );
     }
     assert_eq!(sandbox.store().desktop_summary().unwrap().warned, 3);
+}
+
+#[test]
+fn install_refuses_app_data_and_reports_the_v05_managed_hook() {
+    let sandbox = Sandbox::new("guards");
+    // A home under LOCALAPPDATA would be a private copy for Codex Desktop.
+    let inside = sandbox.0.join("appdata").join("RouDex");
+    let output = sandbox.run(
+        &["hook-install"],
+        "",
+        &[("ROUDEX_HOME", inside.to_str().unwrap())],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("LOCALAPPDATA"));
+    assert!(!sandbox.hooks_json().exists());
+
+    let managed = sandbox.0.join("programdata").join("OpenAI").join("Codex");
+    fs::create_dir_all(&managed).unwrap();
+    fs::write(
+        managed.join("requirements.toml"),
+        "# RouDex managed desktop routing hook
+[[hooks.UserPromptSubmit]]
+",
+    )
+    .unwrap();
+    let installed = sandbox.run(&["hook-install"], "", &[]);
+    let report = stdout_json(&installed);
+    assert!(report["legacyManagedHook"]
+        .as_str()
+        .unwrap()
+        .ends_with("requirements.toml"));
+    assert!(String::from_utf8_lossy(&installed.stderr).contains("v0.5.0"));
 }

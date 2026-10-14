@@ -96,7 +96,22 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
 
   useEffect(() => {
     invoke("dashboard_summary").then(setData).catch((reason) => setError(String(reason)));
-    invoke("desktop_hook_summary").then(setDesktop).catch((reason) => setError(String(reason)));
+  }, [revision]);
+
+  // Codex Desktop prompts arrive from another app: reload when the window
+  // comes back to the front and every 30 s while the summary is open.
+  useEffect(() => {
+    const load = () => invoke("desktop_hook_summary").then(setDesktop).catch((reason) => setError(String(reason)));
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    load();
+    const timer = setInterval(load, 30_000);
+    window.addEventListener("focus", load);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", load);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [revision]);
 
   useEffect(() => {
