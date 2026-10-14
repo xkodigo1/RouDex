@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "RouDex",
-  "version": "0.1.0",
   "identifier": "local.roudex.desktop",
   "build": {
     "beforeDevCommand": "pnpm --dir ../ui dev",
