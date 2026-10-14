@@ -887,3 +887,14 @@ git diff --check && powershell -NoProfile -Command "if (-not (Test-Path -Literal
 ```
 
 Evidence artifact: `specs/002-product-roadmap/release-handoff.md`. Review its observed results before completion; existence alone is insufficient.
+
+Actual verification record (2026-10-13):
+
+- Existing browser fixture: overview checks PASS (21); detail checks PASS (20). State observations: populated (4 tasks/3 runs), empty (explicit empty snapshot), stale read error (error and stale snapshot retain selection), missing store (explicit), and event error/retry (explicit failure, successful read-only retry).
+- Keyboard/focus: Tab focused the first fixture control; visible 2 px light-blue outline observed. Complete app keyboard navigation was not verified.
+- Requested viewports 1280x720 and 800x600: not verified. Available browser surface showed 2560x1344 and exposed no viewport override. Evidence artifact records this gap; no native evidence is claimed.
+- `cargo test --offline -p roudex-desktop --test control_center`: PASS, exit 0, 5 passed / 0 failed.
+- `pnpm --dir ui build --config tests/vite.config.js --configLoader runner`: PASS, exit 0, Vite 7.3.7, 33 modules.
+- Evidence existence check: PASS, exit 0. `git diff --check`: PASS, exit 0 (Git line-ending notice only).
+- Result: evidence added, acceptance incomplete; task remains planned and H2 is not complete.
+

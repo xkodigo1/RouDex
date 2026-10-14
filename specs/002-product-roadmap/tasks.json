@@ -313,7 +313,10 @@
       "verification_artifact": "ui/tests/control-center-accessibility-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": []
+      "evidence": [
+        "ui/tests/control-center-accessibility-evidence.md",
+        "Fixture overview: PASS 21 checks; details: PASS 20 checks; cargo test offline: PASS 5/5; fixture build: PASS (33 modules). Keyboard focus observed on first fixture button only. Requested 1280x720 and 800x600 viewports and full application keyboard traversal NOT VERIFIED; no native evidence. Acceptance incomplete; status remains planned."
+      ]
     },
     {
       "id": "R002-T006",
