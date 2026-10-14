@@ -4,6 +4,7 @@ Run from the workspace root using `cargo run -p router-cli -- <command>`.
 Commands use the local SQLite store; no remote service is added.
 
 ```text
+chat <projectDir>             (prompt on stdin)
 route <projectDir>            (prompt on stdin)
 models [projectDir]
 route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]
@@ -19,6 +20,12 @@ continue-run <runId>
 run-events <runId>
 status
 ```
+
+`chat` routes the prompt, sends it in a new thread of the project's
+`codex app-server` session (workspace-write limited to the project, approvals
+on request) and prints every session event as JSON until the turn ends.
+Approval requests are declined; the desktop app is where they are answered.
+The thread, turn, response and token usage are stored in the local SQLite.
 
 `route` prints the router decision for a prompt (tier, model, effort, source,
 reason and risk matches) using `router.toml` and the project's

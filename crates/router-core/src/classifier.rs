@@ -1,4 +1,4 @@
-use crate::app_server::{AppServerClient, AppServerError};
+use crate::app_server::{AppServerClient, AppServerConfig, AppServerError};
 use crate::risk::{words, RiskMatch, RiskRules};
 use crate::tiers::{ModelTarget, RouterConfig, Tier};
 use serde::{Deserialize, Serialize};
@@ -225,6 +225,54 @@ impl ModelClassifier for AppServerClassifier {
             .map_err(|error: AppServerError| error.to_string())?;
         parse_classification(&text)
     }
+}
+
+/// Starts `codex app-server` in the project only when the fast rules cannot
+/// settle the prompt.
+pub struct LocalClassifier {
+    cwd: PathBuf,
+    inner: Option<AppServerClassifier>,
+}
+
+impl LocalClassifier {
+    pub fn new(cwd: impl AsRef<Path>) -> Self {
+        Self {
+            cwd: cwd.as_ref().to_path_buf(),
+            inner: None,
+        }
+    }
+}
+
+impl ModelClassifier for LocalClassifier {
+    fn classify(&mut self, prompt: &str, target: &ModelTarget) -> Result<Classification, String> {
+        if self.inner.is_none() {
+            let client = AppServerClient::start(&AppServerConfig::local(&self.cwd))
+                .map_err(|error| error.to_string())?;
+            self.inner = Some(AppServerClassifier::new(client, &self.cwd));
+        }
+        self.inner
+            .as_mut()
+            .expect("classifier")
+            .classify(prompt, target)
+    }
+}
+
+/// Route a prompt for a project with the local `router.toml` and the
+/// project rules in `.roudex/rules.toml`. Nothing is executed.
+pub fn route_local(project: &Path, prompt: &str) -> Result<RouteDecision, String> {
+    let config = RouterConfig::load_or_default(&RouterConfig::default_path())
+        .map_err(|error| error.to_string())?;
+    let rules = RiskRules::for_project(project).map_err(|error| error.to_string())?;
+    let mut classifier = LocalClassifier::new(project);
+    Ok(Router::new(&config, &rules).decide(prompt.trim(), &mut classifier))
+}
+
+/// Manual escalation with the local configuration.
+pub fn escalate_local(previous: &RouteDecision) -> Result<RouteDecision, String> {
+    let config = RouterConfig::load_or_default(&RouterConfig::default_path())
+        .map_err(|error| error.to_string())?;
+    let rules = RiskRules::default();
+    Ok(Router::new(&config, &rules).escalate(previous))
 }
 
 #[cfg(test)]

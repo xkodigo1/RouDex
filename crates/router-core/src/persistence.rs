@@ -21,7 +21,7 @@ pub enum StoreError {
 }
 
 pub struct RouterStore {
-    connection: Connection,
+    pub(crate) connection: Connection,
     path: PathBuf,
 }
 
@@ -119,6 +119,7 @@ impl RouterStore {
                  created_at TEXT NOT NULL
              );",
         )?;
+        crate::chat::migrate(&self.connection)?;
         Ok(())
     }
 
@@ -626,7 +627,7 @@ impl RouterStore {
     }
 }
 
-fn now_string() -> String {
+pub(crate) fn now_string() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -1,11 +1,13 @@
 use router_core::{
-    AppServerClassifier, AppServerClient, AppServerConfig, Classification, LocalTaskRuntime,
-    ModelClassifier, ModelTarget, RiskRules, Router, RouterConfig, RouterStore, RoutingConfig,
-    RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest, TaskRuntime,
+    route_local, AppServerClient, AppServerConfig, LocalTaskRuntime, RouterConfig, RouterStore,
+    RoutingConfig, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest,
+    TaskRuntime,
 };
+use router_core::{ApprovalDecision, ChatService, SessionEvent};
 use serde_json::{json, Value};
 use std::env;
 use std::io::{self, Read};
+use std::path::Path;
 use std::path::PathBuf;
 
 fn main() {
@@ -36,6 +38,7 @@ fn run() -> Result<(), String> {
         return Err("un worker activo no puede invocar el ciclo del coordinador".to_owned());
     }
     match command.as_deref() {
+        Some("chat") => chat(checked_args(args.collect(), 1, 1, "chat <projectDir>")?),
         Some("route") => route(checked_args(args.collect(), 1, 1, "route <projectDir>")?),
         Some("models") => models(checked_args(args.collect(), 0, 1, "models [projectDir]")?),
         Some("route-preview") => route_preview(args.collect()),
@@ -74,26 +77,6 @@ fn run() -> Result<(), String> {
     }
 }
 
-/// Starts the runtime only when the fast rules cannot settle the prompt.
-struct LazyClassifier {
-    cwd: PathBuf,
-    inner: Option<AppServerClassifier>,
-}
-
-impl ModelClassifier for LazyClassifier {
-    fn classify(&mut self, prompt: &str, target: &ModelTarget) -> Result<Classification, String> {
-        if self.inner.is_none() {
-            let client = AppServerClient::start(&AppServerConfig::local(&self.cwd))
-                .map_err(|error| error.to_string())?;
-            self.inner = Some(AppServerClassifier::new(client, &self.cwd));
-        }
-        self.inner
-            .as_mut()
-            .expect("classifier")
-            .classify(prompt, target)
-    }
-}
-
 fn project_dir(arg: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(arg);
     if !path.is_dir() {
@@ -109,15 +92,46 @@ fn router_config() -> Result<RouterConfig, String> {
 /// Route a prompt read from stdin and print the decision; nothing is executed.
 fn route(args: Vec<String>) -> Result<(), String> {
     let cwd = project_dir(&args[0])?;
-    let config = router_config()?;
-    let rules = RiskRules::for_project(&cwd).map_err(|error| error.to_string())?;
     let mut prompt = String::new();
     io::stdin()
         .read_to_string(&mut prompt)
         .map_err(|error| format!("could not read prompt: {error}"))?;
-    let mut classifier = LazyClassifier { cwd, inner: None };
-    let decision = Router::new(&config, &rules).decide(prompt.trim(), &mut classifier);
+    let decision = route_local(&cwd, &prompt)?;
     write_json(&serde_json::to_value(decision).map_err(|error| error.to_string())?)
+}
+
+/// Route a prompt from stdin, send it in a new thread and print every session
+/// event as JSON until the turn ends. Approval requests are declined.
+fn chat(args: Vec<String>) -> Result<(), String> {
+    let project = router_core::project_dir(Path::new(&args[0]))?;
+    let mut prompt = String::new();
+    io::stdin()
+        .read_to_string(&mut prompt)
+        .map_err(|error| format!("could not read prompt: {error}"))?;
+    let decision = route_local(&project, &prompt)?;
+    write_json(&json!({ "decision": decision }))?;
+    let (events, received) = std::sync::mpsc::channel();
+    let service = ChatService::new(
+        RouterStore::open(RouterStore::default_path()).map_err(|error| error.to_string())?,
+        Box::new(|cwd: &Path| AppServerConfig::local(cwd)),
+        std::sync::Arc::new(move |event: SessionEvent| {
+            let _ = events.send(event);
+        }),
+    );
+    let sent = service.send(&project, None, prompt.trim(), &decision)?;
+    write_json(&json!({ "sent": sent }))?;
+    for event in received {
+        write_json(&serde_json::to_value(&event).map_err(|error| error.to_string())?)?;
+        match event {
+            SessionEvent::ApprovalRequested { request_id, .. } => {
+                service.respond_approval(&project, request_id, ApprovalDecision::Decline)?;
+            }
+            SessionEvent::TurnCompleted { turn_id, .. } if turn_id == sent.turn_id => break,
+            SessionEvent::Closed { reason } => return Err(reason),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Runtime model catalog and validation of the configured tiers.
@@ -470,6 +484,6 @@ fn write_json(value: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <route <projectDir> (prompt on stdin)|models [projectDir]|route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
+        "Usage: router-cli <chat <projectDir> (prompt on stdin)|route <projectDir> (prompt on stdin)|models [projectDir]|route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
     );
 }
