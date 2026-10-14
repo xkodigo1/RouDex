@@ -182,7 +182,7 @@
       "title": "Tier manifests, milestones and stricter validation",
       "prompt": "Extend TaskManifest/TaskDefinition: optional tier (economico|estandar|fuerte) and milestone per task, optional milestones list; tasks without tier but with profile map to a tier with a warning (D1); reject unknown tiers and danger-full-access sandboxes (D3); keep cycle and dependency checks; persist tier, tier source and milestone. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
       "depends_on": [],
-      "status": "planned",
+      "status": "completed",
       "tier": "fuerte",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -209,7 +209,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "cargo test -p router-core task_manifest: 8 passed (tier and no model, legacy profile mapping with warnings, unknown tier/profile/missing tier rejected, sandbox inside the project, milestones, repository specs 003 and 004 load).",
+        "cargo test -p router-cli --test task_cli spec_load_translates_legacy_profiles_and_reports_it: passed.",
+        "Brought forward from R004-T006: route-preview, RoutingConfig and the profile table removed, since dispatch no longer uses profiles.",
+        "Commit 82c80a2."
+      ],
       "release_target": "v0.8.0"
     },
     {
@@ -220,7 +226,7 @@
       "depends_on": [
         "R004-T001"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "fuerte",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -246,7 +252,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "cargo test -p router-core task_route: 3 passed (spec tier through router.toml, risk forces fuerte, manual wins with the risk kept on record, legacy profile reason).",
+        "cargo test -p router-core --test task_coordinator: 21 passed, including runs_record_the_model_router_toml_had_at_dispatch (A04), risk_forces_fuerte_and_a_manual_tier_wins_on_the_record (A05) and invalid_project_risk_rules_block_without_constructing_runtime.",
+        "cargo test --workspace: 126 passed; cargo clippy --workspace --all-targets -D warnings: clean.",
+        "Commit 82c80a2."
+      ],
       "release_target": "v0.8.0"
     },
     {
