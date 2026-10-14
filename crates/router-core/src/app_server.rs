@@ -284,6 +284,21 @@ impl AppServerClient {
 
     pub fn verify_task(&mut self, task: &TaskDefinition) -> Result<Value, AppServerError> {
         // The command executes in the same server sandbox, never in the coordinator host shell.
+        let cwd = absolute_cwd(task)?;
+        // Keep cargo away from the running coordinator executable on Windows.
+        // Hex encoding keeps arbitrary task ids inside one distinct path component.
+        let task_directory = format!(
+            "task-{}",
+            task.id
+                .as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
+        let cargo_target_dir = cwd
+            .join("target")
+            .join("roudex-verification")
+            .join(task_directory);
         let command = if cfg!(windows) {
             vec!["cmd.exe", "/D", "/S", "/C", task.verify.as_str()]
         } else {
@@ -291,9 +306,10 @@ impl AppServerClient {
         };
         let id = self.next_id();
         self.send(json!({ "id": id, "method": "command/exec", "params": {
-            "command": command, "cwd": absolute_cwd(task)?,
+            "command": command, "cwd": cwd,
             "sandboxPolicy": task_sandbox_policy(task)?, "timeoutMs": 120000,
-            "env": { "ROUDEX_ROUTER_INTERNAL": "1", "ROUDEX_ACTIVE_TASK_ID": task.id }
+            "env": { "ROUDEX_ROUTER_INTERNAL": "1", "ROUDEX_ACTIVE_TASK_ID": task.id,
+                "CARGO_TARGET_DIR": cargo_target_dir }
         }}))?;
         let previous_timeout = self.response_timeout;
         self.response_timeout = Duration::from_secs(150);
