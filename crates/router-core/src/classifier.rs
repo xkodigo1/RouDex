@@ -96,6 +96,16 @@ impl<'a> Router<'a> {
         }
     }
 
+    /// Risk rules and fast rules only, for callers that cannot wait for a
+    /// model. A prompt no rule settles gets the fallback tier.
+    pub fn decide_by_rules(&self, prompt: &str) -> RouteDecision {
+        let mut decision = self.decide(prompt, &mut NoClassifier);
+        if decision.source == DecisionSource::Fallback {
+            decision.reason = "ninguna regla aplica; sin clasificador".into();
+        }
+        decision
+    }
+
     /// Manual escalation: always the strongest tier, never automatic.
     pub fn escalate(&self, previous: &RouteDecision) -> RouteDecision {
         self.decision(
@@ -125,7 +135,15 @@ impl<'a> Router<'a> {
     }
 }
 
-fn describe(risk: &[RiskMatch]) -> String {
+struct NoClassifier;
+
+impl ModelClassifier for NoClassifier {
+    fn classify(&mut self, _: &str, _: &ModelTarget) -> Result<Classification, String> {
+        Err("rules only".into())
+    }
+}
+
+pub(crate) fn describe(risk: &[RiskMatch]) -> String {
     risk.iter()
         .map(|item| match item {
             RiskMatch::Keyword(keyword) => keyword.clone(),

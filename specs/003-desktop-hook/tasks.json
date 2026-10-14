@@ -1,0 +1,342 @@
+{
+  "spec_id": "003-desktop-hook",
+  "title": "Codex Desktop context hook",
+  "version": 1,
+  "status": "running",
+  "planning_assumption": "Scope approved in chat on 2026-10-14: rules-only decisions, warn by default with opt-in blocking, decisions recorded in SQLite and shown in Resumen. Tasks run outside the coordinator per AGENTS.md (decision D5).",
+  "execution_policy": {
+    "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D5)",
+    "network_access": false,
+    "future_task_approval": "manual",
+    "publication_authorized": false,
+    "framework_or_dependency_changes": "None planned. Present scope and decision before adding any dependency."
+  },
+  "milestones": [
+    {
+      "id": "H1",
+      "title": "Hook de contexto",
+      "status": "running",
+      "release_target": "v0.7.0",
+      "depends_on": [],
+      "task_ids": [
+        "R003-T001",
+        "R003-T002",
+        "R003-T003",
+        "R003-T004"
+      ],
+      "release_gate_task": "R003-T004",
+      "exit_criteria": [
+        "Every task completed with verify evidence.",
+        "Every scenario has evidence in acceptance-evidence.md.",
+        "Manifests at 0.7.0; tag and release published only on the user's go-ahead."
+      ]
+    }
+  ],
+  "acceptance_scenarios": [
+    {
+      "id": "A01",
+      "precondition": "Default router.toml; the prompt matches a risk rule; the chat model differs from the fuerte model.",
+      "action": "Run the hook with that UserPromptSubmit input.",
+      "observable_result": "Exit 0, a systemMessage warning naming the fuerte model, additionalContext with tier and risk; the prompt is not blocked.",
+      "task_ids": [
+        "R003-T001",
+        "R003-T002"
+      ],
+      "verification": "cargo test -p router-core desktop_hook; cargo test -p router-cli --test hook_cli"
+    },
+    {
+      "id": "A02",
+      "precondition": "router.toml with [desktop_hook] block_high_risk = true; same risky prompt and lower model.",
+      "action": "Run the hook.",
+      "observable_result": "decision block with a reason naming the fuerte model and effort.",
+      "task_ids": [
+        "R003-T001",
+        "R003-T002"
+      ],
+      "verification": "cargo test -p router-cli --test hook_cli"
+    },
+    {
+      "id": "A03",
+      "precondition": "Risky prompt; the chat already uses the fuerte model; blocking on.",
+      "action": "Run the hook.",
+      "observable_result": "Context only: no warning and no block.",
+      "task_ids": [
+        "R003-T001"
+      ],
+      "verification": "cargo test -p router-core desktop_hook"
+    },
+    {
+      "id": "A04",
+      "precondition": "Short explain prompt without risk.",
+      "action": "Run the hook.",
+      "observable_result": "Context recommends economico from a fast rule; no systemMessage.",
+      "task_ids": [
+        "R003-T001"
+      ],
+      "verification": "cargo test -p router-core desktop_hook"
+    },
+    {
+      "id": "A05",
+      "precondition": "A prompt no rule settles.",
+      "action": "Run the hook.",
+      "observable_result": "Context says no rule applied and names fallback_tier; no classifier call.",
+      "task_ids": [
+        "R003-T001"
+      ],
+      "verification": "cargo test -p router-core desktop_hook"
+    },
+    {
+      "id": "A06",
+      "precondition": "Invalid stdin, or an invalid router.toml.",
+      "action": "Run the hook.",
+      "observable_result": "Exit 0, empty stdout, reason on stderr; the prompt passes.",
+      "task_ids": [
+        "R003-T002"
+      ],
+      "verification": "cargo test -p router-cli --test hook_cli"
+    },
+    {
+      "id": "A07",
+      "precondition": "ROUDEX_ROUTER_INTERNAL is set (RouDex's own app-server turns).",
+      "action": "Run the hook.",
+      "observable_result": "Exit 0, no output, nothing recorded.",
+      "task_ids": [
+        "R003-T002"
+      ],
+      "verification": "cargo test -p router-cli --test hook_cli"
+    },
+    {
+      "id": "A08",
+      "precondition": "A decision for (session_id, turn_id) is already stored.",
+      "action": "Run the hook again for the same turn.",
+      "observable_result": "One row for that turn, updated; prompt text is never stored.",
+      "task_ids": [
+        "R003-T001",
+        "R003-T002"
+      ],
+      "verification": "cargo test -p router-core desktop_hook"
+    },
+    {
+      "id": "A09",
+      "precondition": "hooks.json with unrelated hooks and the legacy route-prompt hook.",
+      "action": "hook-install twice, then hook-uninstall.",
+      "observable_result": "One RouDex entry after both installs, legacy entry removed, unrelated hooks preserved; uninstall removes only RouDex entries.",
+      "task_ids": [
+        "R003-T002"
+      ],
+      "verification": "cargo test -p router-cli --test hook_cli"
+    },
+    {
+      "id": "A10",
+      "precondition": "Stored Codex Desktop decisions.",
+      "action": "Open Resumen.",
+      "observable_result": "A Codex Desktop card shows messages by tier, warnings, blocks and whether the hook is installed.",
+      "task_ids": [
+        "R003-T001",
+        "R003-T003"
+      ],
+      "verification": "cargo test -p router-core desktop_hook; ui/tests/chat-fixture.html in the browser"
+    },
+    {
+      "id": "A11",
+      "precondition": "Hook installed and trusted in the user's Codex.",
+      "action": "Send a risky prompt from Codex with a non-fuerte model.",
+      "observable_result": "The warning appears in Codex and the decision shows in the RouDex Resumen.",
+      "task_ids": [
+        "R003-T004"
+      ],
+      "verification": "specs/003-desktop-hook/acceptance-evidence.md"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "R003-T001",
+      "milestone": "H1",
+      "title": "Rules-only hook decision, config and store",
+      "prompt": "Add a router-core module that turns a UserPromptSubmit input into a decision and a Codex hook response using risk rules and fast rules only, the optional [desktop_hook] block_high_risk setting in router.toml, and a desktop_prompts table keyed by (session_id, turn_id) without prompt text, plus a summary read model for the dashboard. Unit tests cover A01-A05, A08 and the summary. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [],
+      "status": "completed",
+      "profile": "standard",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "approval": "not_required",
+      "approval_requirements": "The user asked in chat for a working v0.7.0; this covers implementation and local verification only. Merging, tagging and releasing stay separate decisions.",
+      "scope": [
+        "crates/router-core"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-core"
+        ]
+      },
+      "acceptance": [
+        "Responses for warn, block, fuerte model, fast rule and no rule match A01-A05.",
+        "A repeated (session_id, turn_id) updates one row.",
+        "Existing router.toml files without [desktop_hook] still load."
+      ],
+      "verify": "cargo test -p router-core desktop_hook",
+      "scenario_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A08",
+        "A10"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D5); route_id and run_id stay null.",
+        "cargo test -p router-core desktop_hook: 13 passed, 0 failed (A01-A05, A08, summary, hooks.json editing, command quoting).",
+        "cargo test -p router-core tiers::tests::desktop_hook_section_is_optional_and_strict: passed (files without [desktop_hook] still load).",
+        "Commit 06dcdd8."
+      ],
+      "release_target": "v0.7.0"
+    },
+    {
+      "id": "R003-T002",
+      "milestone": "H1",
+      "title": "hook, hook-install and hook-uninstall commands",
+      "prompt": "Add router-cli commands: hook (reads stdin, prints the response, fails open, ignores ROUDEX_ROUTER_INTERNAL), hook-install and hook-uninstall ($CODEX_HOME/hooks.json, idempotent, remove the legacy route-prompt entry, keep unrelated hooks). Integration tests run the binary with isolated LOCALAPPDATA and CODEX_HOME. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R003-T001"
+      ],
+      "status": "completed",
+      "profile": "standard",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "approval": "not_required",
+      "approval_requirements": "The user asked in chat for a working v0.7.0; this covers implementation and local verification only. Merging, tagging and releasing stay separate decisions.",
+      "scope": [
+        "crates/router-cli"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates/router-cli"
+        ]
+      },
+      "acceptance": [
+        "A01, A02, A06, A07, A08 and A09 pass against the built binary.",
+        "The hook never exits non-zero."
+      ],
+      "verify": "cargo test -p router-cli --test hook_cli",
+      "scenario_ids": [
+        "A01",
+        "A02",
+        "A06",
+        "A07",
+        "A08",
+        "A09"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D5); route_id and run_id stay null.",
+        "cargo test -p router-cli --test hook_cli: 8 passed, 0 failed (A01, A02, A06-A09; installed command run through sh, cmd and PowerShell).",
+        "Release build: router-cli hook takes 62-82 ms per call including process start (5 runs).",
+        "Commit 06dcdd8."
+      ],
+      "release_target": "v0.7.0"
+    },
+    {
+      "id": "R003-T003",
+      "milestone": "H1",
+      "title": "Codex Desktop card in Resumen",
+      "prompt": "Expose the desktop summary and hook status through a Tauri command and show a Codex Desktop card in Resumen. Extend ui/tests/chat-fixture.html and record a browser check in the verification artifact. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R003-T001"
+      ],
+      "status": "completed",
+      "profile": "standard",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "approval": "not_required",
+      "approval_requirements": "The user asked in chat for a working v0.7.0; this covers implementation and local verification only. Merging, tagging and releasing stay separate decisions.",
+      "scope": [
+        "src-tauri/src",
+        "ui/src",
+        "ui/tests"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "src-tauri",
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "The card shows messages by tier, warnings, blocks and install status.",
+        "The UI build passes and the fixture check is recorded."
+      ],
+      "verify": "pnpm --dir ui build",
+      "scenario_ids": [
+        "A10"
+      ],
+      "verification_artifact": "specs/003-desktop-hook/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D5); route_id and run_id stay null.",
+        "pnpm --dir ui build: OK.",
+        "Browser, ui/tests/chat-fixture.html: populated card and ?desktop=empty state render; no overflow at 900 px (the window minimum).",
+        "Real Tauri window with isolated data and 7 hook calls: desktop_hook_summary over IPC returns 7 prompts and 5 warnings; Resumen shows the card with 'hook instalado'.",
+        "Commit 06dcdd8."
+      ],
+      "release_target": "v0.7.0"
+    },
+    {
+      "id": "R003-T004",
+      "milestone": "H1",
+      "title": "Docs, native check and release gate",
+      "prompt": "Document install, trust, configuration and removal; run the native check with the user's Codex; record acceptance evidence; bump the workspace and UI versions to 0.7.0. Implement only the declared scope. Do not add dependencies, access the network, read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R003-T002",
+        "R003-T003"
+      ],
+      "status": "planned",
+      "profile": "standard",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "approval": "not_required",
+      "approval_requirements": "The user asked in chat for a working v0.7.0; this covers implementation and local verification only. Merging, tagging and releasing stay separate decisions.",
+      "scope": [
+        "docs",
+        "specs/003-desktop-hook",
+        "Cargo.toml",
+        "Cargo.lock",
+        "ui/package.json",
+        "README.md"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "."
+        ]
+      },
+      "acceptance": [
+        "docs/desktop-hook.md covers install, trust, block_high_risk and uninstall.",
+        "acceptance-evidence.md covers A01-A11.",
+        "Manifests at 0.7.0 and cargo test --workspace passes."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A11"
+      ],
+      "verification_artifact": "specs/003-desktop-hook/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.7.0"
+    }
+  ],
+  "revision_history": []
+}

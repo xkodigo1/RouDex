@@ -8,15 +8,19 @@ Se ejecuta sobre `codex app-server` (stdio). Claude será el segundo runtime.
 
 ## Estado
 
-El hito `v0.6.0` (chat con router) está en curso. La app de escritorio tiene
-tres pantallas:
+El hito `v0.7.0` (integración con Codex Desktop) está en curso. La app de
+escritorio tiene tres pantallas:
 
 - **Resumen**: tokens del año y de hoy, calendario de actividad por día,
-  tokens por modelo, turnos por tier, límites de uso e hilos recientes.
+  tokens por modelo, turnos por tier, límites de uso, hilos recientes y los
+  mensajes de Codex Desktop que vio el hook.
 - **Hilos**: búsqueda y filtros, transcripción en estilo terminal con la
   decisión del router de cada turno, aprobaciones, renombrar y archivar.
 - **Proyectos**: nuevo chat sobre un fondo ASCII animado; el router analiza el
   mensaje y puedes cambiar el tier antes de enviarlo.
+
+El hook de Codex Desktop añade a cada mensaje el tier recomendado y avisa de los
+mensajes de riesgo; consulta [docs/desktop-hook.md](docs/desktop-hook.md).
 
 Consulta [ROADMAP.md](ROADMAP.md) y [docs/router.md](docs/router.md).
 

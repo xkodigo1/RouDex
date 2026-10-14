@@ -4,6 +4,9 @@ Run from the workspace root using `cargo run -p router-cli -- <command>`.
 Commands use the local SQLite store; no remote service is added.
 
 ```text
+hook                          (Codex UserPromptSubmit input on stdin)
+hook-install
+hook-uninstall
 chat <projectDir>             (prompt on stdin)
 route <projectDir>            (prompt on stdin)
 models [projectDir]
@@ -33,6 +36,13 @@ reason and risk matches) using `router.toml` and the project's
 needed and never executes the prompt. `models` prints the runtime catalog and
 any configured tier that the catalog does not support. See
 [docs/router.md](../../docs/router.md).
+
+`hook` is the Codex `UserPromptSubmit` hook: it routes the prompt with the risk
+and fast rules only, prints the hook response (context, a warning, or a block
+when `[desktop_hook] block_high_risk = true`), records the decision without the
+prompt text, and always exits 0. `hook-install` and `hook-uninstall` manage the
+RouDex entry in `$CODEX_HOME/hooks.json`. See
+[docs/desktop-hook.md](../../docs/desktop-hook.md).
 
 `route-preview` resolves a legacy coordinator profile without opening the local
 store or starting a runtime.

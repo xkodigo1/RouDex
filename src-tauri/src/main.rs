@@ -1,7 +1,7 @@
 use router_core::{
-    escalate_local, project_dir, route_local, AccessMode, AppServerClient, AppServerConfig,
-    ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision, RouterConfig,
-    RouterStore, SentTurn, ThreadSummary,
+    desktop_hook, escalate_local, project_dir, route_local, AccessMode, AppServerClient,
+    AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision,
+    RouterConfig, RouterStore, SentTurn, ThreadSummary,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -156,6 +156,24 @@ fn dashboard_summary(state: tauri::State<'_, AppState>) -> Result<Dashboard, Str
         .map_err(|error| error.to_string())
 }
 
+/// Codex Desktop decisions and whether the RouDex hook is in `hooks.json`.
+#[tauri::command]
+fn desktop_hook_summary(state: tauri::State<'_, AppState>) -> Result<Value, String> {
+    let summary = state
+        .chat
+        .recorder()
+        .with_store(|store| store.desktop_summary())
+        .map_err(|error| error.to_string())?;
+    let path = desktop_hook::hooks_path();
+    let hook = match desktop_hook::read_hooks(&path) {
+        Ok(document) => {
+            json!({ "path": path, "command": desktop_hook::installed_command(&document) })
+        }
+        Err(error) => json!({ "path": path, "command": null, "error": error }),
+    };
+    Ok(json!({ "summary": summary, "hook": hook }))
+}
+
 /// Threads for the thread list; all projects when `project` is omitted.
 #[tauri::command]
 fn thread_list(
@@ -264,6 +282,7 @@ fn main() {
             chat_turns,
             usage_summary,
             dashboard_summary,
+            desktop_hook_summary,
             thread_list,
             chat_projects,
             thread_rename,

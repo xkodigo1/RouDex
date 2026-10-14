@@ -54,13 +54,49 @@ function LimitBar({ label, window }) {
   </div>;
 }
 
+/** Codex Desktop prompts seen by the RouDex hook, and whether it is installed. */
+function DesktopCard({ desktop }) {
+  if (!desktop) return null;
+  const { summary, hook } = desktop;
+  const counts = ["economico", "estandar", "fuerte"].map((tier) => [tier, summary[tier]]);
+  return <section className="pane" aria-labelledby="desktop-title">
+    <div className="row-wrap">
+      <h2 id="desktop-title">Codex Desktop</h2>
+      <span className="muted small">últimos {summary.days} días</span>
+      <span className="grow" />
+      {hook.command
+        ? <span className="hook-status on" title={hook.command}>hook instalado</span>
+        : <span className="hook-status" title={hook.error ?? hook.path}>hook no instalado · <code>router-cli hook-install</code></span>}
+    </div>
+    {summary.prompts ? <>
+      <div className="desktop-stats">
+        <span><strong>{summary.prompts.toLocaleString("es")}</strong> <span className="muted">mensajes · {summary.today} hoy</span></span>
+        <span><strong className={summary.warned ? "warn-text" : ""}>{summary.warned}</strong> <span className="muted">{summary.warned === 1 ? "aviso" : "avisos"} de riesgo</span></span>
+        <span><strong className={summary.blocked ? "warn-text" : ""}>{summary.blocked}</strong> <span className="muted">{summary.blocked === 1 ? "bloqueado" : "bloqueados"}</span></span>
+        <span><strong>{percent(summary.on_recommended_model, summary.prompts)}</strong> <span className="muted">en el modelo recomendado</span></span>
+      </div>
+      <div className="stack-bar" aria-hidden="true">
+        {counts.map(([tier, count]) => <div key={tier} style={{ width: percent(count, summary.prompts), background: TIER_COLOR[tier] }} />)}
+      </div>
+      <p className="muted small">
+        {counts.map(([tier, count]) => <span key={tier}><span style={{ color: TIER_COLOR[tier] }}>● {tier}</span> {count} · </span>)}
+        {summary.unruled} sin regla{summary.last_at ? ` · último ${relativeTime(summary.last_at)}` : ""}
+      </p>
+    </> : <p className="muted">{hook.command
+      ? "Sin mensajes de Codex Desktop todavía."
+      : "Instala el hook para ver aquí el tier recomendado y el riesgo de tus mensajes de Codex Desktop."}</p>}
+  </section>;
+}
+
 export default function Summary({ project, onOpenThread, onOpenThreads }) {
   const { revision, rateLimits, setRateLimits } = useSession();
   const [data, setData] = useState(null);
+  const [desktop, setDesktop] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     invoke("dashboard_summary").then(setData).catch((reason) => setError(String(reason)));
+    invoke("desktop_hook_summary").then(setDesktop).catch((reason) => setError(String(reason)));
   }, [revision]);
 
   useEffect(() => {
@@ -162,5 +198,7 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
         </button>) : <p className="muted">Sin hilos todavía.</p>}
       </section>
     </div>
+
+    <DesktopCard desktop={desktop} />
   </div>;
 }

@@ -96,6 +96,12 @@ button.link:hover { color: var(--accent-soft); }
 .tier-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; font-size: 13px; }
 .tier-stat { display: grid; gap: 4px; }
 .tier-stat strong { font-size: 20px; }
+.desktop-stats { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; }
+.desktop-stats strong { font-size: 18px; }
+.warn-text { color: #D6A64B; }
+.hook-status { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--muted); font-size: 12px; }
+.hook-status.on { border-color: #2C5A41; color: var(--good); }
+.hook-status code { color: var(--accent-soft); }
 .recent-thread { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; min-height: 44px; padding: 8px 10px; border: none; border-radius: 6px; background: var(--raised); color: var(--text); text-align: left; font-size: 13px; }
 .recent-thread:hover { background: #1D2225; }
 .tier-text.tier-economico { color: var(--economico); } .tier-text.tier-estandar { color: var(--estandar); } .tier-text.tier-fuerte { color: var(--fuerte); }

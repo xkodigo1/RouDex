@@ -33,11 +33,16 @@ cargo run -p router-cli -- status
 La configuración de tiers y las reglas de riesgo están en
 [docs/router.md](router.md).
 
+## Hook de Codex Desktop
+
+Para ver el tier recomendado y el riesgo de tus mensajes de Codex Desktop,
+consulta [desktop-hook.md](desktop-hook.md).
+
 ## Hook de versiones anteriores
 
 Las versiones `v0.3.x`–`v0.5.0` instalaban un hook `UserPromptSubmit` que
-bloqueaba los mensajes de Codex Desktop. Ese hook ya no forma parte de RouDex.
-Si lo instalaste, retíralo:
+bloqueaba los mensajes de Codex Desktop. `router-cli hook-install` lo retira
+si lo encuentra en el `hooks.json` de usuario. Para retirarlo a mano:
 
 - Hook de usuario: elimina la entrada de `route-prompt` de
   `%USERPROFILE%\.codex\hooks.json`.

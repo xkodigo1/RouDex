@@ -1,9 +1,11 @@
 use router_core::{
+    desktop_hook, AccessMode, ApprovalDecision, ChatService, RiskRules, SessionEvent,
+};
+use router_core::{
     route_local, AppServerClient, AppServerConfig, LocalTaskRuntime, RouterConfig, RouterStore,
     RoutingConfig, RuntimeTurn, TaskApproval, TaskCoordinator, TaskDefinition, TaskManifest,
     TaskRuntime,
 };
-use router_core::{AccessMode, ApprovalDecision, ChatService, SessionEvent};
 use serde_json::{json, Value};
 use std::env;
 use std::io::{self, Read};
@@ -38,6 +40,12 @@ fn run() -> Result<(), String> {
         return Err("un worker activo no puede invocar el ciclo del coordinador".to_owned());
     }
     match command.as_deref() {
+        Some("hook") => {
+            hook();
+            Ok(())
+        }
+        Some("hook-install") => hook_install(),
+        Some("hook-uninstall") => hook_uninstall(),
         Some("chat") => chat(checked_args(args.collect(), 1, 1, "chat <projectDir>")?),
         Some("route") => route(checked_args(args.collect(), 1, 1, "route <projectDir>")?),
         Some("models") => models(checked_args(args.collect(), 0, 1, "models [projectDir]")?),
@@ -473,6 +481,67 @@ fn status() -> Result<(), String> {
     }))
 }
 
+/// Codex `UserPromptSubmit` hook. It never fails: any problem lets the prompt
+/// through and is reported on stderr. RouDex's own app-server turns are skipped.
+fn hook() {
+    if env::var_os("ROUDEX_ROUTER_INTERNAL").is_some()
+        || env::var_os("ROUDEX_ACTIVE_TASK_ID").is_some()
+    {
+        return;
+    }
+    match hook_response() {
+        Ok(response) => println!("{response}"),
+        Err(error) => eprintln!("RouDex hook: {error}; el mensaje sigue sin contexto"),
+    }
+}
+
+fn hook_response() -> Result<String, String> {
+    let mut text = String::new();
+    io::stdin()
+        .read_to_string(&mut text)
+        .map_err(|error| format!("no se pudo leer la entrada: {error}"))?;
+    let input: desktop_hook::PromptSubmit =
+        serde_json::from_str(&text).map_err(|error| format!("entrada inválida: {error}"))?;
+    let config = router_config()?;
+    let rules = RiskRules::for_project(&input.cwd).map_err(|error| error.to_string())?;
+    let outcome = desktop_hook::evaluate(&input, &config, &rules);
+    // A store problem must not hide the decision from Codex.
+    if let Err(error) = RouterStore::open(RouterStore::default_path())
+        .and_then(|store| store.record_desktop_prompt(&input, &outcome))
+    {
+        eprintln!("RouDex hook: no se registró la decisión: {error}");
+    }
+    serde_json::to_string(&outcome.response).map_err(|error| error.to_string())
+}
+
+/// Add (or replace) the RouDex hook in Codex's user `hooks.json`.
+fn hook_install() -> Result<(), String> {
+    let path = desktop_hook::hooks_path();
+    let mut document = desktop_hook::read_hooks(&path)?;
+    let exe = env::current_exe().map_err(|error| error.to_string())?;
+    let command = desktop_hook::hook_command(&exe)?;
+    let change = desktop_hook::install_into(&mut document, &command)?;
+    desktop_hook::write_hooks(&path, &document)?;
+    eprintln!("Codex pedirá revisar y confiar en el hook antes de ejecutarlo.");
+    write_json(&json!({
+        "hooksPath": path,
+        "command": command,
+        "replaced": change.removed - change.removed_legacy,
+        "removedLegacy": change.removed_legacy
+    }))
+}
+
+/// Remove RouDex hooks from Codex's user `hooks.json`; other hooks stay.
+fn hook_uninstall() -> Result<(), String> {
+    let path = desktop_hook::hooks_path();
+    let mut document = desktop_hook::read_hooks(&path)?;
+    let change = desktop_hook::uninstall_from(&mut document)?;
+    if change.removed > 0 {
+        desktop_hook::write_hooks(&path, &document)?;
+    }
+    write_json(&json!({ "hooksPath": path, "removed": change.removed }))
+}
+
 fn write_json(value: &Value) -> Result<(), String> {
     println!(
         "{}",
@@ -484,6 +553,6 @@ fn write_json(value: &Value) -> Result<(), String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: router-cli <chat <projectDir> (prompt on stdin)|route <projectDir> (prompt on stdin)|models [projectDir]|route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
+        "Usage: router-cli <hook (Codex UserPromptSubmit input on stdin)|hook-install|hook-uninstall|chat <projectDir> (prompt on stdin)|route <projectDir> (prompt on stdin)|models [projectDir]|route-preview <profile> [--config-stdin] [--model <model>] [--effort <effort>]|spec-load <manifest.json>|task-list <specId>|task-approve <taskId> [approved|denied]|task-dispatch <specId>|continue-run <runId>|task-plan <manifest>|task-run <taskId>|task-recover <taskId> [reason]|task-retry <taskId>|task-status <taskId>|run-events <runId>|status>"
     );
 }
