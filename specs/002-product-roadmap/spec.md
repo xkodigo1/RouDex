@@ -1,69 +1,73 @@
-# Specification 002 - Local-first product roadmap
+# Specification 002 - Approved local-first product roadmap
 
-Version: 1
+Version: 2
 Date: 2026-10-13
 Status: planned; H1 completed, H2-H9 planned
 Executable contract: [tasks.json](tasks.json)
 Human task graph: [tasks.md](tasks.md)
-Technical decisions: [decisions.md](decisions.md)
+Historical technical decisions: [decisions.md](decisions.md) (version 1)
 
 ## Problem and outcome
 
-RouDex has a working local orchestration foundation but needs a versioned path
-from that foundation to a usable, auditable desktop product. A list of features
-alone does not identify what can execute next, what must be approved, or which
-evidence proves completion.
+Align the product roadmap exactly with the approved RouDex master plan, from
+completed local coordination to public beta and stable v1.0.0. The local operator
+needs reviewable execution contracts, the developer needs explicit dependencies,
+and the reviewer needs observable acceptance and release evidence.
 
-This specification defines that path as nine milestones and 33 bounded task
-contracts: one completed historical reference and 32 future tasks. Its users
-are the local operator who reviews and runs work, the developer who implements
-one task at a time, and the reviewer who checks acceptance and release readiness.
+This revision changes only `spec.md`, `tasks.md` and `tasks.json`. It defines
+50 task contracts: one completed historical baseline and 49 planned tasks.
+It does not implement features, execute future tasks, install dependencies,
+change machine settings or publish releases. Existing task ids, outcomes,
+statuses, receipts and evidence are retained. New task ids R002-T034 through
+R002-T050 cover missing approved capabilities; none represents executed work.
 
-The current change creates only `spec.md`, `decisions.md`, `tasks.md` and
-`tasks.json` in this directory. It does not implement any H2-H9 feature,
-including the visual control center, or authorize their execution, installation,
-publication or dependency acquisition.
+## Approved baseline and evidence
 
-## Baseline and planning assumptions
-
-H1 is **completed**, as requested and as recorded by
+H1 is **completed local coordination in v0.5.0**, recorded by
 [specification 001](../001-task-orchestration/spec.md), its
-[task manifest](../001-task-orchestration/tasks.json), and the local `v0.5.0`
-tag. The baseline includes Rust domain/persistence, SQLite, the local Codex
-App Server coordinator over stdio, CLI, desktop ingress and a read-only
-Tauri/React state view.
+[task manifest](../001-task-orchestration/tasks.json) and the local tag.
+It includes Rust/SQLite persistence, the local Codex App Server coordinator over
+stdio, CLI, Desktop ingress and a read-only Tauri/React state view.
+The [historical acceptance audit](../001-task-orchestration/acceptance-evidence.md)
+retains 58 passing tests, an assignment discrepancy and missing native interactive
+smoke qualifications. No new remote publication verification is claimed.
 
-The [H1 acceptance audit](../001-task-orchestration/acceptance-evidence.md)
-records 58 passing tests, a historical T-001 assignment discrepancy and the
-absence of native interactive UI smoke evidence. Its opening publication block
-describes the earlier audit phase; the later task/spec records document
-publication. This roadmap preserves those qualifications. A completed H1 is
-not a claim that the future control center or native product acceptance exists.
-No new remote publication check is claimed by this planning change.
+H2 remains **visual control center targeting v0.6.0**, with its existing partial
+evidence preserved. R002-T005 records 21 passing overview fixture checks, 20
+detail checks, 5 passing control-center tests and a 33-module fixture build.
+Only initial fixture keyboard focus was observed. Complete application keyboard
+traversal and 1280x720 / 800x600 viewports remain unverified; no native evidence
+is claimed. Acceptance is incomplete and neither H2 nor its tasks is newly
+marked completed. The full actual verification record is retained under
+R002-T005 in `tasks.md` and its evidence array remains intact in `tasks.json`.
 
-The repository defines H1 but contains no established H2-H9 roadmap. Their
-titles, grouping and acceptance below are explicit planning proposals, not
-recovered requirements. The proposal reuses the current architecture and can
-be revised before a milestone is approved. There are no promised dates,
-performance SLAs, cloud features or additional platforms.
+The user's approved master plan fixes the titles, order and release targets
+below. It supersedes the version 1 proposed grouping, not the implementation
+history. `decisions.md` remains an unchanged historical version 1 record;
+conflicting milestone references there (notably D001/D002/D004) are superseded
+by these three version 2 artifacts. The existing stack and safety decisions
+remain in force. There are no invented release dates or performance SLAs.
 
-## Milestones
+## Milestones and release targets
 
-| Milestone | Status | Increment and exit condition | Tasks |
-| --- | --- | --- | --- |
-| H1 - Local task orchestration | completed | Retain the published orchestration baseline and its evidence limitations. | R002-T001 |
-| H2 - Visual control center | planned | Read-only milestone/task overview, filters and run details; loading, empty, stale and failure states; keyboard and viewport evidence. | R002-T002-R002-T005 |
-| H3 - Specification and task planning | planned | Validate and preview local manifests, import atomically, edit unexecuted drafts and expose dependency blockers without rewriting history. | R002-T006-R002-T009 |
-| H4 - Routing configuration and preview | planned | Validate local overrides, preview the resolved route and bind each run to an immutable routing revision. | R002-T010-R002-T013 |
-| H5 - Approval and execution controls | planned | Review exact contracts, approve or deny a revision, and explicitly dispatch eligible work through the coordinator once. | R002-T014-R002-T017 |
-| H6 - Interruption and recovery | planned | Request interruption, observe its actual outcome and resume by existing run identity without duplicating completed work. | R002-T018-R002-T021 |
-| H7 - Verification and evidence | planned | Persist and inspect verification results, distinguish runtime success from verified completion, and export a sanitized local summary. | R002-T022-R002-T025 |
-| H8 - Local installation and data portability | planned | Diagnose readiness, back up and restore disposable/local stores safely, and document reproducible local packaging. | R002-T026-R002-T029 |
-| H9 - Product acceptance and release readiness | planned | Complete integrated checks, boundary audit and native smoke; prepare a concrete release handoff with remaining publication authorization explicit. | R002-T030-R002-T033 |
+| Milestone | Release target | Status | Increment and exit condition | Tasks | Release gate task |
+| --- | --- | --- | --- | --- | --- |
+| H1 - Local coordination | v0.5.0 | completed | Retain the completed local coordinator baseline and its historical audit qualifications. | R002-T001 | R002-T001 |
+| H2 - Visual control center | v0.6.0 | planned | Read-only overview, filters and task/run details pass state, keyboard and viewport checks; preserve partial H2 evidence and unresolved gaps. | R002-T002, R002-T003, R002-T004, R002-T005 | R002-T005 |
+| H3 - Multiplatform installers and onboarding | v0.7.0 | planned | Native Tauri installers for Windows, macOS and Linux and first-run onboarding have per-platform install/launch/upgrade/uninstall evidence; missing platform evidence blocks release. | R002-T026, R002-T034, R002-T029, R002-T035, R002-T036, R002-T037 | R002-T037 |
+| H4 - Interactive execution from RouDex | v0.8.0 | planned | Review routes and concrete contracts, approve/deny, dispatch once, stream events and send interactive turns through Tauri IPC and the local App Server stdio coordinator; verified completion is distinct from runtime success. | R002-T010, R002-T011, R002-T012, R002-T013, R002-T014, R002-T015, R002-T016, R002-T017, R002-T022, R002-T023, R002-T024, R002-T050 | R002-T050 |
+| H5 - SDD Studio for specs and task graphs | v0.9.0 | planned | Author and review versioned local specs, map acceptance to tasks, validate/import manifests and edit draft dependency graphs atomically without rewriting execution history. | R002-T006, R002-T007, R002-T008, R002-T009, R002-T038, R002-T039 | R002-T039 |
+| H6 - Global Codex Desktop integration | v0.10.0 | planned | Global local-machine Desktop ingress is explicitly installed and reversible, preserves other configuration and routes each delivery to the coordinator once with native evidence. | R002-T040, R002-T041, R002-T042 | R002-T042 |
+| H7 - Multi-project, queues and long-running executions | v0.11.0 | planned | Registered local projects remain isolated; persistent queues enforce eligibility and shared-write exclusion; long-running executions retain identity and bounded events across app reconnects. | R002-T043, R002-T044, R002-T045 | R002-T045 |
+| H8 - Security, recovery and compatibility | v0.12.0 | planned | Audit permissions and sensitive-data boundaries, verify interruption/crash recovery and backup/restore, and prove data/runtime/platform compatibility without silent fallback. | R002-T018, R002-T019, R002-T020, R002-T021, R002-T025, R002-T027, R002-T028, R002-T046, R002-T047 | R002-T047 |
+| H9 - Public beta and stable release | v1.0.0 | planned | Complete integrated and native acceptance, prepare the public beta, resolve blocking feedback and approve stable readiness with an auditable v1.0.0 release handoff; publication remains separately authorized. | R002-T030, R002-T031, R002-T032, R002-T048, R002-T049, R002-T033 | R002-T033 |
 
-Milestone numbers express product progression, not a mandatory global execution
-sequence. The task graph contains the actual dependencies. Independent branches
-can progress after H1; overlapping file scopes still require serialized edits.
+Milestone dependencies are H1 -> H2 -> H3 -> H4 -> H5 -> H6 -> H7 -> H8 -> H9.
+The task graph encodes the corresponding release-gate prerequisites without
+serializing independent work inside a milestone. Each gate transitively covers
+all its milestone tasks and earlier gates. Shared writable scopes still require
+serialized edits. A gate task verifies readiness; it never automatically creates
+a tag, publishes a package or completes other tasks.
 
 ## Scope and invariants
 
@@ -112,71 +116,103 @@ can progress after H1; overlapping file scopes still require serialized edits.
     is insufficient. Fixture, automated, native and live-runtime results are
     distinct; missing evidence remains visible and blocking where required.
 
-## Non-goals
+## Approved capability boundaries
 
-- Implementing the visual control center or any other future roadmap task now.
-- Replacing the current stack, writing a general Markdown parser, introducing
-  a graph rendering library or implementing remote collaboration.
-- Changing the host Codex application's model selection or bypassing its runtime
-  permissions through a hook.
-- Automatic approval, automatic replay after an ambiguous crash, destructive
-  cancellation rollback, unattended installation or automatic updates.
-- Committing, pushing, tagging, creating releases, uploading exports or altering
-  an operational database as part of this specification authoring task.
+- H3 owns native Tauri installers and onboarding for Windows, macOS and Linux.
+  Formats, architectures and supported runtime versions are reviewed in the
+  platform matrix before packaging. Each supported target needs actual native
+  install/launch/upgrade/uninstall evidence; missing prerequisites stay blocked.
+  Installation preserves local data and does not activate global hooks by default.
+- H4 owns route configuration, contract approvals, single-task dispatch, interactive
+  input/continuation, streaming events and verification/evidence in RouDex. Existing
+  contracts can execute before SDD Studio; approvals and dependency eligibility
+  are enforced by the coordinator. Advanced interruption/crash recovery belongs
+  to H8; H4 reuses existing coordinator behavior without promising that hardening.
+- H5 owns SDD Studio: local versioned specs, scenarios, decisions, task drafts,
+  dependency graph editing, validation/import and acceptance-to-verification
+  traceability. Only unexecuted drafts can change, with stale review invalidated.
+- H6 owns global Codex Desktop integration on the local machine, with explicit
+  activation/removal, configuration preservation and native delivery evidence.
+  H1 ingress is retained as a baseline; it is not proof of the complete global
+  product workflow. Global integration grants no automatic project permissions.
+- H7 owns explicit multi-project registration/isolation, persistent queues and
+  long-running execution visibility across UI disconnect/reconnect. Scheduling
+  must honor approvals, dependencies and shared writable-scope exclusion.
+- H8 owns security hardening, interruption/crash recovery, private local backups,
+  guarded restore, sanitized export and platform/runtime/schema compatibility.
+  It retains original identities and approvals without replaying completed work.
+- H9 owns public beta preparation, observed feedback and blocker disposition,
+  stable v1.0.0 readiness and the final release handoff. A beta prerelease label
+  is a stage within H9; its exact label is selected in that task. Publication
+  requires a separate explicit action approval and actual publication evidence.
+
+## Non-goals for this alignment
+
+- Implementing any roadmap feature or executing a planned task now.
+- Adding frameworks, dependencies, graph libraries or remote access by default.
+- Reading authentication configuration, environment values or unrelated projects.
+- Automatically approving, replaying ambiguous work, installing global hooks,
+  uploading evidence, committing, tagging or publishing packages.
+- Treating builds, fixtures, routing receipts or model prose as native/live
+  acceptance or marking unexecuted tasks completed.
 
 ## Acceptance scenarios and traceability
 
-The following are future product acceptance gates except A01, which records
-the historical baseline. Commands are defined per task in `tasks.md` and
-`tasks.json`. New named test targets are planned deliverables, not existing
-tests or evidence of completion.
+A01 is historical. All other scenarios are future gates. Named test targets and
+new evidence artifacts are planned deliverables, not claims they exist or pass.
+R002-T030 aggregates A02-A19 after all H2-H8 gate tasks pass. Individual task
+criteria and native/platform observations remain mandatory.
 
 | ID | Precondition | Action | Observable result | Tasks and verification |
 | --- | --- | --- | --- | --- |
-| A01 | Specification 001 and local H1 release metadata exist. | Inspect completion records and qualifications. | H1 is completed without implying H2 or native smoke has passed. | R002-T001; historical manifest, audit, local tag. |
-| A02 | Synthetic snapshots contain tasks, retries, missing runs and errors. | Open overview, filter, select details, refresh, switch selections and navigate by keyboard. | Correct task counts, stable selection, ordered run events, no stale-response contamination; empty/loading/stale/error states and visible focus. No writes occur. | R002-T002-T005; `control_center` tests, fixture builds and three UI evidence artifacts. |
-| A03 | Valid, cyclic, duplicate, cross-spec-collision and changed manifests are available. | Preview, import, reimport and edit an unexecuted draft. | Invalid input produces zero writes; valid import is atomic; reimport preserves history; draft changes invalidate review; running/completed contracts remain immutable. | R002-T006-T009; `roadmap_planning`, `planning_commands` and task-editor/graph evidence. |
-| A04 | Built-in routing and a valid/invalid override revision exist. | Preview, save, dispatch, change settings and continue the original run. | Preview matches dispatch; invalid values cannot replace settings; resume retains the original mapping; unavailable models block without fallback. | R002-T010-T013; `roadmap_routing`, `routing_preview`, `routing_commands` and UI evidence. |
-| A05 | A task is unapproved, denied, approved or changed after approval. | Review its concrete contract and approve/deny, then request dispatch. | Approval alone starts nothing; stale or denied approval blocks; only the approved revision is eligible. | R002-T014-T016 and R002-T008; `roadmap_approvals`, `approval_commands` and review/editor evidence. |
-| A06 | An eligible task, an unmet dependency and a failed runtime are available. | Submit dispatch twice and then retry the blocked/failing cases. | At most one eligible run starts with assigned model/effort; dependency/runtime failure has a durable reason; no UI bypass. | R002-T015, R002-T017; `approval_commands` and dispatch-control evidence. |
-| A07 | A run is active, interrupted, terminal or missing reliable identity. | Interrupt, simulate a crash at terminal persistence, restart and resume twice. | One terminal result; immutable assignment and original run identity retained; completed work does not replay; unsupported interruption and ambiguous identity block. | R002-T018-T021 and R002-T012; `roadmap_recovery`, `recovery_commands`, routing tests and recovery UI evidence. |
-| A08 | Runs have successful, failed, absent and malformed verification records. | Complete a runtime turn and inspect/paginate its evidence. | Only independently verified success completes the task; history is bounded, run-isolated and explicit about missing/failed evidence. | R002-T022-T024; `roadmap_evidence`, `evidence_commands` and evidence UI artifact. |
-| A09 | Synthetic records contain sensitive markers and an existing export destination. | Export an allowlisted local summary and inspect the candidate release package. | No raw prompts/event bodies, authentication data or absolute personal paths; overwrite requires explicit confirmation; nothing is sent externally. | R002-T025, R002-T031; `evidence_export` and boundary audit. |
-| A10 | Runtime/configuration/storage are absent, incompatible or inaccessible. | Run diagnostics and read local state; inspect exposed interfaces and permissions. | Actionable errors, no accidental database creation/migration, installation, dispatch, new listener or expanded path scope. | R002-T002, R002-T006, R002-T026, R002-T029, R002-T031; focused tests, packaging checklist and boundary audit. |
-| A11 | Disposable stores include concurrent writes, corruption and incompatible versions. | Back up, preview restore, confirm restore and inject replacement failure. | Backup is consistent; invalid/busy restore changes nothing; rollback preserves the previous store; restore cannot execute tasks. | R002-T027-T028; `local_backup`, `local_restore`, with synthetic source/destination evidence. |
-| A12 | Feature tasks and integrated checks pass and a local native runtime is available. | Build, launch the native app, follow the smoke workflow and prepare the release handoff. | Actual native actions and runtime provenance are recorded; unresolved findings block readiness; handoff distinguishes verified local readiness from unapproved publication. | R002-T029-T033; workspace tests/builds, native evidence, boundary audit and release handoff. |
+| A01 | Specification 001 and local v0.5.0 metadata exist. | Inspect completed records and qualifications. | H1 remains completed; historical limitations do not imply H2/native acceptance. | R002-T001; Historical manifest, audit and local tag. |
+| A02 | Synthetic overview/detail snapshots include retries, empty state and errors. | Open, filter, refresh, select details and traverse at both requested viewports by keyboard. | Correct counts/selection/events and loading/empty/stale/error/focus states, with no writes; incomplete keyboard/viewport evidence remains blocking. | R002-T002, R002-T003, R002-T004, R002-T005, R002-T030; control_center tests, fixture builds and UI evidence. |
+| A03 | Valid, cyclic, duplicate and colliding manifests/drafts exist. | Preview, import, reimport and edit drafts and dependency edges. | Atomic validation and persistence; invalid input writes nothing; history survives reimport; changes invalidate review; completed contracts are immutable. | R002-T006, R002-T007, R002-T008, R002-T009, R002-T039, R002-T030; roadmap_planning, planning_commands, sdd_traceability and editor/graph evidence. |
+| A04 | Built-in routes and valid/invalid local overrides exist. | Preview, save, dispatch and continue an existing run after changing settings. | Preview equals dispatch; invalid settings cannot replace a revision; existing runs retain model/effort; unavailable runtime blocks without fallback. | R002-T010, R002-T011, R002-T012, R002-T013, R002-T050, R002-T030; roadmap_routing, routing_preview, routing_commands and interactive_execution. |
+| A05 | Tasks are unapproved, denied, approved or changed after review. | Review concrete contracts and approve/deny or edit a draft. | Approval starts nothing; stale/denied review blocks; only the exact approved revision is eligible. | R002-T014, R002-T015, R002-T016, R002-T050, R002-T008, R002-T030; roadmap_approvals, approval_commands and interactive/editor evidence. |
+| A06 | Eligible, dependency-blocked and runtime-failing tasks exist. | Dispatch twice and retry blocked/failing requests. | One eligible run with assigned route; durable blocked/failed reasons; no UI execution bypass. | R002-T015, R002-T017, R002-T050, R002-T030; approval_commands and interactive dispatch evidence. |
+| A07 | Runs are active, interrupted, terminal or missing reliable identity. | Interrupt, inject terminal-persistence failure, restart and resume twice. | One terminal result; original assignment/run/thread identity; no replay; unsupported/ambiguous recovery blocks. | R002-T012, R002-T018, R002-T019, R002-T020, R002-T021, R002-T047, R002-T030; roadmap_recovery, recovery_commands, routing and compatibility tests. |
+| A08 | Verification is successful, failed, absent or malformed. | Complete a runtime turn and inspect/paginate evidence. | Only independently verified success completes a task; bounded, run-isolated evidence exposes missing/failed checks. | R002-T022, R002-T023, R002-T024, R002-T050, R002-T030; roadmap_evidence, evidence_commands and interactive evidence. |
+| A09 | Synthetic records contain sensitive markers and an existing destination. | Export an allowlisted local summary and inspect release contents. | No raw prompts/events, authentication data or personal paths; overwrite needs confirmation; nothing is sent externally. | R002-T025, R002-T030, R002-T031; evidence_export and boundary audit. |
+| A10 | Runtime/config/storage are unavailable, incompatible or inaccessible. | Read local state, validate manifests and run readiness/boundary checks. | Actionable errors without accidental writes, implicit installation, dispatch, new listeners or wider path permissions. | R002-T002, R002-T026, R002-T029, R002-T006, R002-T030, R002-T031; control_center, roadmap_planning, diagnostics, packaging checklist and boundary audit. |
+| A11 | Disposable stores contain concurrent writes, corruption and incompatible schemas. | Back up, preview/confirm restore and inject replacement failure. | Consistent backup; invalid/busy restore writes nothing; rollback preserves prior state; restore never executes tasks. | R002-T027, R002-T028, R002-T047, R002-T030; local_backup, local_restore and compatibility evidence. |
+| A12 | All milestone features and integration checks have evidence. | Run integrated/native acceptance and prepare final release handoff. | Actual native actions/runtime provenance recorded; findings block readiness; publication remains a separate explicit gate. | R002-T030, R002-T031, R002-T032, R002-T033; Workspace tests/builds, native smoke, audit and release handoff. |
+| A13 | Windows/macOS/Linux targets and disposable install environments are reviewed. | Build native installers, install/launch/upgrade/uninstall and complete first-run onboarding. | Per-platform package/checksum and observed lifecycle/onboarding evidence; state preserved; missing target/prerequisite blocks v0.7.0. | R002-T034, R002-T029, R002-T035, R002-T036, R002-T037, R002-T030; Platform matrix, installer build/smoke artifacts, onboarding tests/native evidence. |
+| A14 | A local versioned spec and draft task graph are available. | Edit/review/save/reopen the spec, link acceptance and round-trip graph changes. | Versioned scenarios/decisions trace to tasks/checks; invalid/uncovered drafts block; no execution or history rewrite. | R002-T038, R002-T039, R002-T030; sdd_studio, sdd_traceability and native/fixture evidence. |
+| A15 | Supported native Desktop, disposable cwd surfaces and explicit hook action approval exist. | Install global integration, submit/replay messages, test failure/recursion and uninstall. | One ingress and one explicit approved coordinator execution; other configuration preserved; unsupported/absent runtime blocks. | R002-T040, R002-T041, R002-T042, R002-T030; global_desktop tests plus actual native Desktop route/run/thread/turn evidence. |
+| A16 | Two disposable registered projects and persistent queues exist. | Switch projects, enqueue/reorder/pause, schedule competing scopes and reconnect to a long run. | Project isolation, durable queues, eligibility and shared-write exclusion; bounded ordered events; no duplicate run or silent replay. | R002-T043, R002-T044, R002-T045, R002-T030; multi_project, task_queues, long_running and UI evidence. |
+| A17 | Synthetic adversarial paths, runtime versions and upgrade fixtures exist. | Probe permissions/data boundaries and upgrade/rollback supported combinations. | Unauthorized access rejected; safe local-only exports; identities/history preserved; incompatibility and unresolved security findings block. | R002-T046, R002-T047, R002-T030; local_security, compatibility and matrix/audit artifacts. |
+| A18 | Integrated/native gates pass and beta publication/observation has separate authorization. | Prepare beta, assess actual feedback/blockers, validate stable promotion and handoff. | Traceable beta results and resolved blockers required for v1.0.0 readiness; target, readiness and actual publication never conflated. | R002-T030, R002-T048, R002-T049, R002-T033; beta-evidence, stable-readiness, release-handoff and regression results. |
+| A19 | An approved task/session and pending runtime approval request exist. | Send/continue interactive input, stream events and answer the exact pending request. | Coordinator owns stdio turns/permissions; input and approval replay cannot duplicate turns; native execution and verification receipts remain separate. | R002-T050, R002-T030; Core/native interactive_execution tests and installed-native interactive evidence. |
 
-R002-T030 aggregates A02-A12. R002-T033 closes the milestone record only after
-all prior tasks, automated checks and required human observations are complete.
-Each task's narrower acceptance criteria remain mandatory; this matrix does
-not replace them.
+## Verification for this documentation alignment
 
-## Verification and delivery for this planning change
+- Parse JSON and validate required task fields, unique/stable ids, complete
+  dependencies, route/profile assignments and acyclic task/milestone graphs.
+- Check exact H1-H9 titles, versions, statuses, membership, release-gate ancestry,
+  criteria/scenario mapping and human task details across all three artifacts.
+- Compare against the pre-edit records: all prior statuses, route/run ids and
+  evidence survive; H2 checks and unresolved gaps remain visible. Added tasks
+  remain planned/manual with null execution receipts and empty evidence.
+- Load the JSON with the existing Rust `TaskManifest` validator without importing
+  it into operational storage or dispatching any task.
+- Inspect whitespace, the changed-file list and boundary/sensitive-content scan.
+  Only the three requested roadmap artifacts may change; no dependency or
+  feature implementation is part of the alignment.
 
-- Verify the four files, JSON parse, required fields, unique ids, acyclic and
-  complete dependency graph, matching built-in routes and milestone coverage.
-- Verify all acceptance scenarios map to task records, all future tasks are
-  planned/manual, and logical scopes plus writable roots stay repository-relative.
-- Parse the manifest with the existing Rust `TaskManifest` validator without
-  importing it into operational storage or dispatching future tasks.
-- Run the enclosing authoring task's required `cargo test --workspace` check
-  and inspect the whitespace diff and changed-file list.
-- Inspect for personal paths, unrelated project paths, credentials and
-  environment values. No implementation or dependency file should change.
+## Versioning, authoring receipts and completion
 
-Current authoring is already inside the coordinator worker. Its receipt is
-recorded in `tasks.json` under `authoring_run`; it does not belong to a future
-product task. The worker cannot assert its own terminal completion. The parent
-coordinator records that after the authoring turn and independent verification.
+Keep `spec_id` and existing task identities stable. Increment version for
+material contract/scope changes and update the three current artifacts together.
+Changed approvals must be reviewed again. The original `authoring_run` object
+is retained as historical authoring metadata; it does not describe this revision's
+worker or prove product task completion. The enclosing Codex Router coordinator
+owns this authoring worker's terminal state.
 
-## Versioning and completion policy
-
-Keep `spec_id` stable and increment `version` for a material scope, task-contract
-or acceptance change. Update all four files together; retain existing ids and
-record supersession rather than reusing ids for a different outcome. A changed
-approved contract must pass review again before dispatch.
-
-H1's completed status is inherited. H2-H9 remain planned until explicitly
-authorized for execution and become completed only with all listed task and
-milestone evidence. Local readiness is independent of publication: a later
-approved publishing workflow owns signed commits, tags and release metadata.
+Only H1 is completed. H2-H9 and all unexecuted tasks remain planned until
+authorized execution and independent verification. Release targets are fixed
+by the approved plan; they are not assertions of available installers, passed
+acceptance, publication or release dates. Closing a milestone requires every
+task, its release gate and required manual/platform evidence; stable v1.0.0
+also requires actual beta results and resolved blockers. Signed publication
+and public availability remain separately authorized and evidenced.
