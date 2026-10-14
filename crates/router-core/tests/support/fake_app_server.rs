@@ -52,7 +52,7 @@ fn main() {
                 };
                 let first_page = message["params"]["cursor"].is_null();
                 let result = if first_page {
-                    json!({ "data": [entry("gpt-5.6-luna", &["low", "medium", "high"])],
+                    json!({ "data": [entry("gpt-6-luna", &["low", "medium", "high"])],
                         "nextCursor": "page-2" })
                 } else {
                     json!({ "data": [entry("gpt-6.1-sol", &["low", "medium", "high", "xhigh"])],
