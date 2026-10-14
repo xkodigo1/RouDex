@@ -1,4 +1,5 @@
 use crate::domain::TaskDefinition;
+use crate::tiers::{CatalogModel, ModelTarget};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -58,6 +59,8 @@ pub struct AppServerTurn {
     pub turn_id: String,
     pub text: String,
     pub status: String,
+    /// Runtime error message of a non-completed turn (e.g. usage limits).
+    pub error: Option<String>,
 }
 
 pub struct AppServerClient {
@@ -196,6 +199,77 @@ impl AppServerClient {
         )
     }
 
+    /// Runtime model catalog (`model/list`), following pagination.
+    pub fn list_models(&mut self) -> Result<Vec<CatalogModel>, AppServerError> {
+        let mut models = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let response = self.request(
+                "model/list",
+                json!({ "includeHidden": false, "cursor": cursor }),
+            )?;
+            let result = &response["result"];
+            let data = result["data"].as_array().ok_or_else(|| {
+                AppServerError::Protocol("model/list returned no data array".into())
+            })?;
+            for entry in data {
+                models.push(catalog_model(entry)?);
+            }
+            match result["nextCursor"].as_str() {
+                Some(next) if !next.is_empty() => cursor = Some(next.to_owned()),
+                _ => return Ok(models),
+            }
+        }
+    }
+
+    /// One-shot classification turn: ephemeral, read-only thread that never
+    /// asks for approvals. Returns the final assistant text.
+    pub fn classify(
+        &mut self,
+        target: &ModelTarget,
+        cwd: &Path,
+        instructions: &str,
+        input: &str,
+        output_schema: Value,
+    ) -> Result<String, AppServerError> {
+        let response = self.request(
+            "thread/start",
+            json!({
+                "model": target.model,
+                "cwd": cwd,
+                "approvalPolicy": "never",
+                "sandbox": "read-only",
+                "ephemeral": true,
+                "developerInstructions": instructions,
+                "serviceName": "roudex-classifier"
+            }),
+        )?;
+        let thread_id = response["result"]["thread"]["id"]
+            .as_str()
+            .ok_or_else(|| AppServerError::Protocol("thread/start returned no thread id".into()))?
+            .to_owned();
+        let turn = self.run_turn_params(
+            json!({
+                "threadId": thread_id,
+                "input": [{ "type": "text", "text": input }],
+                "cwd": cwd,
+                "approvalPolicy": "never",
+                "sandboxPolicy": { "type": "readOnly" },
+                "model": target.model,
+                "effort": target.effort,
+                "outputSchema": output_schema
+            }),
+            &mut |_| Ok(()),
+        )?;
+        if turn.status != "completed" {
+            return Err(AppServerError::Turn(match turn.error {
+                Some(error) => format!("{}: {error}", turn.status),
+                None => turn.status,
+            }));
+        }
+        Ok(turn.text)
+    }
+
     pub fn start_task_thread(&mut self, task: &TaskDefinition) -> Result<String, AppServerError> {
         let params = task_thread_params(task)?;
         let response = self.request("thread/start", params)?;
@@ -255,6 +329,7 @@ impl AppServerClient {
                     .into(),
                 text: agent_text(turn),
                 status: "completed".into(),
+                error: None,
             })),
             Some(turn) if turn["status"] != "interrupted" => Err(AppServerError::Turn(format!(
                 "resumed thread cannot start another turn: {}",
@@ -414,6 +489,7 @@ impl AppServerClient {
                     turn_id,
                     text,
                     status: status.into(),
+                    error: turn["error"]["message"].as_str().map(ToOwned::to_owned),
                 });
             }
         }
@@ -526,6 +602,29 @@ pub(crate) fn task_sandbox_policy(task: &TaskDefinition) -> Result<Value, AppSer
             "invalid task sandbox or missing writable roots".into(),
         )),
     }
+}
+
+fn catalog_model(entry: &Value) -> Result<CatalogModel, AppServerError> {
+    let text = |key: &str| {
+        entry[key]
+            .as_str()
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| AppServerError::Protocol(format!("model/list entry without {key}")))
+    };
+    Ok(CatalogModel {
+        id: text("id")?,
+        model: text("model")?,
+        display_name: text("displayName")?,
+        hidden: entry["hidden"].as_bool().unwrap_or(false),
+        default_effort: text("defaultReasoningEffort")?,
+        efforts: entry["supportedReasoningEfforts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|option| option["reasoningEffort"].as_str())
+            .map(ToOwned::to_owned)
+            .collect(),
+    })
 }
 
 fn agent_text(turn: &Value) -> String {

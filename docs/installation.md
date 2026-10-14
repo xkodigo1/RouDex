@@ -28,6 +28,11 @@ contiene esa base de datos ni credenciales.
 cargo run -p router-cli -- status
 ```
 
+## Router
+
+La configuración de tiers y las reglas de riesgo están en
+[docs/router.md](router.md).
+
 ## Hook de versiones anteriores
 
 Las versiones `v0.3.x`–`v0.5.0` instalaban un hook `UserPromptSubmit` que
