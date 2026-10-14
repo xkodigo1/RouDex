@@ -685,7 +685,7 @@
       "depends_on": [
         "R002-T001"
       ],
-      "status": "planned",
+      "status": "completed",
       "profile": "deep",
       "model": "gpt-6.1-sol",
       "effort": "high",
@@ -712,9 +712,15 @@
         "A04"
       ],
       "verification_artifact": null,
-      "route_id": null,
-      "run_id": null,
-      "evidence": [],
+      "route_id": "698ee6be-683c-4ffd-821b-27fe0d307b88",
+      "run_id": "39a46088-af40-445c-80ca-f456894f7ceb",
+      "evidence": [
+        "crates/router-core/tests/roadmap_routing.rs",
+        "cargo test --offline -p router-core --test roadmap_routing: PASS, 8 tests",
+        "cargo test --offline -p router-core: PASS, 40 tests",
+        "git diff --check: PASS; worktree clean at routed verification",
+        "Commit 9467128 contains the implementation; no authentication data or dependency installation was introduced."
+      ],
       "release_target": "v0.8.0"
     },
     {

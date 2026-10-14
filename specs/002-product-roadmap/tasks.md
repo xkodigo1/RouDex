@@ -4,8 +4,8 @@ Version: 2. Date: 2026-10-13. Status: planned; H1 baseline completed.
 
 `tasks.json` is the authoritative executable contract; `spec.md` defines the
 approved roadmap. This document is their human-readable counterpart. There
-are 50 tasks: R002-T001 is the completed historical baseline, and the other
-49 remain planned. Existing evidence and route/run fields are retained;
+are 50 tasks: R002-T001 is the completed historical baseline, R002-T010 is
+completed, and the other 48 remain planned. Existing evidence and route/run fields are retained;
 creating or aligning this plan grants no future execution or publication approval.
 `decisions.md` is the historical version 1 decision record; version 2 of the
 three current artifacts supersedes conflicting milestone numbering/scope.
@@ -60,7 +60,7 @@ implemented or newly marked completed by this documentation revision.
 | R002-T035 | H3 | v0.7.0 | planned | R002-T026, R002-T029, R002-T034 | standard |
 | R002-T036 | H3 | v0.7.0 | planned | R002-T035 | standard |
 | R002-T037 | H3 | v0.7.0 | planned | R002-T026, R002-T029, R002-T036 | standard |
-| R002-T010 | H4 | v0.8.0 | planned | R002-T001 | deep |
+| R002-T010 | H4 | v0.8.0 | completed | R002-T001 | deep |
 | R002-T011 | H4 | v0.8.0 | planned | R002-T010 | standard |
 | R002-T012 | H4 | v0.8.0 | planned | R002-T010 | deep |
 | R002-T013 | H4 | v0.8.0 | planned | R002-T011, R002-T012, R002-T003 | standard |
@@ -423,7 +423,7 @@ Evidence artifact: `ui/tests/onboarding-evidence.md`. Review its observed result
 
 ### R002-T010 - Define validated local routing overrides
 
-- Milestone/status: H4 / planned.
+- Milestone/status: H4 / completed.
 - Release target: `v0.8.0`.
 - Dependencies: R002-T001.
 - Route: deep / gpt-6.1-sol / high.
@@ -431,7 +431,7 @@ Evidence artifact: `ui/tests/onboarding-evidence.md`. Review its observed result
 - Scope: `crates/router-core/src/routing.rs`, `crates/router-core/src/lib.rs`, `crates/router-core/tests/roadmap_routing.rs`.
 - Cwd: `.`; sandbox: `workspaceWrite`; writable roots: `crates/router-core`.
 - Scenarios: A04.
-- Route/run ids: none / none; retained historical fields are not evidence of a new dispatch.
+- Route/run ids: `698ee6be-683c-4ffd-821b-27fe0d307b88` / `39a46088-af40-445c-80ca-f456894f7ceb`.
 
 Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T010 entry in tasks.md. Add a versioned local routing configuration contract while retaining all existing built-in defaults. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.
 
@@ -439,6 +439,13 @@ Acceptance:
 
 - Invalid profile, model or effort values fail validation without overwriting the last valid configuration.
 - Absent configuration retains the exact built-in mapping; configuration contains no authentication data.
+
+Actual verification:
+
+- `cargo test --offline -p router-core --test roadmap_routing`: PASS, 8 tests.
+- `cargo test --offline -p router-core`: PASS, 40 tests.
+- `git diff --check`: PASS; routed verification reported a clean worktree.
+- Implementation published in signed commit `9467128`; no dependencies were installed and no credentials were added.
 
 Verification:
 
