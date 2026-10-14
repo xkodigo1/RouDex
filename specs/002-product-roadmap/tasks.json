@@ -731,7 +731,7 @@
       "depends_on": [
         "R002-T010"
       ],
-      "status": "planned",
+      "status": "completed",
       "profile": "standard",
       "model": "gpt-6.1-sol",
       "effort": "medium",
@@ -757,9 +757,15 @@
         "A04"
       ],
       "verification_artifact": null,
-      "route_id": null,
-      "run_id": null,
-      "evidence": [],
+      "route_id": "35bae85c-4ac3-4d2d-b4b2-cf965aa5ea4c",
+      "run_id": "0d6b5ee1-b6c9-4752-bac3-3f3fb89065a4",
+      "evidence": [
+        "crates/router-cli/tests/routing_preview.rs",
+        "cargo test --offline -p router-cli --test routing_preview: PASS, 7 tests",
+        "cargo test --offline -p router-cli: PASS, 28 tests",
+        "Verification was rerun with per-task CARGO_TARGET_DIR after the initial Windows target lock; git diff --check and format passed.",
+        "Commit fb9ce63 contains the implementation; preview is read-only and does not start runs or access credentials."
+      ],
       "release_target": "v0.8.0"
     },
     {

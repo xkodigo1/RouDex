@@ -5,7 +5,7 @@ Version: 2. Date: 2026-10-13. Status: planned; H1 baseline completed.
 `tasks.json` is the authoritative executable contract; `spec.md` defines the
 approved roadmap. This document is their human-readable counterpart. There
 are 50 tasks: R002-T001 is the completed historical baseline, R002-T010 is
-completed, and the other 48 remain planned. Existing evidence and route/run fields are retained;
+completed, R002-T011 is completed, and the other 47 remain planned. Existing evidence and route/run fields are retained;
 creating or aligning this plan grants no future execution or publication approval.
 `decisions.md` is the historical version 1 decision record; version 2 of the
 three current artifacts supersedes conflicting milestone numbering/scope.
@@ -61,7 +61,7 @@ implemented or newly marked completed by this documentation revision.
 | R002-T036 | H3 | v0.7.0 | planned | R002-T035 | standard |
 | R002-T037 | H3 | v0.7.0 | planned | R002-T026, R002-T029, R002-T036 | standard |
 | R002-T010 | H4 | v0.8.0 | completed | R002-T001 | deep |
-| R002-T011 | H4 | v0.8.0 | planned | R002-T010 | standard |
+| R002-T011 | H4 | v0.8.0 | completed | R002-T010 | standard |
 | R002-T012 | H4 | v0.8.0 | planned | R002-T010 | deep |
 | R002-T013 | H4 | v0.8.0 | planned | R002-T011, R002-T012, R002-T003 | standard |
 | R002-T014 | H4 | v0.8.0 | planned | R002-T001 | deep |
@@ -455,7 +455,7 @@ cargo test --offline -p router-core --test roadmap_routing
 
 ### R002-T011 - Preview a route and its resolution reason
 
-- Milestone/status: H4 / planned.
+- Milestone/status: H4 / completed.
 - Release target: `v0.8.0`.
 - Dependencies: R002-T010.
 - Route: standard / gpt-6.1-sol / medium.
@@ -463,7 +463,7 @@ cargo test --offline -p router-core --test roadmap_routing
 - Scope: `crates/router-cli/src/main.rs`, `crates/router-cli/tests/routing_preview.rs`.
 - Cwd: `.`; sandbox: `workspaceWrite`; writable roots: `crates/router-cli`.
 - Scenarios: A04.
-- Route/run ids: none / none; retained historical fields are not evidence of a new dispatch.
+- Route/run ids: `35bae85c-4ac3-4d2d-b4b2-cf965aa5ea4c` / `0d6b5ee1-b6c9-4752-bac3-3f3fb89065a4`.
 
 Read specs/002-product-roadmap/spec.md, decisions.md and the R002-T011 entry in tasks.md. Expose a read-only route preview using the same resolver used by dispatch. Implement only the declared scope, add the named verification coverage and record actual results. Preserve local-only state and coordinator-only execution. Do not install dependencies, access unrelated repositories, read environment files, publish, or grant approvals. Stop with a concrete blocked reason if a required approval, runtime or dependency is unavailable.
 
@@ -471,6 +471,13 @@ Acceptance:
 
 - The preview returns profile, model, effort and whether a built-in or explicit rule won.
 - Preview neither creates a run nor starts an App Server turn; conflicting task overrides are rejected.
+
+Actual verification:
+
+- `cargo test --offline -p router-cli --test routing_preview`: PASS, 7 tests.
+- `cargo test --offline -p router-cli`: PASS, 28 tests.
+- Verification was rerun with a per-task `CARGO_TARGET_DIR` after the initial Windows target lock; format and `git diff --check` passed.
+- Implementation published in signed commit `fb9ce63`; the preview is read-only and does not access credentials.
 
 Verification:
 
