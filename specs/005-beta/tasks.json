@@ -372,7 +372,7 @@
       "depends_on": [
         "R005-T003"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -400,7 +400,15 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "router.toml [prices.<model>] (input, cached_input, output in USD per 1M tokens), validated finite and non-negative; no default prices (tiers::tests::prices_are_read_by_model_and_must_not_be_negative).",
+        "savings module: cost formula with cached input at its own price (savings::tests::cached_input_is_charged_at_its_own_price), baseline at the fuerte model (savings_compare_each_turn_with_the_strong_model), unpriced turns counted apart and tokens by tier without prices (without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept).",
+        "Router overhead: the classification turn reports its tokens, RouteDecision.router_usage carries them, router_decide and router-cli route record them in router_usage; savings subtract them (router_classifier::app_server_classifier_runs_an_ephemeral_read_only_turn, savings::tests::the_classifier_counts_against_the_savings).",
+        "Store: chat turns and task runs (last thread/tokenUsage/updated evidence per run) of the last 30 days plus router_usage (savings::tests::the_store_adds_chat_turns_task_runs_and_the_classifier); savings_summary Tauri command.",
+        "cargo test --workspace: 145 passed; clippy -D warnings and fmt clean.",
+        "Commit 1daed64."
+      ],
       "release_target": "v0.9.0"
     },
     {
