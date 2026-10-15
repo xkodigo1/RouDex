@@ -29,8 +29,8 @@ pub use coordinator::{
 pub use dashboard::{Dashboard, DayUsage, ThreadSummary, TierUsage};
 pub use desktop_hook::{DesktopSummary, HookAction, HookChange, HookOutcome, PromptSubmit};
 pub use domain::{
-    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
-    TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,
+    EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, StoredRun, StoredTask, TaskApproval,
+    TaskDefinition, TaskSandbox, TaskStatus,
 };
 pub use persistence::{RouterStore, StoreError, StoredSpec};
 pub use risk::{RiskMatch, RiskRules, RiskRulesError};

@@ -8,7 +8,6 @@ import Threads from "./Threads.jsx";
 import { readStored, writeStored } from "./lib/format.js";
 import { SessionProvider, useSession } from "./lib/session.jsx";
 import { TaskProvider, useTasks } from "./lib/tasks.jsx";
-import "./styles.css";
 import "./theme.css";
 
 const VIEWS = [["resumen", "resumen"], ["hilos", "hilos"], ["proyectos", "proyectos"], ["tareas", "tareas"]];

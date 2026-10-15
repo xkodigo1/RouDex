@@ -4,14 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[lib]
-name = "roudex_desktop"
-path = "src/lib.rs"
-
 [dependencies]
 router-core = { path = "../crates/router-core" }
-rusqlite.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
 

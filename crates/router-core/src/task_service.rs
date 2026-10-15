@@ -78,6 +78,9 @@ pub struct TaskCard {
     pub approval: Option<TaskApproval>,
     pub latest_run: Option<StoredRun>,
     pub running: bool,
+    /// A retry would make it ready for a new run (interrupted, failed, or
+    /// blocked because its thread could not be resumed).
+    pub retryable: bool,
 }
 
 pub struct TaskService {
@@ -175,6 +178,7 @@ impl TaskService {
         let store = self.store()?;
         let spec = self.spec(&store, spec_id)?;
         let config = self.router_config();
+        let coordinator = TaskCoordinator::new(&store);
         let tasks = store
             .tasks_for_spec(spec_id)
             .map_err(|error| error.to_string())?
@@ -203,6 +207,9 @@ impl TaskService {
                         .latest_run_for_task(&task.id)
                         .map_err(|error| error.to_string())?,
                     running: self.runs.is_running(&task.id),
+                    retryable: coordinator
+                        .is_retryable(&task.id)
+                        .map_err(|error| error.to_string())?,
                     task,
                 })
             })

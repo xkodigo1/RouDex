@@ -203,20 +203,11 @@ impl<'a> TaskCoordinator<'a> {
                 "task requires scope, acceptance and verification before dispatch",
             );
         }
-        if task.status == TaskStatus::Blocked {
-            if let Some(run) = self.store.latest_run_for_task(task_id)? {
-                if self
-                    .store
-                    .events_for_run(&run.run_id)?
-                    .iter()
-                    .any(|event| event.event_type == "thread.resume.failed")
-                {
-                    return self.existing_receipt(
-                        &task,
-                        "thread recovery is blocked; explicit recovery required",
-                    );
-                }
-            }
+        if task.status == TaskStatus::Blocked && self.resume_failed(task_id)? {
+            return self.existing_receipt(
+                &task,
+                "thread recovery is blocked; explicit recovery required",
+            );
         }
         if !self.store.dependencies_completed(task_id)? {
             if matches!(
@@ -842,6 +833,34 @@ impl<'a> TaskCoordinator<'a> {
         })
     }
 
+    /// Whether [`Self::retry_interrupted_task`] would make the task ready
+    /// again: it was interrupted or failed, or its last run is blocked because
+    /// its thread could not be resumed.
+    pub fn is_retryable(&self, task_id: &str) -> Result<bool, CoordinatorError> {
+        let task = self
+            .store
+            .get_task(task_id)?
+            .ok_or_else(|| CoordinatorError::TaskNotFound(task_id.to_owned()))?;
+        Ok(match task.definition.status {
+            TaskStatus::Interrupted | TaskStatus::Failed => true,
+            TaskStatus::Blocked => self.resume_failed(task_id)?,
+            _ => false,
+        })
+    }
+
+    /// The task's latest run could not resume its thread. Dispatching it
+    /// again is refused; only an explicit retry starts a new run.
+    fn resume_failed(&self, task_id: &str) -> Result<bool, CoordinatorError> {
+        let Some(run) = self.store.latest_run_for_task(task_id)? else {
+            return Ok(false);
+        };
+        Ok(self
+            .store
+            .events_for_run(&run.run_id)?
+            .iter()
+            .any(|event| event.event_type == "thread.resume.failed"))
+    }
+
     pub fn retry_interrupted_task(
         &self,
         task_id: &str,
@@ -850,10 +869,7 @@ impl<'a> TaskCoordinator<'a> {
             .store
             .get_task(task_id)?
             .ok_or_else(|| CoordinatorError::TaskNotFound(task_id.to_owned()))?;
-        if !matches!(
-            task.definition.status,
-            TaskStatus::Interrupted | TaskStatus::Failed
-        ) {
+        if !self.is_retryable(task_id)? {
             return Ok(TaskExecutionReceipt {
                 task_id: task_id.to_owned(),
                 route_id: None,

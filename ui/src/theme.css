@@ -1,4 +1,4 @@
-/* Terminal/orchestrator theme. Loaded after styles.css (legacy task view). */
+/* Terminal/orchestrator theme: the app's only stylesheet. */
 :root {
   --bg: #0E1011;
   --bg-deep: #0B0D0E;
@@ -21,10 +21,15 @@
   color: var(--text);
   background: var(--bg);
   font-family: var(--mono);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
+* { box-sizing: border-box; }
 body { margin: 0; min-width: 900px; background: var(--bg); }
+p { margin: 0; }
 button { font-family: inherit; cursor: pointer; }
+summary { cursor: pointer; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 h1, h2 { margin: 0; font-weight: 600; }

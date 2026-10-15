@@ -133,7 +133,7 @@ const contract = (id, title, extra = {}) => ({ id, title, prompt: `${title}. Imp
   acceptance: ["El reporte cuadra con el extracto del banco.", "cargo test -p reports pasa."], verify: "cargo test -p reports", ...extra });
 const specFiles = [
   { slug: "001-comisiones", spec: { specId: "001-comisiones", title: "Reporte mensual de comisiones",
-    milestones: [{ id: "H1", title: "Cálculo", task_ids: ["R1-T1", "R1-T2", "R1-T3"] }, { id: "H2", title: "Entrega", task_ids: ["R1-T4", "R1-T5", "R1-T6"] }],
+    milestones: [{ id: "H1", title: "Cálculo", task_ids: ["R1-T1", "R1-T2", "R1-T3"] }, { id: "H2", title: "Entrega", task_ids: ["R1-T4", "R1-T5", "R1-T6", "R1-T7"] }],
     warnings: [], tasks: [
       contract("R1-T1", "Separa los reembolsos del cálculo de comisiones", { milestone: "H1", status: "completed" }),
       contract("R1-T2", "Agrega los festivos al corte del día 15", { milestone: "H1", depends_on: ["R1-T1"], tier: "economico", status: "ready" }),
@@ -142,6 +142,7 @@ const specFiles = [
       contract("R1-T5", "Documenta los campos del reporte", { milestone: "H2", status: "failed", tier: "economico",
         sandbox: { type: "readOnly", writable_roots: [] }, verify: "node scripts/check-docs.mjs" }),
       contract("R1-T6", "Publica el reporte en el panel", { milestone: "H2", depends_on: ["R1-T2", "R1-T4"], tier: "fuerte", approval: "manual" }),
+      contract("R1-T7", "Archiva los reportes de meses cerrados", { milestone: "H2", status: "blocked" }),
     ] } },
   { slug: "002-conciliacion", spec: { specId: "002-conciliacion", title: "Conciliación diaria", milestones: [],
     warnings: ["C2-T1: perfil standard traducido a tier estandar; el model/effort declarados se ignoran"], tasks: [
@@ -191,7 +192,8 @@ function board(specId) {
   if (!loadedSpecs.has(specId)) throw new Error(`la spec ${specId} no está cargada`);
   const tasks = [...tasksById.values()].filter((item) => item.specId === specId).map((entry) => ({
     task: entry.task, tierOverride: entry.tierOverride, route: route(entry), routeError: null, dependenciesCompleted: depsDone(entry),
-    approval: entry.approval, latestRun: storedRun(entry.runs.at(-1)), running: activeRun?.taskId === entry.task.id }));
+    approval: entry.approval, latestRun: storedRun(entry.runs.at(-1)), running: activeRun?.taskId === entry.task.id,
+    retryable: ["interrupted", "failed"].includes(entry.task.status) || Boolean(entry.resumeFailed) }));
   return { spec: storedSpec(specId), tasks };
 }
 
@@ -226,6 +228,11 @@ loadSpec("001-comisiones");
 seedRun(tasksById.get("R1-T1"), "completed", "El reembolso se restaba en fees.rs y otra vez en monthly_report.rs. Lo dejé solo en el agregado mensual y añadí un test con un reembolso parcial.",
   { exitCode: 0, stdout: "running 12 tests\ntest result: ok. 12 passed; 0 failed" });
 seedRun(tasksById.get("R1-T4"), "interrupted", "Generé la cabecera del CSV y empecé con el formato de montos");
+// Its thread could not be resumed: only a retry (a new run) gets it going.
+seedRun(tasksById.get("R1-T7"), "interrupted", "Listé los meses cerrados");
+tasksById.get("R1-T7").resumeFailed = true;
+tasksById.get("R1-T7").runs[0].status = "blocked";
+tasksById.get("R1-T7").runs[0].record("thread.resume.failed", { taskId: "R1-T7", reason: "resumed history does not match the persisted turn; explicit recovery required" });
 seedRun(tasksById.get("R1-T5"), "failed", "Documenté los campos en docs/reporte.md.", { exitCode: 1, stderr: "falta la descripción de: fee_total, refund_total" });
 
 async function streamTask(entry, run, resumed) {
@@ -326,7 +333,8 @@ function taskCommand(cmd, args) {
       return null;
     case "task_run_events": return [...tasksById.values()].flatMap((item) => item.runs).find((run) => run.run_id === args.runId)?.events ?? [];
     case "task_retry":
-      if (!["interrupted", "failed"].includes(entry.task.status)) return receiptOnly(args.taskId, entry.task.status, "task is not retryable");
+      if (!["interrupted", "failed"].includes(entry.task.status) && !entry.resumeFailed) return receiptOnly(args.taskId, entry.task.status, "task is not retryable");
+      entry.resumeFailed = false;
       entry.task.status = "ready";
       return receiptOnly(args.taskId, "ready", "task ready for retry");
     case "task_recover":
