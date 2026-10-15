@@ -57,8 +57,14 @@ tier and `spec-load` reports it in `warnings`.
 - `task-approve` records an approval or denial (default `approved`).
 - `task-run` / `task-dispatch` execute eligible tasks through `codex app-server`.
   Approval and dependency gates stay active; dispatch never grants approval.
+  Nobody can answer Codex's command or file-change approvals here, so the CLI
+  declines them and keeps the requests as evidence; the desktop app lets you
+  answer them.
 - `continue-run` resumes a task run from its persisted thread; completed runs
   are returned without replay.
+- `task-retry` makes an interrupted or failed task ready for a new run, and
+  also one blocked because its thread could not be resumed.
+  `task-recover` marks a task left running by a closed process as interrupted.
 - `run-events` returns the persisted events of a run.
 
 Errors go to stderr and exit nonzero. Internal workers cannot load specs, grant

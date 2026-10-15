@@ -389,19 +389,20 @@ export default function Tasks({ project }) {
 
 function TaskActions({ card, cards, busy, actions }) {
   const { task, running } = card;
-  const open = OPEN.includes(task.status);
+  // A task blocked by a failed resume only leaves that state through a retry.
+  const open = OPEN.includes(task.status) && !card.retryable;
   const reason = open ? blocker(card, cards) : null;
   const stale = task.status === "running" && !running;
   const tierEditable = !running && !["running", "completed"].includes(task.status);
   const loweredRisk = card.route?.risk?.length > 0 && card.route.tier !== "fuerte";
   // A completed task has nothing left to do.
-  if (!running && !open && !stale && !tierEditable) return null;
+  if (!running && !open && !stale && !tierEditable && !card.retryable) return null;
   return <div className="task-actions">
     {running && <button type="button" className="ghost" onClick={actions.stop}>■ detener</button>}
     {open && <button type="button" className="primary" disabled={busy || Boolean(reason)} title={reason ?? undefined} onClick={actions.run}>▶ ejecutar</button>}
     {task.status === "interrupted" && card.latestRun?.status === "interrupted" && <button type="button" className="primary" disabled={busy}
       title="Sigue en el mismo hilo sin repetir lo completado" onClick={actions.resume}>reanudar</button>}
-    {(task.status === "interrupted" || task.status === "failed") && <button type="button" className="ghost" disabled={busy}
+    {card.retryable && <button type="button" className="ghost" disabled={busy}
       title="Empieza una ejecución nueva" onClick={actions.retry}>reintentar</button>}
     {stale && <button type="button" className="amber-ghost" disabled={busy}
       title="La app se cerró durante la ejecución: márcala como interrumpida" onClick={actions.recover}>recuperar</button>}

@@ -767,7 +767,7 @@ fn resume_claim_rechecks_revoked_approval_dependencies_and_latest_run() {
 }
 
 #[test]
-fn missing_recovery_identity_is_durably_blocked_without_starting_runtime() {
+fn missing_recovery_identity_is_durably_blocked_until_an_explicit_retry() {
     for missing in ["definition", "thread", "turn"] {
         let fixture = Fixture::new();
         let db = fixture.cwd.join("router.sqlite3");
@@ -839,6 +839,19 @@ fn missing_recovery_identity_is_durably_blocked_without_starting_runtime() {
             .unwrap();
         assert_eq!(store.events_for_run("run").unwrap(), before);
         assert_eq!(store.count_runs().unwrap(), 1);
+
+        // A retry is the way out: a new run on a new thread.
+        assert!(coordinator.is_retryable(&task.id).unwrap(), "{missing}");
+        let retried = coordinator.retry_interrupted_task(&task.id).unwrap();
+        assert_eq!(retried.status, TaskStatus::Ready, "{missing}");
+        let rerun = coordinator
+            .dispatch_task(&task.id, &mut fixture.runtime("success"))
+            .unwrap();
+        assert_eq!(rerun.status, TaskStatus::Completed, "{missing}");
+        assert_ne!(rerun.run_id.as_deref(), Some("run"));
+        assert_eq!(store.events_for_run("run").unwrap(), before);
+        assert_eq!(store.count_runs().unwrap(), 2);
+        assert!(!coordinator.is_retryable(&task.id).unwrap());
     }
 }
 

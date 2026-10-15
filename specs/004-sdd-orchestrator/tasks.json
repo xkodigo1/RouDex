@@ -409,7 +409,7 @@
         "R004-T003",
         "R004-T005"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -439,7 +439,14 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "Removed: local_snapshot and local_run_events commands, the roudex_desktop library with its control_center and local_state tests (and its rusqlite and serde dependencies), RunStatus, TasksView, styles.css (base rules moved to theme.css) and ui/tests/ipc-fixture.html. route-preview, RoutingConfig and the profile table were removed in R004-T002; AppServerClient methods only used by tests in R004-T003.",
+        "A10: retry_interrupted_task also accepts a task blocked by thread.resume.failed; the next dispatch starts a new run and the blocked run keeps its events (task_coordinator::missing_recovery_identity_is_durably_blocked_until_an_explicit_retry). The board exposes retryable and the app offers reintentar for it (fixture R1-T7).",
+        "A11: the CLI loads tier manifests (legacy profiles with warnings), keeps approval and dependency gates, and its LocalTaskRuntime::start declines Codex approvals as evidence (task_cli, task_coordinator::cli_runs_decline_approvals_and_keep_them_as_evidence).",
+        "cargo test --workspace: 123 passed (10 legacy snapshot tests removed with their code); clippy -D warnings and fmt clean; pnpm --dir ui build and the fixture build pass.",
+        "Commit aecc7e8."
+      ],
       "release_target": "v0.8.0"
     },
     {

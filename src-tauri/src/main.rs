@@ -29,16 +29,6 @@ async fn blocking<T: Send + 'static>(
         .map_err(|error| error.to_string())?
 }
 
-#[tauri::command]
-fn local_snapshot() -> Result<roudex_desktop::LocalSnapshot, String> {
-    roudex_desktop::local_snapshot(&RouterStore::default_path())
-}
-
-#[tauri::command]
-fn local_run_events(run_id: String) -> Result<roudex_desktop::RunEvents, String> {
-    roudex_desktop::local_run_events(&RouterStore::default_path(), &run_id)
-}
-
 /// Router decision for a prompt; nothing is executed.
 #[tauri::command]
 async fn router_decide(project: String, prompt: String) -> Result<RouteDecision, String> {
@@ -414,8 +404,6 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            local_snapshot,
-            local_run_events,
             router_decide,
             router_escalate,
             router_config,

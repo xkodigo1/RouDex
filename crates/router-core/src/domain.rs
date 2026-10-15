@@ -9,16 +9,6 @@ pub enum RouteStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RunStatus {
-    Queued,
-    Running,
-    AwaitingApproval,
-    Completed,
-    Failed,
-    Interrupted,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Planned,

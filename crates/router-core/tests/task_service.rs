@@ -239,6 +239,7 @@ fn runs_stream_to_the_app_and_only_one_runs_at_a_time() {
         .any(|event| event.event_type == "task.verified"));
     let board = service.board("001-run").unwrap();
     assert!(!board.tasks[0].running);
+    assert!(!board.tasks[0].retryable);
     assert_eq!(board.tasks[0].latest_run.as_ref().unwrap().run_id, run_id);
 }
 
