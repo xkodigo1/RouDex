@@ -485,6 +485,55 @@ fn is_legacy(handler: &Value) -> bool {
 }
 
 /// Read `hooks.json`; a missing file is an empty document.
+/// What [`install`] did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Installed {
+    pub hooks_path: PathBuf,
+    pub command: String,
+    pub binary: PathBuf,
+    /// Earlier RouDex entries replaced by this one.
+    pub replaced: usize,
+    /// `route-prompt` entries from v0.3.x–v0.5.0 removed.
+    pub removed_legacy: usize,
+    /// The v0.5.0 managed hook still in place, if any.
+    pub legacy_managed_hook: Option<PathBuf>,
+}
+
+/// Install the Codex hook: copy `router_cli` to RouDex's home (outside
+/// AppData) unless it already is that copy, and point the RouDex entry of
+/// `hooks.json` at it. Installing twice leaves one entry and keeps the other
+/// hooks. Used by `router-cli hook-install` and by the app's button.
+pub fn install(router_cli: &Path) -> Result<Installed, String> {
+    let target = bin_path();
+    check_outside_app_data(&target)?;
+    let command = hook_command(&target)?;
+    let same = match (router_cli.canonicalize(), target.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    };
+    if !same {
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+        }
+        std::fs::copy(router_cli, &target).map_err(|error| {
+            format!("could not copy router-cli to {}: {error}", target.display())
+        })?;
+    }
+    let path = hooks_path();
+    let mut document = read_hooks(&path)?;
+    let change = install_into(&mut document, &command)?;
+    write_hooks(&path, &document)?;
+    Ok(Installed {
+        hooks_path: path,
+        command,
+        binary: target,
+        replaced: change.removed - change.removed_legacy,
+        removed_legacy: change.removed_legacy,
+        legacy_managed_hook: legacy_managed_hook(),
+    })
+}
+
 pub fn read_hooks(path: &Path) -> Result<Value, String> {
     match std::fs::read_to_string(path) {
         Ok(text) if text.trim().is_empty() => Ok(json!({})),

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import SavingsCard from "./SavingsCard.jsx";
 import { basename, percent, relativeTime, tokens } from "./lib/format.js";
+import { t } from "./lib/i18n.js";
 import { useSession } from "./lib/session.jsx";
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -55,8 +56,39 @@ function LimitBar({ label, window }) {
   </div>;
 }
 
+/**
+ * Install (or reinstall) the Codex hook from the router-cli bundled with an
+ * installed app; running from source, point to the CLI instead.
+ */
+function HookInstall({ hook, onInstalled }) {
+  const { notify } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!hook.bundled) {
+    return <span className="muted small">{t("hook.fromSource")} <code>router-cli hook-install</code></span>;
+  }
+  async function install() {
+    setBusy(true);
+    setError(null);
+    try {
+      const installed = await invoke("desktop_hook_install");
+      notify(t("hook.installed", { path: installed.hooksPath }));
+      onInstalled();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <>
+    <button type="button" className={hook.command ? "ghost" : "primary"} disabled={busy} onClick={install}>
+      {busy ? t("hook.installing") : hook.command ? t("hook.reinstall") : t("hook.install")}</button>
+    {error && <span className="error-line small">{error}</span>}
+  </>;
+}
+
 /** Codex Desktop prompts seen by the RouDex hook, and whether it is installed. */
-function DesktopCard({ desktop }) {
+function DesktopCard({ desktop, onInstalled }) {
   if (!desktop) return null;
   const { summary, hook } = desktop;
   const counts = ["economico", "estandar", "fuerte"].map((tier) => [tier, summary[tier]]);
@@ -67,7 +99,8 @@ function DesktopCard({ desktop }) {
       <span className="grow" />
       {hook.command
         ? <span className="hook-status on" title={hook.command}>hook instalado</span>
-        : <span className="hook-status" title={hook.error ?? hook.path}>hook no instalado · <code>router-cli hook-install</code></span>}
+        : <span className="hook-status" title={hook.error ?? hook.path}>hook no instalado</span>}
+      <HookInstall hook={hook} onInstalled={onInstalled} />
     </div>
     {summary.prompts ? <>
       <div className="desktop-stats">
@@ -101,6 +134,7 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
 
   // Codex Desktop prompts arrive from another app: reload when the window
   // comes back to the front and every 30 s while the summary is open.
+  const [installs, setInstalls] = useState(0);
   useEffect(() => {
     const load = () => invoke("desktop_hook_summary").then(setDesktop).catch((reason) => setError(String(reason)));
     const onVisible = () => { if (document.visibilityState === "visible") load(); };
@@ -113,7 +147,7 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
       window.removeEventListener("focus", load);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [revision]);
+  }, [revision, installs]);
 
   useEffect(() => {
     if (!project || rateLimits) return;
@@ -217,6 +251,6 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
       </section>
     </div>
 
-    <DesktopCard desktop={desktop} />
+    <DesktopCard desktop={desktop} onInstalled={() => setInstalls((n) => n + 1)} />
   </div>;
 }

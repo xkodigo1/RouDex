@@ -48,6 +48,11 @@ const DICTIONARIES = {
     "savings.noTier": "sin tier",
     "savings.turnsCount": "{count} turnos",
     "savings.addPrices": "Añade el precio de cada modelo (USD por millón de tokens) en router.toml:",
+    "hook.install": "Instalar hook",
+    "hook.reinstall": "Reinstalar hook",
+    "hook.installing": "Instalando…",
+    "hook.installed": "Hook instalado en {path}. Codex pedirá confiar en él antes de usarlo.",
+    "hook.fromSource": "Sin instalador, instálalo desde una terminal con",
   },
   en: {
     "nav.label": "Sections",
@@ -90,6 +95,11 @@ const DICTIONARIES = {
     "savings.noTier": "no tier",
     "savings.turnsCount": "{count} turns",
     "savings.addPrices": "Add each model's price (USD per million tokens) to router.toml:",
+    "hook.install": "Install hook",
+    "hook.reinstall": "Reinstall hook",
+    "hook.installing": "Installing…",
+    "hook.installed": "Hook installed in {path}. Codex asks you to trust it before it runs.",
+    "hook.fromSource": "Without the installer, install it from a terminal with",
   },
 };
 

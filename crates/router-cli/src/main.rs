@@ -472,31 +472,10 @@ fn hook_response(text: &str) -> Result<String, String> {
 /// Copy this binary to the RouDex home and point Codex's user `hooks.json`
 /// at that copy, replacing any earlier RouDex hook.
 fn hook_install() -> Result<(), String> {
-    let target = desktop_hook::bin_path();
-    desktop_hook::check_outside_app_data(&target)?;
-    let command = desktop_hook::hook_command(&target)?;
     let exe = env::current_exe().map_err(|error| error.to_string())?;
-    let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => false,
-    };
-    if !same(&exe, &target) {
-        if let Some(dir) = target.parent() {
-            std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
-        }
-        std::fs::copy(&exe, &target).map_err(|error| {
-            format!(
-                "no se pudo copiar router-cli a {}: {error}",
-                target.display()
-            )
-        })?;
-    }
-    let path = desktop_hook::hooks_path();
-    let mut document = desktop_hook::read_hooks(&path)?;
-    let change = desktop_hook::install_into(&mut document, &command)?;
-    desktop_hook::write_hooks(&path, &document)?;
+    let installed = desktop_hook::install(&exe)?;
     eprintln!("Codex pedirá revisar y confiar en el hook antes de ejecutarlo.");
-    let legacy_managed = desktop_hook::legacy_managed_hook();
+    let legacy_managed = installed.legacy_managed_hook.clone();
     if let Some(managed) = &legacy_managed {
         eprintln!(
             "Aviso: {} contiene el hook administrado de RouDex v0.5.0. Renómbralo como administrador; \
@@ -505,11 +484,11 @@ fn hook_install() -> Result<(), String> {
         );
     }
     write_json(&json!({
-        "hooksPath": path,
-        "command": command,
-        "binary": target,
-        "replaced": change.removed - change.removed_legacy,
-        "removedLegacy": change.removed_legacy,
+        "hooksPath": installed.hooks_path,
+        "command": installed.command,
+        "binary": installed.binary,
+        "replaced": installed.replaced,
+        "removedLegacy": installed.removed_legacy,
         "legacyManagedHook": legacy_managed
     }))
 }
