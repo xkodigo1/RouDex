@@ -77,6 +77,9 @@ pub struct RouterConfig {
     /// Codex Desktop hook options; optional so older files keep loading.
     #[serde(default)]
     pub desktop_hook: DesktopHookConfig,
+    /// The Codex executable, when RouDex cannot find it on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,6 +102,7 @@ impl Default for RouterConfig {
             },
             classifier: ModelTarget::new("gpt-6-luna", "low"),
             desktop_hook: DesktopHookConfig::default(),
+            codex_path: None,
         }
     }
 }

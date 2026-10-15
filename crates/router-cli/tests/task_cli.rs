@@ -610,3 +610,32 @@ fn data_from_before_0_9_is_copied_once_and_left_in_place() {
     assert!(!String::from_utf8_lossy(&second.stderr).contains("copied"));
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn a_missing_codex_says_where_it_looked_and_how_to_set_codex_path() {
+    let root = temp_root("no-codex");
+    let (home, empty) = (root.join("home"), root.join("empty"));
+    fs::create_dir_all(&home).unwrap();
+    fs::create_dir_all(&empty).unwrap();
+    let output = Command::new(binary())
+        .args(["models", &root.to_string_lossy()])
+        .env("ROUDEX_HOME", &home)
+        .env("LOCALAPPDATA", &empty)
+        .env("USERPROFILE", &empty)
+        .env("HOME", &empty)
+        .env("PATH", &empty)
+        .env_remove("ROUDEX_CODEX_BIN")
+        .env_remove("ROUDEX_ROUTER_INTERNAL")
+        .env_remove("ROUDEX_ACTIVE_TASK_ID")
+        .output()
+        .expect("run router-cli");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Codex was not found"), "{stderr}");
+    assert!(stderr.contains("codex_path"), "{stderr}");
+    assert!(
+        stderr.contains(&home.join("router.toml").display().to_string()),
+        "{stderr}"
+    );
+    let _ = fs::remove_dir_all(root);
+}

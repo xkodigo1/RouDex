@@ -201,7 +201,7 @@ impl Session {
         }
         let mut child = command
             .spawn()
-            .map_err(|error| SessionError::Start(error.to_string()))?;
+            .map_err(|error| SessionError::Start(crate::codex::start_error(&error)))?;
         let stdin = child
             .stdin
             .take()

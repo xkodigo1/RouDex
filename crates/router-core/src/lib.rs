@@ -1,6 +1,7 @@
 pub mod app_server;
 pub mod chat;
 pub mod classifier;
+pub mod codex;
 pub mod coordinator;
 pub mod dashboard;
 pub mod desktop_hook;
@@ -24,6 +25,7 @@ pub use classifier::{
     escalate_local, route_local, AppServerClassifier, Classification, DecisionSource,
     LocalClassifier, ModelClassifier, RouteDecision, Router,
 };
+pub use codex::{CodexNotFound, CodexSearch, Os};
 pub use coordinator::{
     CoordinatorError, RuntimeTurn, TaskCoordinator, TaskExecutionReceipt, TaskRuntime,
 };
