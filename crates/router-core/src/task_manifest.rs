@@ -472,5 +472,15 @@ mod tests {
         assert_eq!(orchestrator.tasks.len(), 7);
         assert_eq!(orchestrator.milestones[0].task_ids.len(), 7);
         assert!(orchestrator.warnings.is_empty());
+        let example = TaskManifest::from_json(include_str!(
+            "../../../examples/hello-orchestrator/specs/001-notes/tasks.json"
+        ))
+        .unwrap();
+        assert_eq!(example.tasks.len(), 2);
+        assert!(example
+            .tasks
+            .iter()
+            .all(|task| task.tier == Tier::Economico));
+        assert!(example.warnings.is_empty());
     }
 }
