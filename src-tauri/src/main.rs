@@ -59,8 +59,12 @@ async fn savings_summary(state: tauri::State<'_, AppState>) -> Result<SavingsSum
     blocking(move || {
         let config = RouterConfig::load_or_default(&RouterConfig::default_path())
             .map_err(|error| error.to_string())?;
+        let sessions = config
+            .savings
+            .include_codex_desktop
+            .then(router_core::codex_sessions::sessions_dir);
         chat.recorder()
-            .with_store(|store| store.savings(&config))
+            .with_store(|store| store.savings(&config, sessions.as_deref()))
             .map_err(|error| error.to_string())
     })
     .await
@@ -75,6 +79,18 @@ fn router_escalate(decision: RouteDecision) -> Result<RouteDecision, String> {
 #[tauri::command]
 fn router_config() -> Result<RouterConfig, String> {
     RouterConfig::load_or_default(&RouterConfig::default_path()).map_err(|error| error.to_string())
+}
+
+/// Count Codex Desktop turns in the savings estimate, or stop counting them.
+#[tauri::command]
+fn settings_set_codex_desktop(enabled: bool) -> Result<RouterConfig, String> {
+    RouterConfig::write_setting(
+        &RouterConfig::default_path(),
+        Some("savings"),
+        "include_codex_desktop",
+        &enabled.to_string(),
+    )
+    .map_err(|error| error.to_string())
 }
 
 /// Store the interface language in router.toml, where the Desktop hook and
@@ -458,6 +474,7 @@ fn main() {
             router_escalate,
             router_config,
             settings_set_language,
+            settings_set_codex_desktop,
             savings_summary,
             router_models,
             chat_send,

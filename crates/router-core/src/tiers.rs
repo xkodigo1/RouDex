@@ -125,6 +125,17 @@ pub struct RouterConfig {
     /// Prices by model id, for the savings estimate.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub prices: BTreeMap<String, ModelPrice>,
+    #[serde(default)]
+    pub savings: SavingsConfig,
+}
+
+/// Savings estimate options.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct SavingsConfig {
+    /// Also count Codex Desktop turns, read from `$CODEX_HOME/sessions`
+    /// (model and token counts only). Off by default.
+    pub include_codex_desktop: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +161,7 @@ impl Default for RouterConfig {
             codex_path: None,
             language: None,
             prices: BTreeMap::new(),
+            savings: SavingsConfig::default(),
         }
     }
 }

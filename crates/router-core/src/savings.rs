@@ -278,8 +278,19 @@ impl RouterStore {
         Ok((turns, router))
     }
 
-    pub fn savings(&self, config: &RouterConfig) -> Result<SavingsSummary, StoreError> {
-        let (turns, router) = self.usage()?;
+    /// The summary; with `codex_sessions`, Codex Desktop turns from that
+    /// folder are read (only new or changed files) and added as their own
+    /// source. Without it, no session file is opened.
+    pub fn savings(
+        &self,
+        config: &RouterConfig,
+        codex_sessions: Option<&std::path::Path>,
+    ) -> Result<SavingsSummary, StoreError> {
+        let (mut turns, router) = self.usage()?;
+        if let Some(dir) = codex_sessions {
+            self.refresh_codex_sessions(dir, std::time::SystemTime::now())?;
+            turns.extend(self.codex_desktop_usage()?);
+        }
         Ok(summarize(&turns, &router, config))
     }
 }
@@ -399,7 +410,7 @@ mod tests {
         assert_eq!(task.tier, Some(Tier::Fuerte));
         assert_eq!(router.len(), 1);
 
-        let summary = store.savings(&priced()).unwrap();
+        let summary = store.savings(&priced(), None).unwrap();
         // Chat 0.7 vs 3.0, task 3.0 vs 3.0, classifier 0.2.
         assert!((summary.cost - 3.7).abs() < 1e-9, "{}", summary.cost);
         assert!(
