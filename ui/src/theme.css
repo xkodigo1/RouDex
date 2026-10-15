@@ -102,6 +102,16 @@ button.link:hover { color: var(--accent-soft); }
 .tier-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; font-size: 13px; }
 .tier-stat { display: grid; gap: 4px; }
 .tier-stat strong { font-size: 20px; }
+.savings-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.savings-stats > div { display: grid; gap: 4px; }
+.savings-stats .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.savings-stats strong { font-size: 22px; font-weight: 600; }
+.savings-sources { width: 100%; border-collapse: collapse; font-size: 13px; }
+.savings-sources th { color: var(--muted); font-weight: 400; text-align: left; padding: 4px 8px 4px 0; }
+.savings-sources td { padding: 6px 8px 6px 0; border-top: 1px solid var(--line); }
+.toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+.toggle input { accent-color: var(--accent); }
+.snippet { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-deep); color: var(--accent-soft); font-family: inherit; font-size: 12px; white-space: pre; overflow-x: auto; }
 .desktop-stats { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; }
 .desktop-stats strong { font-size: 18px; }
 .warn-text { color: #D6A64B; }

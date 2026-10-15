@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
+import SavingsCard from "./SavingsCard.jsx";
 import { basename, percent, relativeTime, tokens } from "./lib/format.js";
 import { useSession } from "./lib/session.jsx";
 
@@ -144,6 +145,8 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
       <div className="pane stat"><span className="label">modelo más usado</span><strong className="stat-model">{top?.model ?? "—"}</strong>
         <span className="muted small">{top ? `${percent(top.tokens.total, (data?.models ?? []).reduce((s, m) => s + m.tokens.total, 0))} de los tokens` : "sin turnos todavía"}</span></div>
     </section>
+
+    <SavingsCard />
 
     <section className="pane" aria-labelledby="heat-title">
       <div className="row-wrap">

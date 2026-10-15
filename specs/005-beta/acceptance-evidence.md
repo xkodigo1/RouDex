@@ -15,10 +15,10 @@ cubren.
 | A06 instalar el hook desde la app | | Pendiente (R005-T007) |
 | A07 sin binario incluido | | Pendiente (R005-T007) |
 | A08 workflow de release | | Pendiente (R005-T008) |
-| A09 ahorro con precios | `savings::tests::*`, `tiers::tests::prices_are_read_by_model_and_must_not_be_negative`; tarjeta en R005-T006 | OK (cálculo) |
-| A10 sin precios | `savings::tests::without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept`; tarjeta en R005-T006 | OK (cálculo) |
+| A09 ahorro con precios | `savings::tests::*`, `tiers::tests::prices_are_read_by_model_and_must_not_be_negative`; tarjeta en el fixture | OK |
+| A10 sin precios | `savings::tests::without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept`; tarjeta en el fixture | OK |
 | A11 coste del clasificador | `router_classifier::app_server_classifier_runs_an_ephemeral_read_only_turn`, `savings::tests::the_classifier_counts_against_the_savings`, `the_store_adds_chat_turns_task_runs_and_the_classifier` | OK |
-| A12 Codex Desktop activado | `codex_sessions::tests::desktop_turns_count_once_without_keeping_any_text`, `lines_are_told_apart_by_their_start_only`; sesiones reales (conteos); tarjeta en R005-T006 | OK (lectura) |
+| A12 Codex Desktop activado | `codex_sessions::tests::desktop_turns_count_once_without_keeping_any_text`, `lines_are_told_apart_by_their_start_only`; sesiones reales (conteos); tarjeta en el fixture | OK |
 | A13 Codex Desktop apagado | `codex_sessions::tests::the_summary_reads_sessions_only_when_asked` | OK |
 | A14 cambiar de idioma | Fixture (marco, navegación y avisos); pantallas en R005-T009 | En curso |
 | A15 idioma del sistema | `tiers::tests::a_setting_changes_one_line_and_keeps_the_rest`, `a_setting_in_an_empty_or_missing_file_is_all_the_file_holds`; fixture | OK |
@@ -138,3 +138,23 @@ cubren.
   - 399 turnos de 5 modelos.
   - Se imprimieron solo conteos, con una prueba temporal que se retiró antes
     del commit.
+
+## A09, A10 y A12 · Tarjeta de ahorro (R005-T006)
+
+Fixture `?view=resumen`, 2026-10-15:
+
+- **Con precios, en español:**
+  - Coste estimado 3,15 US$, todo en fuerte 8,32 US$ (`gpt-6.1-sol`), coste
+    del router 0,0042 US$ (18 clasificaciones) y ahorro 5,17 US$, un 62 %
+    menos que en fuerte.
+  - Hay una tabla por origen (chat y tareas) y la nota de estimación.
+- **«incluir Codex Desktop»:**
+  - Escribe la opción, añade la fila Codex Desktop (382/399 turnos) y avisa
+    de «17 turnos sin precio no cuentan (gpt-6-astra)».
+  - Los totales pasan a 24,55 / 67,07 / 42,52 US$.
+- **En inglés:** los mismos importes como $24.55 / $67.07 / $42.52, con
+  «Estimated savings», «all on fuerte» y «router cost».
+- **Sin precios (`?savings=none`):** «Sin precios no se estima dinero», los
+  tokens por tier y el fragmento con `[prices."gpt-6.1-sol"]` y
+  `[prices."gpt-6-luna"]` listo para pegar.
+- **Diseño:** a 1280×900 la tarjeta sigue el estilo de Resumen.
