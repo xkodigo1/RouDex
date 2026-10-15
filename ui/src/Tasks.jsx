@@ -1,25 +1,27 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApprovalCard, CommandLine, TurnLog } from "./Transcript.jsx";
-import { TASK_STATUS_LABEL, TIERS, basename, percent, readStored, reasonText, receiptLine, routeReason, writeStored } from "./lib/format.js";
+import { TIERS, basename, percent, readStored, reasonText, receiptLine, routeReason, taskStatusLabel, writeStored } from "./lib/format.js";
+import { errorText, t, tn } from "./lib/i18n.js";
 import { useSession } from "./lib/session.jsx";
+import { useI18n } from "./lib/language.jsx";
 import { useTasks } from "./lib/tasks.jsx";
 
 const STATUS_MARK = { planned: "○", ready: "○", awaiting_approval: "?", running: "●", completed: "✓", failed: "✗", blocked: "■", interrupted: "‖" };
 // Statuses a dispatch can start from (the coordinator checks the rest).
 const OPEN = ["planned", "ready", "blocked", "awaiting_approval"];
-const DECISION_LABEL = { approved: "aprobada", denied: "denegada" };
-const SANDBOX_LABEL = { workspaceWrite: "escritura en el proyecto", readOnly: "solo lectura" };
+const DECISION_KEY = { approved: "tasks.detail.approved", denied: "tasks.detail.denied" };
+const SANDBOX_KEY = { workspaceWrite: "tasks.detail.workspaceWrite", readOnly: "tasks.detail.readOnly" };
 // Stored run events worth a line in the transcript.
 const EVENT_NOTE = {
-  "turn.error": "el turno se cortó",
-  "turn.invalid": "respuesta inválida del runtime",
-  "turn.incomplete": "el turno no terminó",
-  "thread.start.failed": "no se pudo abrir el hilo",
-  "thread.resume.failed": "no se pudo reanudar el hilo",
-  "thread.resumed": "hilo reanudado",
-  "task.blocked": "bloqueada",
-  "task.recovered": "marcada como interrumpida",
+  "turn.error": "tasks.note.turnError",
+  "turn.invalid": "tasks.note.turnInvalid",
+  "turn.incomplete": "tasks.note.turnIncomplete",
+  "thread.start.failed": "tasks.note.threadStartFailed",
+  "thread.resume.failed": "tasks.note.threadResumeFailed",
+  "thread.resumed": "tasks.note.threadResumed",
+  "task.blocked": "tasks.note.taskBlocked",
+  "task.recovered": "tasks.note.taskRecovered",
 };
 
 function StatusMark({ status }) {
@@ -32,12 +34,12 @@ const needsApproval = (task) => task.approval !== "not_required";
 function blocker(card, cards) {
   if (!card.dependenciesCompleted) {
     const pending = card.task.depends_on.filter((id) => cards.find((c) => c.task.id === id)?.task.status !== "completed");
-    return `faltan dependencias: ${pending.join(", ")}`;
+    return t("tasks.missingDeps", { list: pending.join(", ") });
   }
   if (needsApproval(card.task) && card.approval?.decision !== "approved") {
-    return card.approval?.decision === "denied" ? "la aprobación fue denegada" : "necesita aprobación";
+    return card.approval?.decision === "denied" ? t("tasks.approvalDenied") : t("tasks.needsApproval");
   }
-  return card.routeError ?? null;
+  return card.routeError ? errorText(card.routeError) : null;
 }
 
 const runnable = (card, cards) => OPEN.includes(card.task.status) && !card.running && !blocker(card, cards);
@@ -91,7 +93,7 @@ function runLog(events, task) {
     } else if (type === "task.verified" || type === "verification.failed") {
       verify = verification(payload, type === "verification.failed", task.verify);
     } else if (EVENT_NOTE[type]) {
-      entries.push({ note: { type, text: `${EVENT_NOTE[type]}${payload.reason ? `: ${reasonText(payload.reason)}` : ""}` } });
+      entries.push({ note: { type, text: `${t(EVENT_NOTE[type])}${payload.reason ? `: ${reasonText(payload.reason)}` : ""}` } });
     }
   }
   return { turns, entries, verify };
@@ -99,10 +101,10 @@ function runLog(events, task) {
 
 function Verification({ verify, running, command }) {
   if (!verify && !running) return null;
-  const line = verify ?? { id: "verify", command, status: "en curso", exitCode: null };
+  const line = verify ?? { id: "verify", command, status: "inProgress", exitCode: null };
   return <>
     <span />
-    <span className="log-router">verificación{verify?.exitCode !== null && verify?.exitCode !== undefined ? ` · salida ${verify.exitCode}` : ""}{verify?.reason ? ` · ${verify.reason}` : ""}</span>
+    <span className="log-router">{t("tasks.verification")}{verify?.exitCode !== null && verify?.exitCode !== undefined ? t("tasks.exit", { code: verify.exitCode }) : ""}{verify?.reason ? ` · ${verify.reason}` : ""}</span>
     <CommandLine command={line} />
   </>;
 }
@@ -127,11 +129,11 @@ function RunTranscript({ card, events, onAnswer }) {
   const run = card.latestRun;
 
   if (!shown.length && !approvals.length) {
-    return <div className="placeholder"><h2>Sin ejecuciones</h2>
-      <p className="muted">{card.running ? "Arrancando Codex…" : "Ejecuta la tarea para ver aquí su transcripción."}</p></div>;
+    return <div className="placeholder"><h2>{t("tasks.noRuns")}</h2>
+      <p className="muted">{card.running ? t("tasks.starting") : t("tasks.runToSee")}</p></div>;
   }
   return <>
-    {run && <p className="run-head muted small">ejecución {run.run_id.slice(0, 8)} · {TASK_STATUS_LABEL[run.status] ?? run.status} · {run.model} {run.effort}</p>}
+    {run && <p className="run-head muted small">{t("tasks.run", { id: run.run_id.slice(0, 8), status: taskStatusLabel(run.status), model: run.model, effort: run.effort })}</p>}
     {shown.map(({ turn, note }, index) => (turn
       ? <TurnLog key={turn.turn_id ?? index} turn={turn} live={tasks.live[turn.turn_id]}
         extra={turn === lastTurn && <Verification verify={log.verify} running={verifying} command={task.verify} />} />
@@ -146,22 +148,22 @@ function TaskDetail({ card, cards, onSelect }) {
   const roots = task.sandbox.writable_roots?.join(", ");
   return <div className="task-detail">
     <dl>
-      <dt>prompt</dt><dd><pre>{task.prompt}</pre></dd>
-      <dt>aceptación</dt><dd><ul>{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}</ul></dd>
-      <dt>verificación</dt><dd><code>$ {task.verify}</code></dd>
-      <dt>dependencias</dt><dd className="row-wrap">{task.depends_on.length ? task.depends_on.map((id) => {
+      <dt>{t("tasks.detail.prompt")}</dt><dd><pre>{task.prompt}</pre></dd>
+      <dt>{t("tasks.detail.acceptance")}</dt><dd><ul>{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}</ul></dd>
+      <dt>{t("tasks.detail.verify")}</dt><dd><code>$ {task.verify}</code></dd>
+      <dt>{t("tasks.detail.dependencies")}</dt><dd className="row-wrap">{task.depends_on.length ? task.depends_on.map((id) => {
         const dependency = cards.find((c) => c.task.id === id);
         return <button key={id} type="button" className="dep-link" onClick={() => onSelect(id)}>
           <StatusMark status={dependency?.task.status} /> {id}</button>;
-      }) : <span className="muted">ninguna</span>}</dd>
-      <dt>tier</dt><dd>{task.tier} en la spec{task.profile ? ` (perfil ${task.profile})` : ""}{card.tierOverride ? ` · elegido a mano: ${card.tierOverride}` : ""}</dd>
-      <dt>ruta</dt><dd>{route ? <><span className={`tier-text tier-${route.tier}`}>{route.tier}</span> · {route.model} {route.effort} · {routeReason(route)}</>
-        : <span className="error-line">{card.routeError}</span>}</dd>
-      {route?.risk?.length > 0 && <><dt>riesgo</dt><dd className="warn-text">{route.risk.map((match) => match.value).join(", ")}</dd></>}
-      <dt>aprobación</dt><dd>{needsApproval(task) ? DECISION_LABEL[card.approval?.decision] ?? "pendiente" : "no requerida"}</dd>
-      <dt>alcance</dt><dd>{task.scope.join(", ")}</dd>
-      <dt>sandbox</dt><dd>{SANDBOX_LABEL[task.sandbox.type] ?? task.sandbox.type}{roots ? ` · ${roots}` : ""}</dd>
-      <dt>carpeta</dt><dd>{task.cwd}</dd>
+      }) : <span className="muted">{t("tasks.detail.none")}</span>}</dd>
+      <dt>{t("tasks.detail.tier")}</dt><dd>{t("tasks.detail.specTier", { tier: task.tier })}{task.profile ? t("tasks.detail.profile", { profile: task.profile }) : ""}{card.tierOverride ? t("tasks.detail.override", { tier: card.tierOverride }) : ""}</dd>
+      <dt>{t("tasks.detail.route")}</dt><dd>{route ? <><span className={`tier-text tier-${route.tier}`}>{route.tier}</span> · {route.model} {route.effort} · {routeReason(route)}</>
+        : <span className="error-line">{errorText(card.routeError)}</span>}</dd>
+      {route?.risk?.length > 0 && <><dt>{t("tasks.detail.risk")}</dt><dd className="warn-text">{route.risk.map((match) => match.value).join(", ")}</dd></>}
+      <dt>{t("tasks.detail.approval")}</dt><dd>{needsApproval(task) ? t(DECISION_KEY[card.approval?.decision] ?? "tasks.detail.pending") : t("tasks.detail.notRequired")}</dd>
+      <dt>{t("tasks.detail.scope")}</dt><dd>{task.scope.join(", ")}</dd>
+      <dt>{t("tasks.detail.sandbox")}</dt><dd>{SANDBOX_KEY[task.sandbox.type] ? t(SANDBOX_KEY[task.sandbox.type]) : task.sandbox.type}{roots ? ` · ${roots}` : ""}</dd>
+      <dt>{t("tasks.detail.folder")}</dt><dd>{task.cwd}</dd>
     </dl>
   </div>;
 }
@@ -169,20 +171,21 @@ function TaskDetail({ card, cards, onSelect }) {
 /** Specs of the project and the loaded ones; picking an unloaded one loads it. */
 function SpecPicker({ specs, files, specId, project, onPick }) {
   const unloaded = files.filter((file) => !file.loaded && !file.error);
-  return <label className="field">spec
+  return <label className="field">{t("tasks.spec")}
     <select value={specId} onChange={(event) => onPick(event.target.value)}>
-      {!specs.some((spec) => spec.specId === specId) && <option value="">elige una spec</option>}
-      {specs.length > 0 && <optgroup label="cargadas">
+      {!specs.some((spec) => spec.specId === specId) && <option value="">{t("tasks.pickSpec")}</option>}
+      {specs.length > 0 && <optgroup label={t("tasks.loaded")}>
         {specs.map((spec) => <option key={spec.specId} value={spec.specId}>{spec.specId} · {spec.completed}/{spec.tasks}</option>)}
       </optgroup>}
-      {unloaded.length > 0 && <optgroup label={`sin cargar · ${basename(project)}`}>
-        {unloaded.map((file) => <option key={file.path} value={`file:${file.path}`}>{file.specId} · {file.tasks} tareas</option>)}
+      {unloaded.length > 0 && <optgroup label={t("tasks.unloaded", { project: basename(project) })}>
+        {unloaded.map((file) => <option key={file.path} value={`file:${file.path}`}>{file.specId} · {t("tasks.taskCount", { count: file.tasks })}</option>)}
       </optgroup>}
     </select>
   </label>;
 }
 
 export default function Tasks({ project }) {
+  const { language } = useI18n();
   const session = useSession();
   const tasks = useTasks();
   const [files, setFiles] = useState([]);
@@ -197,9 +200,9 @@ export default function Tasks({ project }) {
   const endRef = useRef(null);
 
   useEffect(() => {
-    invoke("spec_list").then(setSpecs).catch((reason) => setError(String(reason)));
+    invoke("spec_list").then(setSpecs).catch((reason) => setError(errorText(reason)));
     if (!project) { setFiles([]); return; }
-    invoke("spec_files", { project }).then(setFiles).catch((reason) => setError(String(reason)));
+    invoke("spec_files", { project }).then(setFiles).catch((reason) => setError(errorText(reason)));
   }, [project, tasks.revision]);
 
   const choose = (id) => {
@@ -216,7 +219,7 @@ export default function Tasks({ project }) {
     if (!specId) { setBoard(null); return undefined; }
     let current = true;
     invoke("task_board", { specId }).then((value) => { if (current) setBoard(value); })
-      .catch((reason) => { if (current) { setBoard(null); setError(String(reason)); } });
+      .catch((reason) => { if (current) { setBoard(null); setError(errorText(reason)); } });
     return () => { current = false; };
   }, [specId, tasks.revision]);
 
@@ -243,7 +246,7 @@ export default function Tasks({ project }) {
     if (!runId) { setEvents([]); return undefined; }
     let current = true;
     invoke("task_run_events", { runId }).then((value) => { if (current) setEvents(value); })
-      .catch((reason) => { if (current) setError(String(reason)); });
+      .catch((reason) => { if (current) setError(errorText(reason)); });
     return () => { current = false; };
   }, [runId, tasks.revision]);
 
@@ -259,7 +262,7 @@ export default function Tasks({ project }) {
       await after?.(result);
       tasks.bump();
     } catch (reason) {
-      setError(String(reason));
+      setError(errorText(reason));
     } finally {
       setBusy(false);
     }
@@ -270,7 +273,7 @@ export default function Tasks({ project }) {
     await act("spec_load", { path: value.slice(5) }, (spec) => {
       choose(spec.specId);
       const count = spec.warnings.length;
-      if (count) session.notify(`${spec.specId} cargada con ${count} ${count === 1 ? "aviso" : "avisos"}`);
+      if (count) session.notify(tn("tasks.loadedWithWarnings", count, { spec: spec.specId }));
     });
   }
 
@@ -291,14 +294,14 @@ export default function Tasks({ project }) {
     recover: () => act("task_recover", { taskId }, (receipt) => session.notify(receiptLine(taskId, receipt))),
     decide: (approved) => act("task_decide", { taskId, approved }),
     tier: (tier) => act("task_set_tier", { taskId, tier }),
-    reload: () => act("spec_load", { path: board.spec.path }, () => session.notify(`${specId} recargada desde el archivo`)),
+    reload: () => act("spec_load", { path: board.spec.path }, () => session.notify(t("tasks.reloaded", { spec: specId }))),
   };
 
   async function answer(item, decision) {
     try {
       await invoke("task_approval", { taskId: item.taskId, requestId: item.requestId, decision });
       tasks.resolveApproval(item);
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(errorText(reason)); }
   }
 
   const groups = useMemo(() => {
@@ -311,9 +314,9 @@ export default function Tasks({ project }) {
       return { id: milestone.id, title: milestone.title, cards: members };
     });
     const rest = cards.filter((item) => !listed.has(item.task.id));
-    if (rest.length) result.push({ id: "", title: "sin hito", cards: rest });
+    if (rest.length) result.push({ id: "", title: t("tasks.noMilestone"), cards: rest });
     return result;
-  }, [board]);
+  }, [board, language]);
 
   const ready = cards.filter((item) => runnable(item, cards));
   const broken = files.filter((file) => file.error);
@@ -321,26 +324,26 @@ export default function Tasks({ project }) {
   const waiting = new Set(tasks.approvals.map((item) => item.taskId));
 
   return <div className="threads tasks">
-    <section className="thread-list" aria-label="Specs y tareas">
+    <section className="thread-list" aria-label={t("tasks.listLabel")}>
       <div className="thread-list-head">
-        <div className="row-between"><h1>Tareas</h1>
+        <div className="row-between"><h1>{t("tasks.title")}</h1>
           {board && <button type="button" className="ghost" disabled={!ready.length || busyApp || busy} onClick={actions.runReady}
-            title="Ejecuta una tras otra, en orden de dependencias, las tareas que pueden correr ahora">▶ ejecutar listas · {ready.length}</button>}
+            title={t("tasks.runReadyHint")}>{t("tasks.runReady", { count: ready.length })}</button>}
         </div>
         <SpecPicker specs={specs ?? []} files={files} specId={specId} project={project} onPick={pick} />
         {board && <div className="spec-summary">
           <div className="row-between small">
             <span className="muted ellipsis" title={board.spec.title}>{board.spec.title}</span>
-            {board.spec.path && <button type="button" className="link small" disabled={busy} onClick={actions.reload}>recargar</button>}
+            {board.spec.path && <button type="button" className="link small" disabled={busy} onClick={actions.reload}>{t("tasks.reload")}</button>}
           </div>
           <div className="bar"><div className="bar-fill ok" style={{ width: percent(board.spec.completed, board.spec.tasks) }} /></div>
-          <span className="muted small">{board.spec.completed}/{board.spec.tasks} completadas{tasks.active ? ` · en curso: ${tasks.active}` : ""}</span>
+          <span className="muted small">{t("tasks.completedCount", { done: board.spec.completed, total: board.spec.tasks })}{tasks.active ? t("tasks.runningLabel", { label: tasks.active }) : ""}</span>
           {board.spec.warnings.length > 0 && <details className="warn-text small">
-            <summary>{board.spec.warnings.length} {board.spec.warnings.length === 1 ? "aviso" : "avisos"} al cargar</summary>
+            <summary>{tn("tasks.warnings", board.spec.warnings.length)}</summary>
             {board.spec.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
           </details>}
         </div>}
-        {broken.map((file) => <p key={file.path} className="error-line small">{basename(file.path.replace(/[\\/]tasks\.json$/, ""))}: {file.error}</p>)}
+        {broken.map((file) => <p key={file.path} className="error-line small">{basename(file.path.replace(/[\\/]tasks\.json$/, ""))}: {errorText(file.error)}</p>)}
       </div>
       <div className="thread-items">
         {groups.map((group) => <div key={group.id || "rest"} className="milestone" role="group" aria-label={group.title}>
@@ -350,34 +353,34 @@ export default function Tasks({ project }) {
             onClick={() => select(item.task.id)}>
             <span className="row-start"><StatusMark status={item.task.status} /><span className="muted task-id">{item.task.id}</span><span className="ellipsis">{item.task.title}</span></span>
             <span className="row-between muted small">
-              <span>{waiting.has(item.task.id) ? "esperando tu respuesta" : TASK_STATUS_LABEL[item.task.status] ?? item.task.status}
-                {needsApproval(item.task) && OPEN.includes(item.task.status) && item.approval?.decision !== "approved" ? " · pide aprobación" : ""}</span>
+              <span>{waiting.has(item.task.id) ? t("tasks.waiting") : taskStatusLabel(item.task.status)}
+                {needsApproval(item.task) && OPEN.includes(item.task.status) && item.approval?.decision !== "approved" ? t("tasks.asksApproval") : ""}</span>
               {item.route && <span className={`tier-text tier-${item.route.tier}`}>{item.route.tier}{item.tierOverride ? " ·m" : ""}</span>}
             </span>
           </button>)}
         </div>)}
-        {!board && <p className="muted pad">{specs === null ? "Cargando…" : project
-          ? "Elige una spec del proyecto para cargarla."
-          : "Elige un proyecto en «proyectos» para ver sus specs."}</p>}
+        {!board && <p className="muted pad">{specs === null ? t("tasks.loading") : project
+          ? t("tasks.pickProjectSpec")
+          : t("tasks.pickProject")}</p>}
       </div>
     </section>
 
     <main className="thread-main">
-      {!card ? <div className="placeholder"><h2>Sin tarea</h2><p className="muted">Carga una spec y elige una tarea.</p></div> : <>
+      {!card ? <div className="placeholder"><h2>{t("tasks.noTask")}</h2><p className="muted">{t("tasks.noTaskHint")}</p></div> : <>
         <div className="thread-head">
           <div className="thread-title">
             <h2>{card.task.title}</h2>
-            <span className="muted small">{card.task.id}{card.task.milestone ? ` · ${card.task.milestone}` : ""} · <StatusMark status={card.task.status} /> {TASK_STATUS_LABEL[card.task.status] ?? card.task.status}</span>
+            <span className="muted small">{card.task.id}{card.task.milestone ? ` · ${card.task.milestone}` : ""} · <StatusMark status={card.task.status} /> {taskStatusLabel(card.task.status)}</span>
           </div>
           {card.route && <span className={`tier-chip tier-${card.route.tier}`} title={card.route.reason}>{card.route.tier} · {card.route.model} {card.route.effort}</span>}
         </div>
         <TaskActions card={card} cards={cards} busy={busy || busyApp} actions={actions} />
-        <div className="chips task-tabs" role="tablist" aria-label="Vista de la tarea">
-          {[["detalle", "detalle"], ["ejecucion", "ejecución"]].map(([id, label]) => <button key={id} type="button" role="tab" className="chip"
-            aria-selected={tab === id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}
+        <div className="chips task-tabs" role="tablist" aria-label={t("tasks.viewLabel")}>
+          {["detalle", "ejecucion"].map((id) => <button key={id} type="button" role="tab" className="chip"
+            aria-selected={tab === id} aria-pressed={tab === id} onClick={() => setTab(id)}>{t(`tasks.tab.${id}`)}</button>)}
         </div>
         {tab === "detalle" ? <TaskDetail card={card} cards={cards} onSelect={(id) => select(id)} />
-          : <div className="transcript" aria-label="Transcripción de la tarea">
+          : <div className="transcript" aria-label={t("tasks.transcript")}>
             <RunTranscript card={card} events={events} onAnswer={answer} />
             <div ref={endRef} />
           </div>}
@@ -398,26 +401,26 @@ function TaskActions({ card, cards, busy, actions }) {
   // A completed task has nothing left to do.
   if (!running && !open && !stale && !tierEditable && !card.retryable) return null;
   return <div className="task-actions">
-    {running && <button type="button" className="ghost" onClick={actions.stop}>■ detener</button>}
-    {open && <button type="button" className="primary" disabled={busy || Boolean(reason)} title={reason ?? undefined} onClick={actions.run}>▶ ejecutar</button>}
+    {running && <button type="button" className="ghost" onClick={actions.stop}>{t("tasks.stop")}</button>}
+    {open && <button type="button" className="primary" disabled={busy || Boolean(reason)} title={reason ?? undefined} onClick={actions.run}>{t("tasks.runTask")}</button>}
     {task.status === "interrupted" && card.latestRun?.status === "interrupted" && <button type="button" className="primary" disabled={busy}
-      title="Sigue en el mismo hilo sin repetir lo completado" onClick={actions.resume}>reanudar</button>}
+      title={t("tasks.resumeHint")} onClick={actions.resume}>{t("tasks.resume")}</button>}
     {card.retryable && <button type="button" className="ghost" disabled={busy}
-      title="Empieza una ejecución nueva" onClick={actions.retry}>reintentar</button>}
+      title={t("tasks.retryHint")} onClick={actions.retry}>{t("tasks.retry")}</button>}
     {stale && <button type="button" className="amber-ghost" disabled={busy}
-      title="La app se cerró durante la ejecución: márcala como interrumpida" onClick={actions.recover}>recuperar</button>}
+      title={t("tasks.recoverHint")} onClick={actions.recover}>{t("tasks.recover")}</button>}
     {needsApproval(task) && open && <>
-      <button type="button" className="ghost" disabled={card.approval?.decision === "approved"} onClick={() => actions.decide(true)}>aprobar</button>
-      <button type="button" className="ghost" disabled={card.approval?.decision === "denied"} onClick={() => actions.decide(false)}>denegar</button>
+      <button type="button" className="ghost" disabled={card.approval?.decision === "approved"} onClick={() => actions.decide(true)}>{t("tasks.approve")}</button>
+      <button type="button" className="ghost" disabled={card.approval?.decision === "denied"} onClick={() => actions.decide(false)}>{t("tasks.deny")}</button>
     </>}
     {reason && <span className="muted small">{reason}</span>}
     <span className="grow" />
-    {tierEditable && <div className="segmented" role="group" aria-label="Tier de la tarea">
-      <button type="button" aria-pressed={!card.tierOverride} title="El tier de la spec, subido a fuerte si hay riesgo"
+    {tierEditable && <div className="segmented" role="group" aria-label={t("tasks.tierLabel")}>
+      <button type="button" aria-pressed={!card.tierOverride} title={t("tasks.specTierHint")}
         onClick={() => card.tierOverride && actions.tier(null)}>spec</button>
       {TIERS.map((tier) => <button key={tier} type="button" className={`tier-text tier-${tier}`} aria-pressed={card.tierOverride === tier}
         onClick={() => card.tierOverride !== tier && actions.tier(tier)}>{tier}</button>)}
     </div>}
-    {loweredRisk && <p className="error-line task-warning">Esta tarea tiene riesgo y la bajaste por debajo de fuerte.</p>}
+    {loweredRisk && <p className="error-line task-warning">{t("tasks.loweredRisk")}</p>}
   </div>;
 }

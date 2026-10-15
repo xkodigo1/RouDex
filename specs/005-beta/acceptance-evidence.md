@@ -20,7 +20,7 @@ cubren.
 | A11 coste del clasificador | `router_classifier::app_server_classifier_runs_an_ephemeral_read_only_turn`, `savings::tests::the_classifier_counts_against_the_savings`, `the_store_adds_chat_turns_task_runs_and_the_classifier` | OK |
 | A12 Codex Desktop activado | `codex_sessions::tests::desktop_turns_count_once_without_keeping_any_text`, `lines_are_told_apart_by_their_start_only`; sesiones reales (conteos); tarjeta en el fixture | OK |
 | A13 Codex Desktop apagado | `codex_sessions::tests::the_summary_reads_sessions_only_when_asked` | OK |
-| A14 cambiar de idioma | Fixture (marco, navegación y avisos); pantallas en R005-T009 | En curso |
+| A14 cambiar de idioma | Fixture en las cuatro pantallas; `ui/tests/check-i18n.mjs` en el build | OK |
 | A15 idioma del sistema | `tiers::tests::a_setting_changes_one_line_and_keeps_the_rest`, `a_setting_in_an_empty_or_missing_file_is_all_the_file_holds`; fixture | OK |
 | A16 hook en el idioma elegido | `desktop_hook::tests::the_hook_writes_in_the_chosen_language_and_in_english_when_unset`, `hook_cli::the_hook_follows_the_language_in_router_toml` | OK |
 | A17 instalador de Windows con Codex real | | Pendiente (R005-T010) |
@@ -196,3 +196,20 @@ Fixture `?view=resumen`, 2026-10-15:
 5. **Sin binario incluido (fixture):** la tarjeta no ofrece el botón y
    muestra «Sin instalador, instálalo desde una terminal con
    `router-cli hook-install`».
+
+## A14 · Todas las pantallas (R005-T009)
+
+- **Comprobación de textos:** `ui/tests/check-i18n.mjs` corre con
+  `pnpm --dir ui build` e informa «300 keys in es and en; no text outside
+  the dictionaries».
+  - Un archivo de prueba con un texto, un `aria-label` y un `title` sin
+    traducir hace que falle con las tres líneas.
+  - Ignora `<code>` y las comparaciones.
+- **Fixture en inglés, 2026-10-15:**
+  - Ninguna palabra en español de la interfaz queda en resumen, hilos,
+    proyectos ni tareas; lo que sigue en español son datos del fixture
+    (títulos de hilos, specs, motivos simulados del router).
+  - Ejemplos: «$ roudex summary --period 12m», «current streak: 9 days»,
+    «▶ run ready · 2», «verification · exit 1», «─ turn completed · 84k
+    tokens», «waiting for approval», horas como «01:02 AM».
+  - ES devuelve todo al español.

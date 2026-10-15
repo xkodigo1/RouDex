@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Composer from "./Composer.jsx";
-import { ApprovalCard, TURN_STATUS_LABEL as STATUS_LABEL, TurnLog } from "./Transcript.jsx";
-import { ACCESS_LABEL, basename, decisionFromTurn, tokens } from "./lib/format.js";
+import { ApprovalCard, TurnLog } from "./Transcript.jsx";
+import { accessLabel, basename, decisionFromTurn, tokens } from "./lib/format.js";
+import { errorText, t, tn } from "./lib/i18n.js";
 import { useSession } from "./lib/session.jsx";
 
-const FILTERS = [["todos", "todos"], ["curso", "en curso"], ["aprobacion", "aprobación"], ["fuerte", "fuerte"], ["archivados", "archivados"]];
+const FILTERS = ["todos", "curso", "aprobacion", "fuerte", "archivados"];
+const STATUS_KEY = { running: "turn.status.running", completed: "turn.status.completed", interrupted: "turn.status.interrupted", failed: "turn.status.failed" };
 
 export default function Threads({ project, config, selected, onSelect, onNewChat }) {
   const session = useSession();
@@ -16,15 +18,16 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
   const [renaming, setRenaming] = useState(null);
   const [error, setError] = useState(null);
   const endRef = useRef(null);
+  const fail = (reason) => setError(errorText(reason));
 
   const archived = filter === "archivados";
   useEffect(() => {
-    invoke("thread_list", { includeArchived: archived }).then(setThreads).catch((reason) => setError(String(reason)));
+    invoke("thread_list", { includeArchived: archived }).then(setThreads).catch(fail);
   }, [session.revision, archived]);
 
   useEffect(() => {
     if (!selected) { setTurns([]); return; }
-    invoke("chat_turns", { threadId: selected }).then(setTurns).catch((reason) => setError(String(reason)));
+    invoke("chat_turns", { threadId: selected }).then(setTurns).catch(fail);
   }, [selected, session.revision]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [turns, session.live]);
@@ -55,20 +58,20 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
     try {
       const decision = await invoke("router_escalate", { decision: decisionFromTurn(turn) });
       await send(turn.prompt, decision);
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { fail(reason); }
   }
 
   async function answer(item, decision) {
     try {
       await invoke("chat_approval", { project: current?.cwd ?? project, requestId: item.requestId, decision });
       session.resolveApproval(item);
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { fail(reason); }
   }
 
   async function stop() {
     if (!runningTurn) return;
     try { await invoke("chat_interrupt", { project: current.cwd, threadId: current.thread_id, turnId: runningTurn.turn_id }); }
-    catch (reason) { setError(String(reason)); }
+    catch (reason) { fail(reason); }
   }
 
   async function rename(event) {
@@ -77,7 +80,7 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
       await invoke("thread_rename", { threadId: current.thread_id, title: renaming });
       setRenaming(null);
       session.bump();
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { fail(reason); }
   }
 
   async function archive() {
@@ -85,52 +88,55 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
       await invoke("thread_archive", { threadId: current.thread_id, archived: !current.archived });
       onSelect(null);
       session.bump();
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { fail(reason); }
   }
 
+  const statusOf = (thread) => (waiting.has(thread.thread_id) ? t("threads.waiting")
+    : STATUS_KEY[thread.last_status] ? t(STATUS_KEY[thread.last_status]) : t("threads.noTurns"));
+
   return <div className="threads">
-    <section className="thread-list" aria-label="Lista de hilos">
+    <section className="thread-list" aria-label={t("threads.listLabel")}>
       <div className="thread-list-head">
-        <div className="row-between"><h1>Hilos</h1><button type="button" className="ghost" onClick={onNewChat}>+ nuevo</button></div>
-        <label className="field">buscar
-          <input type="search" placeholder="título, proyecto o modelo" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <div className="row-between"><h1>{t("threads.title")}</h1><button type="button" className="ghost" onClick={onNewChat}>{t("threads.new")}</button></div>
+        <label className="field">{t("threads.search")}
+          <input type="search" placeholder={t("threads.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
-        <div className="chips" role="group" aria-label="Filtros">
-          {FILTERS.map(([id, label]) => <button key={id} type="button" className="chip" aria-pressed={filter === id}
-            onClick={() => setFilter(id)}>{label}{id !== "archivados" ? ` · ${count(id)}` : ""}</button>)}
+        <div className="chips" role="group" aria-label={t("threads.filters")}>
+          {FILTERS.map((id) => <button key={id} type="button" className="chip" aria-pressed={filter === id}
+            onClick={() => setFilter(id)}>{t(`threads.filter.${id}`)}{id !== "archivados" ? ` · ${count(id)}` : ""}</button>)}
         </div>
       </div>
       <div className="thread-items">
         {visible.length ? visible.map((thread) => <button key={thread.thread_id} type="button" className="thread-item"
           aria-pressed={thread.thread_id === selected} onClick={() => onSelect(thread.thread_id)}>
-          <span className="row-start"><span className={`dot tier-bg-${thread.last_tier ?? "none"}`} /><span className="ellipsis">{thread.title || "Sin título"}</span></span>
+          <span className="row-start"><span className={`dot tier-bg-${thread.last_tier ?? "none"}`} /><span className="ellipsis">{thread.title || t("threads.untitled")}</span></span>
           <span className="row-between muted small">
-            <span>{basename(thread.cwd)}{thread.access === "readOnly" ? ` · ${ACCESS_LABEL.readOnly}` : ""} · {waiting.has(thread.thread_id) ? "esperando aprobación" : STATUS_LABEL[thread.last_status] ?? "sin turnos"}</span>
+            <span>{basename(thread.cwd)}{thread.access === "readOnly" ? ` · ${accessLabel("readOnly")}` : ""} · {statusOf(thread)}</span>
             <span>{tokens(thread.tokens)}</span>
           </span>
-        </button>) : <p className="muted pad">{threads.length ? "Ningún hilo coincide." : "Sin hilos todavía."}</p>}
+        </button>) : <p className="muted pad">{threads.length ? t("threads.noMatch") : t("threads.none")}</p>}
       </div>
     </section>
 
     <main className="thread-main">
-      {!current ? <div className="placeholder"><h2>Elige un hilo</h2><p className="muted">O empieza uno nuevo desde proyectos.</p></div> : <>
+      {!current ? <div className="placeholder"><h2>{t("threads.pick")}</h2><p className="muted">{t("threads.pickHint")}</p></div> : <>
         <div className="thread-head">
           {renaming !== null ? <form className="rename" onSubmit={rename}>
-            <label className="visually-hidden" htmlFor="rename">Nuevo título</label>
+            <label className="visually-hidden" htmlFor="rename">{t("threads.newTitle")}</label>
             <input id="rename" value={renaming} autoFocus onChange={(event) => setRenaming(event.target.value)} />
-            <button type="submit" className="ghost">guardar</button>
-            <button type="button" className="ghost" onClick={() => setRenaming(null)}>cancelar</button>
+            <button type="submit" className="ghost">{t("threads.save")}</button>
+            <button type="button" className="ghost" onClick={() => setRenaming(null)}>{t("threads.cancel")}</button>
           </form> : <div className="thread-title">
-            <h2>{current.title || "Sin título"}</h2>
-            <span className="muted small">{basename(current.cwd)} · {current.turns} {current.turns === 1 ? "turno" : "turnos"} · {tokens(current.tokens)} tokens{current.last_model ? ` · ${current.last_model}` : ""}</span>
+            <h2>{current.title || t("threads.untitled")}</h2>
+            <span className="muted small">{basename(current.cwd)} · {tn("threads.turns", current.turns)} · {t("threads.tokens", { count: tokens(current.tokens) })}{current.last_model ? ` · ${current.last_model}` : ""}</span>
           </div>}
           <span className={`access-badge access-${current.access ?? "write"}`}
-            title={current.access === "readOnly" ? "sandbox sin escritura; cualquier cambio pide aprobación" : "puede escribir dentro del proyecto"}>
-            {ACCESS_LABEL[current.access] ?? ACCESS_LABEL.write}</span>
-          <button type="button" className="ghost" onClick={() => setRenaming(current.title)}>renombrar</button>
-          <button type="button" className="ghost" onClick={archive}>{current.archived ? "desarchivar" : "archivar"}</button>
+            title={current.access === "readOnly" ? t("threads.readOnlyHint") : t("threads.writeHint")}>
+            {accessLabel(current.access)}</span>
+          <button type="button" className="ghost" onClick={() => setRenaming(current.title)}>{t("threads.rename")}</button>
+          <button type="button" className="ghost" onClick={archive}>{current.archived ? t("threads.unarchive") : t("threads.archive")}</button>
         </div>
-        <div className="transcript" aria-label="Transcripción">
+        <div className="transcript" aria-label={t("threads.transcript")}>
           {turns.map((turn) => <TurnLog key={turn.turn_id} turn={turn} live={session.live[turn.turn_id]}
             disabled={Boolean(runningTurn)} onEscalate={escalate} />)}
           {approvals.map((item) => <ApprovalCard key={JSON.stringify(item.requestId)} item={item} onAnswer={answer} />)}
@@ -139,7 +145,7 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
         {error && <p className="error-line pad" role="alert">{error}</p>}
         <div className="thread-composer">
           <Composer project={current.cwd} config={config} onSend={send} running={Boolean(runningTurn)} onStop={stop}
-            placeholder="describe la tarea · Ctrl+Enter analiza y envía" />
+            placeholder={t("threads.composerPlaceholder")} />
         </div>
       </>}
     </main>

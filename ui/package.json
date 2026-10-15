@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node tests/check-i18n.mjs && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:i18n": "node tests/check-i18n.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
