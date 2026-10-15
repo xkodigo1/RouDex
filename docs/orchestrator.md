@@ -147,9 +147,9 @@ router-cli run-events <runId>                     # the evidence of a run
 ## Where things live
 
 Specs stay in your project. Loaded tasks, runs, approvals and their events
-are stored in `%LOCALAPPDATA%\RouDex\router.sqlite3`, and tier targets are in
-`%LOCALAPPDATA%\RouDex\router.toml`. Nothing leaves your machine except the
-turns Codex runs.
+are stored in `~/.roudex/router.sqlite3`, and tier targets are in
+`~/.roudex/router.toml` (see [installation.md](installation.md)). Nothing
+leaves your machine except the turns Codex runs.
 
 ## Not included
 

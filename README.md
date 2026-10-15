@@ -8,12 +8,14 @@ Se ejecuta sobre `codex app-server` (stdio). Claude será el segundo runtime.
 
 ## Estado
 
-La versión actual es `v0.8.0` (orquestador de specs). La app de escritorio
-tiene cuatro pantallas:
+La versión actual es `v0.9.0`, una beta para Windows, macOS y Linux con
+instaladores, ahorro estimado e interfaz en español e inglés. La app de
+escritorio tiene cuatro pantallas:
 
-- **Resumen**: tokens del año y de hoy, calendario de actividad por día,
+- **Resumen**: tokens del año y de hoy, el ahorro estimado del router
+  ([docs/savings.md](docs/savings.md)), calendario de actividad por día,
   tokens por modelo, turnos por tier, límites de uso, hilos recientes y los
-  mensajes de Codex Desktop que vio el hook.
+  mensajes de Codex Desktop que vio el hook, que se instala desde ahí.
 - **Hilos**: búsqueda y filtros, transcripción en estilo terminal con la
   decisión del router de cada turno, aprobaciones, renombrar y archivar.
 - **Proyectos**: nuevo chat sobre un fondo ASCII animado; el router analiza el

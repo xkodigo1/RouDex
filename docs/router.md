@@ -20,8 +20,11 @@ El escalado al tier `fuerte` es siempre manual.
 
 ## Configuración
 
-`%LOCALAPPDATA%\RouDex\router.toml`. Si no existe se usan estos valores; si
-existe y es inválido, el router falla en lugar de ignorarlo.
+`~/.roudex/router.toml` (o `$ROUDEX_HOME/router.toml`). Si no existe se usan
+estos valores, y puede fijar solo algunas claves; si existe y es inválido, el
+router falla en lugar de ignorarlo. Además de los tiers admite `language`
+(`"es"` o `"en"`), `codex_path` y los precios del
+[ahorro estimado](savings.md).
 
 ```toml
 version = 1
