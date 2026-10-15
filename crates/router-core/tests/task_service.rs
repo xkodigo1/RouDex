@@ -264,6 +264,7 @@ fn ready_tasks_run_in_dependency_order() {
             events.recv_timeout(Duration::from_secs(15)).expect("batch")
         {
             assert_eq!(receipt.status, TaskStatus::Completed);
+            assert_eq!(service.active(), None, "the slot is free before results");
             finished.push(task_id);
         }
     }

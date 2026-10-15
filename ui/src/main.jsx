@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import NewChat from "./NewChat.jsx";
 import Summary from "./Summary.jsx";
-import TasksView from "./TasksView.jsx";
+import Tasks from "./Tasks.jsx";
 import Threads from "./Threads.jsx";
 import { readStored, writeStored } from "./lib/format.js";
 import { SessionProvider, useSession } from "./lib/session.jsx";
+import { TaskProvider, useTasks } from "./lib/tasks.jsx";
 import "./styles.css";
 import "./theme.css";
 
@@ -23,6 +24,7 @@ function Notices() {
 
 function Shell() {
   const { rateLimits } = useSession();
+  const tasks = useTasks();
   const [view, setView] = useState(() => {
     const stored = readStored("roudex.view", "resumen");
     return VIEWS.some(([id]) => id === stored) ? stored : "resumen";
@@ -66,7 +68,8 @@ function Shell() {
     <div className="body">
       <nav className="sidenav" aria-label="Secciones">
         {VIEWS.map(([id, label]) => <button key={id} type="button" className="navlink" aria-current={view === id ? "page" : undefined}
-          onClick={() => go(id)}><span className={view === id ? "accent" : "dim"}>❯</span> {label}</button>)}
+          onClick={() => go(id)}><span className={view === id ? "accent" : "dim"}>❯</span> {label}
+          {id === "tareas" && tasks.active && <span className="accent caret" title={`en curso: ${tasks.active}`}>●</span>}</button>)}
         <span className="grow" />
         {config && <div className="tier-box small">
           <div>tiers activos</div>
@@ -81,7 +84,7 @@ function Shell() {
         {view === "hilos" && <Threads project={project} config={config} selected={thread} onSelect={setThread} onNewChat={() => go("proyectos")} />}
         {view === "proyectos" && <NewChat project={project} projects={projects} config={config} onProject={chooseProject}
           onStarted={(id) => { setThread(id); go("hilos"); }} />}
-        {view === "tareas" && <div className="legacy"><TasksView /></div>}
+        {view === "tareas" && <Tasks project={project} />}
       </div>
     </div>
     <Notices />
@@ -101,4 +104,4 @@ function OutsideDesktop() {
 }
 
 const inDesktop = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
-createRoot(document.getElementById("root")).render(inDesktop ? <SessionProvider><Shell /></SessionProvider> : <OutsideDesktop />);
+createRoot(document.getElementById("root")).render(inDesktop ? <SessionProvider><TaskProvider><Shell /></TaskProvider></SessionProvider> : <OutsideDesktop />);

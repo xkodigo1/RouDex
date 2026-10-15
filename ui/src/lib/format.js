@@ -9,6 +9,48 @@ export const SOURCE_LABEL = {
   spec: "spec",
 };
 
+export const TASK_STATUS_LABEL = {
+  planned: "planificada",
+  ready: "lista",
+  awaiting_approval: "espera aprobación",
+  running: "en curso",
+  completed: "completada",
+  failed: "falló",
+  blocked: "bloqueada",
+  interrupted: "interrumpida",
+};
+
+// Reasons the coordinator gives when a task does not run (receipt text).
+const RECEIPT_REASON = {
+  "explicit approval required": "necesita aprobación",
+  "task has incomplete dependencies": "tiene dependencias sin completar",
+  "manual approval denied": "la aprobación fue denegada",
+  "task is not ready for dispatch": "no está lista para ejecutarse",
+  "thread recovery is blocked; explicit recovery required": "no se pudo reanudar su hilo",
+  "task requires scope, acceptance and verification before dispatch": "le faltan alcance, criterios o verificación",
+  "task verification failed or returned no exit code": "la verificación falló",
+  "task ready for retry": "lista para reintentar",
+};
+
+export function reasonText(text) {
+  return RECEIPT_REASON[text] ?? text;
+}
+
+/** One line for the end of a task run: "R1 completada", "R2 bloqueada: …". */
+export function receiptLine(taskId, receipt) {
+  if (receipt.status === "completed") return `${taskId} completada y verificada`;
+  const status = TASK_STATUS_LABEL[receipt.status] ?? receipt.status;
+  // An interrupted turn's text is its partial answer, not a reason.
+  const text = receipt.text && receipt.status !== "interrupted" ? reasonText(receipt.text) : "";
+  return `${taskId} ${status}${text ? `: ${text.length > 200 ? `${text.slice(0, 200)}…` : text}` : ""}`;
+}
+
+/** "regla de riesgo: x", without repeating the source the reason already names. */
+export function routeReason(route) {
+  const label = SOURCE_LABEL[route.source] ?? route.source;
+  return route.reason.includes(label) ? route.reason : `${label}: ${route.reason}`;
+}
+
 /** Thread access modes, in the order the composer offers them. */
 export const ACCESS_LABEL = {
   write: "escritura",

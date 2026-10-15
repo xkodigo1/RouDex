@@ -111,7 +111,7 @@ button.link:hover { color: var(--accent-soft); }
 .thread-list { width: 340px; flex: none; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .thread-list-head { display: grid; gap: 12px; padding: 18px 16px 12px; border-bottom: 1px solid var(--line); }
 .field { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
-.field input, .rename input, .menu-path input { min-height: 38px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px; }
+.field input, .field select, .rename input, .menu-path input { min-height: 38px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { min-height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 99px; background: transparent; color: #9AA3A8; font-size: 12px; }
 .chip[aria-pressed="true"] { border-color: var(--accent); background: #2A1F0E; color: var(--accent-soft); }
@@ -163,11 +163,11 @@ button.link:hover { color: var(--accent-soft); }
 .prompt-mark { color: var(--accent); font-size: 14px; line-height: 22px; }
 .prompt textarea { flex: 1; resize: none; border: none; outline: none; background: transparent; color: var(--text); font-family: inherit; font-size: 14px; line-height: 22px; }
 .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.access-modes { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
-.access-modes button { min-height: 34px; padding: 0 10px; border: none; background: transparent; color: var(--muted); font-size: 12px; }
-.access-modes button + button { border-left: 1px solid var(--line-strong); }
-.access-modes button[aria-pressed="true"] { background: #2A1F0E; color: var(--accent-soft); }
-.access-modes button:focus-visible { outline-offset: -2px; }
+.access-modes, .segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.access-modes button, .segmented button { min-height: 34px; padding: 0 10px; border: none; background: transparent; color: var(--muted); font-size: 12px; }
+.access-modes button + button, .segmented button + button { border-left: 1px solid var(--line-strong); }
+.access-modes button[aria-pressed="true"], .segmented button[aria-pressed="true"] { background: #2A1F0E; color: var(--accent-soft); }
+.access-modes button:focus-visible, .segmented button:focus-visible { outline-offset: -2px; }
 
 /* New chat */
 .new-chat { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
@@ -184,8 +184,28 @@ button.link:hover { color: var(--accent-soft); }
 .menu-path { display: flex; gap: 6px; padding: 4px; }
 .menu-path input { flex: 1; min-width: 0; }
 
-/* Legacy task view keeps its own layout inside the shell. */
-.legacy { flex: 1; overflow-y: auto; }
-.legacy .shell { width: auto; padding: 24px 30px 48px; }
+/* Tasks (reuses the thread list and transcript) */
+.spec-summary { display: grid; gap: 6px; }
+.spec-summary details p { margin: 4px 0 0; }
+.milestone { display: grid; gap: 2px; }
+.milestone + .milestone { margin-top: 10px; }
+.milestone-head { display: flex; justify-content: space-between; gap: 10px; padding: 6px 12px 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.status-mark { width: 12px; flex: none; text-align: center; color: var(--muted); }
+.status-completed { color: var(--good); } .status-failed { color: var(--bad); } .status-running { color: var(--accent); }
+.status-interrupted, .status-awaiting_approval, .status-blocked { color: #D6A64B; }
+.task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 22px; border-bottom: 1px solid var(--line); }
+.task-actions .segmented button.tier-text { color: inherit; }
+.task-actions .segmented button.tier-economico { color: var(--economico); } .task-actions .segmented button.tier-estandar { color: var(--estandar); } .task-actions .segmented button.tier-fuerte { color: var(--fuerte); }
+.task-warning { flex-basis: 100%; }
+.task-tabs { padding: 10px 22px; border-bottom: 1px solid var(--line); }
+.task-detail { flex: 1; overflow-y: auto; padding: 18px 22px; font-size: 13px; line-height: 1.6; }
+.task-detail dl { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px 18px; margin: 0; }
+.task-detail dt { color: var(--muted); }
+.task-detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.task-detail pre { margin: 0; color: var(--text-strong); font-family: inherit; white-space: pre-wrap; }
+.task-detail ul { margin: 0; padding-left: 18px; }
+.task-detail code { color: var(--accent-soft); font-family: inherit; }
+.dep-link { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 4px; background: transparent; color: var(--text); font-size: 12px; }
+.run-head { margin: 0; }
 .outside { align-items: center; justify-content: center; }
 .outside code { color: var(--accent-soft); }
