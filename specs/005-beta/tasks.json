@@ -467,7 +467,7 @@
         "R005-T004",
         "R005-T005"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -495,7 +495,13 @@
       "verification_artifact": "specs/005-beta/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "ui/src/SavingsCard.jsx in Resumen: estimated cost, cost on fuerte, router cost and savings with the share saved; table by source (chat, tasks, Codex Desktop); unpriced turns counted apart; estimate note; Codex Desktop toggle via settings_set_codex_desktop; without prices, tokens by tier and the router.toml snippet for each model missing a price. All strings in the es/en dictionaries.",
+        "Fixture check (2026-10-15): with prices in Spanish 3,15 US$ cost / 8,32 US$ on fuerte / 5,17 US$ savings (62%); toggle adds Codex Desktop (382/399 turns, 17 unpriced, gpt-6-astra) and totals 24,55 / 67,07 / 42,52 US$; English shows $24.55 / $67.07 / $42.52 and English labels; ?savings=none shows tokens by tier and the [prices.\"gpt-6.1-sol\"] and [prices.\"gpt-6-luna\"] snippet. Screenshot at 1280x900 matches the app style.",
+        "pnpm --dir ui build passes.",
+        "Commit a07566f."
+      ],
       "release_target": "v0.9.0"
     },
     {
