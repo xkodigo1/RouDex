@@ -11,6 +11,7 @@ pub mod session;
 pub mod task_manifest;
 pub mod task_route;
 pub mod task_runtime;
+pub mod task_service;
 pub mod tiers;
 
 pub use app_server::{AppServerClient, AppServerConfig, AppServerError, AppServerTurn};
@@ -31,7 +32,7 @@ pub use domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, RunStatus, StoredRun, StoredTask,
     TaskApproval, TaskDefinition, TaskSandbox, TaskStatus,
 };
-pub use persistence::{RouterStore, StoreError};
+pub use persistence::{RouterStore, StoreError, StoredSpec};
 pub use risk::{RiskMatch, RiskRules, RiskRulesError};
 pub use session::{
     AccessMode, ApprovalDecision, ApprovalKind, EventSink, Session, SessionError, SessionEvent,
@@ -39,6 +40,9 @@ pub use session::{
 pub use task_manifest::{ManifestError, Milestone, TaskManifest};
 pub use task_route::resolve_task_route;
 pub use task_runtime::{LocalTaskRuntime, TaskApprovals, TaskRuns};
+pub use task_service::{
+    SpecFile, TaskBoard, TaskCard, TaskConfigFactory, TaskEvent, TaskService, TaskSink,
+};
 pub use tiers::{
     CatalogModel, DesktopHookConfig, ModelTarget, RouterConfig, RouterConfigError, Tier,
     TierTargets, ROUTER_CONFIG_VERSION,
