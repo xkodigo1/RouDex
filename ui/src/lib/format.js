@@ -1,60 +1,59 @@
-import { locale } from "./i18n.js";
+import { errorText, locale, t } from "./i18n.js";
 
 export const TIERS = ["economico", "estandar", "fuerte"];
 
-export const SOURCE_LABEL = {
-  risk: "regla de riesgo",
-  rule: "regla rápida",
-  model: "clasificador",
-  fallback: "respaldo",
-  manual: "manual",
-  spec: "spec",
-};
+/** How a router decision was made: "regla de riesgo", "risk rule"… */
+export function sourceLabel(source) {
+  return t(`source.${source}`);
+}
 
-export const TASK_STATUS_LABEL = {
-  planned: "planificada",
-  ready: "lista",
-  awaiting_approval: "espera aprobación",
-  running: "en curso",
-  completed: "completada",
-  failed: "falló",
-  blocked: "bloqueada",
-  interrupted: "interrumpida",
-};
+export function taskStatusLabel(status) {
+  return t(`taskStatus.${status}`);
+}
 
-// Reasons the coordinator gives when a task does not run (receipt text).
+/** Thread access modes, in the order the composer offers them. */
+export const ACCESS_MODES = ["write", "readOnly"];
+
+export function accessLabel(mode) {
+  return t(`access.${mode ?? "write"}`);
+}
+
+// Reasons the coordinator gives when a task does not run (receipt text),
+// as it writes them, and the key that says the same in either language.
 const RECEIPT_REASON = {
-  "explicit approval required": "necesita aprobación",
-  "task has incomplete dependencies": "tiene dependencias sin completar",
-  "manual approval denied": "la aprobación fue denegada",
-  "task is not ready for dispatch": "no está lista para ejecutarse",
-  "thread recovery is blocked; explicit recovery required": "no se pudo reanudar su hilo; reintenta la tarea",
-  "resumed history does not match the persisted turn; explicit recovery required": "el historial reanudado no coincide con el turno guardado; reintenta la tarea",
-  "run has no persisted thread; explicit recovery required": "la ejecución no guardó su hilo; reintenta la tarea",
-  "run has no persisted turn identity; explicit recovery required": "la ejecución no guardó su turno; reintenta la tarea",
-  "run has no valid immutable dispatch definition; explicit recovery required": "la ejecución no guardó su definición; reintenta la tarea",
-  "resume has incomplete dependencies; explicit recovery required": "sus dependencias ya no están completas; reintenta la tarea",
-  "resume requires approval": "reanudar necesita aprobación",
-  "run is not interrupted": "la ejecución no está interrumpida",
-  "run was superseded by a later dispatch; resume the latest run instead": "hay una ejecución más reciente; reanuda esa",
-  "task is not retryable": "no se puede reintentar",
-  "task is not running": "no se está ejecutando",
-  "task requires scope, acceptance and verification before dispatch": "le faltan alcance, criterios o verificación",
-  "task verification failed or returned no exit code": "la verificación falló",
-  "task ready for retry": "lista para reintentar",
+  "explicit approval required": "approvalRequired",
+  "task has incomplete dependencies": "incompleteDependencies",
+  "manual approval denied": "approvalDenied",
+  "task is not ready for dispatch": "notReady",
+  "thread recovery is blocked; explicit recovery required": "recoveryBlocked",
+  "resumed history does not match the persisted turn; explicit recovery required": "historyMismatch",
+  "run has no persisted thread; explicit recovery required": "noThread",
+  "run has no persisted turn identity; explicit recovery required": "noTurn",
+  "run has no valid immutable dispatch definition; explicit recovery required": "noDefinition",
+  "resume has incomplete dependencies; explicit recovery required": "resumeDependencies",
+  "resume requires approval": "resumeApproval",
+  "run is not interrupted": "notInterrupted",
+  "run was superseded by a later dispatch; resume the latest run instead": "superseded",
+  "task is not retryable": "notRetryable",
+  "task is not running": "notRunning",
+  "task requires scope, acceptance and verification before dispatch": "missingContract",
+  "task verification failed or returned no exit code": "verificationFailed",
+  "task ready for retry": "readyForRetry",
 };
 
 export function reasonText(text) {
-  return RECEIPT_REASON[text] ?? text;
+  const key = RECEIPT_REASON[text];
+  return key ? t(`reason.${key}`) : errorText(text);
 }
 
 /** One line for the end of a task run: "R1 completada", "R2 bloqueada: …". */
 export function receiptLine(taskId, receipt) {
-  if (receipt.status === "completed") return `${taskId} completada y verificada`;
-  const status = TASK_STATUS_LABEL[receipt.status] ?? receipt.status;
+  if (receipt.status === "completed") return t("receipt.completed", { task: taskId });
+  const status = taskStatusLabel(receipt.status);
   // An interrupted turn's text is its partial answer, not a reason.
   const text = receipt.text && receipt.status !== "interrupted" ? reasonText(receipt.text) : "";
-  return `${taskId} ${status}${text ? `: ${text.length > 200 ? `${text.slice(0, 200)}…` : text}` : ""}`;
+  if (!text) return t("receipt.status", { task: taskId, status });
+  return t("receipt.withReason", { task: taskId, status, reason: text.length > 200 ? `${text.slice(0, 200)}…` : text });
 }
 
 // How router reasons name their source, in either language.
@@ -69,16 +68,10 @@ const REASON_SOURCE = {
 
 /** "regla de riesgo: x", without repeating the source the reason already names. */
 export function routeReason(route) {
-  const label = SOURCE_LABEL[route.source] ?? route.source;
+  const label = sourceLabel(route.source);
   const named = [label, ...(REASON_SOURCE[route.source] ?? [])].some((name) => route.reason.includes(name));
   return named ? route.reason : `${label}: ${route.reason}`;
 }
-
-/** Thread access modes, in the order the composer offers them. */
-export const ACCESS_LABEL = {
-  write: "escritura",
-  readOnly: "solo lectura",
-};
 
 export function tokens(count) {
   if (!count) return "0";
@@ -100,10 +93,10 @@ export function relativeTime(epochSeconds) {
   const seconds = Number(epochSeconds);
   if (!Number.isFinite(seconds)) return "";
   const diff = Date.now() / 1000 - seconds;
-  if (diff < 60) return "ahora";
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
-  if (diff < 172800) return "ayer";
+  if (diff < 60) return t("time.now");
+  if (diff < 3600) return t("time.minutes", { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t("time.hours", { count: Math.floor(diff / 3600) });
+  if (diff < 172800) return t("time.yesterday");
   return new Date(seconds * 1000).toLocaleDateString(locale(), { day: "numeric", month: "short" });
 }
 

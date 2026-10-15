@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { tokens } from "./lib/format.js";
-import { locale, t } from "./lib/i18n.js";
+import { errorText, locale, t } from "./lib/i18n.js";
 import { useI18n } from "./lib/language.jsx";
 import { useSession } from "./lib/session.jsx";
 
@@ -34,7 +34,7 @@ export default function SavingsCard() {
 
   const load = useCallback(() => {
     invoke("router_config").then((config) => setWithDesktop(Boolean(config?.savings?.include_codex_desktop))).catch(() => {});
-    invoke("savings_summary").then((value) => { setSummary(value); setError(null); }).catch((reason) => setError(String(reason)));
+    invoke("savings_summary").then((value) => { setSummary(value); setError(null); }).catch((reason) => setError(errorText(reason)));
   }, []);
   useEffect(load, [load, revision]);
 
@@ -42,7 +42,7 @@ export default function SavingsCard() {
     try {
       await invoke("settings_set_codex_desktop", { enabled: event.target.checked });
       load();
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(errorText(reason)); }
   }
 
   const priced = summary && summary.baselinePriced && summary.sources.some((source) => source.pricedTurns > 0);

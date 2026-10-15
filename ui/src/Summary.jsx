@@ -2,16 +2,27 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import SavingsCard from "./SavingsCard.jsx";
 import { basename, percent, relativeTime, tokens } from "./lib/format.js";
-import { t } from "./lib/i18n.js";
+import { errorText, locale, t, tn } from "./lib/i18n.js";
 import { useSession } from "./lib/session.jsx";
 
-const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const TIER_COLOR = { economico: "var(--economico)", estandar: "var(--estandar)", fuerte: "var(--fuerte)" };
-const SOURCE_SHORT = { risk: "riesgo", rule: "reglas", model: "modelo", fallback: "respaldo", manual: "manual" };
 
 function dateKey(date) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const monthName = (date) => date.toLocaleDateString(locale(), { month: "short" }).replace(".", "");
+const dayName = (date) => date.toLocaleDateString(locale(), { day: "numeric", month: "short" });
+
+/** Monday-first weekday names, short, for the calendar's row labels. */
+function weekdays() {
+  const monday = new Date(2024, 0, 1);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + index);
+    return day.toLocaleDateString(locale(), { weekday: "short" }).replace(".", "");
+  });
 }
 
 /** 53 Monday-first weeks ending today, each day with its activity level 0–4. */
@@ -25,7 +36,7 @@ function calendar(days) {
   const weeks = [];
   const day = new Date(start);
   while (day <= today) {
-    const week = { month: day.getDate() <= 7 ? MONTHS[day.getMonth()] : "", days: [] };
+    const week = { month: day.getDate() <= 7 ? monthName(day) : "", days: [] };
     for (let i = 0; i < 7; i++) {
       if (day > today) { week.days.push(null); continue; }
       const key = dateKey(day);
@@ -34,7 +45,9 @@ function calendar(days) {
       week.days.push({
         key,
         level,
-        title: `${day.getDate()} ${MONTHS[day.getMonth()]} · ${usage ? `${tokens(usage.tokens)} tokens · ${usage.turns} turnos` : "sin actividad"}`,
+        title: usage
+          ? t("summary.dayTitle", { date: dayName(day), tokens: tokens(usage.tokens), turns: usage.turns })
+          : t("summary.dayIdle", { date: dayName(day) }),
       });
       day.setDate(day.getDate() + 1);
     }
@@ -52,7 +65,7 @@ function LimitBar({ label, window }) {
     <div className="bar" role="progressbar" aria-label={label} aria-valuenow={used} aria-valuemin={0} aria-valuemax={100}>
       <div className={`bar-fill ${used >= 85 ? "hot" : used >= 60 ? "warm" : "ok"}`} style={{ width: `${used}%` }} />
     </div>
-    {reset && <span className="muted small">se reinicia {reset.toLocaleString("es", { weekday: "short", hour: "2-digit", minute: "2-digit" })}</span>}
+    {reset && <span className="muted small">{t("summary.resets", { when: reset.toLocaleString(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }) })}</span>}
   </div>;
 }
 
@@ -75,7 +88,7 @@ function HookInstall({ hook, onInstalled }) {
       notify(t("hook.installed", { path: installed.hooksPath }));
       onInstalled();
     } catch (reason) {
-      setError(String(reason));
+      setError(errorText(reason));
     } finally {
       setBusy(false);
     }
@@ -95,30 +108,28 @@ function DesktopCard({ desktop, onInstalled }) {
   return <section className="pane" aria-labelledby="desktop-title">
     <div className="row-wrap">
       <h2 id="desktop-title">Codex Desktop</h2>
-      <span className="muted small">últimos {summary.days} días</span>
+      <span className="muted small">{t("desktop.window", { days: summary.days })}</span>
       <span className="grow" />
       {hook.command
-        ? <span className="hook-status on" title={hook.command}>hook instalado</span>
-        : <span className="hook-status" title={hook.error ?? hook.path}>hook no instalado</span>}
+        ? <span className="hook-status on" title={hook.command}>{t("desktop.hookOn")}</span>
+        : <span className="hook-status" title={hook.error ?? hook.path}>{t("desktop.hookOff")}</span>}
       <HookInstall hook={hook} onInstalled={onInstalled} />
     </div>
     {summary.prompts ? <>
       <div className="desktop-stats">
-        <span><strong>{summary.prompts.toLocaleString("es")}</strong> <span className="muted">mensajes · {summary.today} hoy</span></span>
-        <span><strong className={summary.warned ? "warn-text" : ""}>{summary.warned}</strong> <span className="muted">{summary.warned === 1 ? "aviso" : "avisos"} de riesgo</span></span>
-        <span><strong className={summary.blocked ? "warn-text" : ""}>{summary.blocked}</strong> <span className="muted">{summary.blocked === 1 ? "bloqueado" : "bloqueados"}</span></span>
-        <span><strong>{percent(summary.on_recommended_model, summary.prompts)}</strong> <span className="muted">en el modelo recomendado</span></span>
+        <span><strong>{summary.prompts.toLocaleString(locale())}</strong> <span className="muted">{t("desktop.messages", { today: summary.today })}</span></span>
+        <span><strong className={summary.warned ? "warn-text" : ""}>{summary.warned}</strong> <span className="muted">{tn("desktop.warnings", summary.warned)}</span></span>
+        <span><strong className={summary.blocked ? "warn-text" : ""}>{summary.blocked}</strong> <span className="muted">{tn("desktop.blocked", summary.blocked)}</span></span>
+        <span><strong>{percent(summary.on_recommended_model, summary.prompts)}</strong> <span className="muted">{t("desktop.onRecommended")}</span></span>
       </div>
       <div className="stack-bar" aria-hidden="true">
         {counts.map(([tier, count]) => <div key={tier} style={{ width: percent(count, summary.prompts), background: TIER_COLOR[tier] }} />)}
       </div>
       <p className="muted small">
         {counts.map(([tier, count]) => <span key={tier}><span style={{ color: TIER_COLOR[tier] }}>● {tier}</span> {count} · </span>)}
-        {summary.unruled} sin regla{summary.last_at ? ` · último ${relativeTime(summary.last_at)}` : ""}
+        {t("desktop.unruled", { count: summary.unruled })}{summary.last_at ? t("desktop.last", { when: relativeTime(summary.last_at) }) : ""}
       </p>
-    </> : <p className="muted">{hook.command
-      ? "Sin mensajes de Codex Desktop todavía."
-      : "Instala el hook para ver aquí el tier recomendado y el riesgo de tus mensajes de Codex Desktop."}</p>}
+    </> : <p className="muted">{hook.command ? t("desktop.empty") : t("desktop.install")}</p>}
   </section>;
 }
 
@@ -127,16 +138,16 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
   const [data, setData] = useState(null);
   const [desktop, setDesktop] = useState(null);
   const [error, setError] = useState(null);
+  const [installs, setInstalls] = useState(0);
 
   useEffect(() => {
-    invoke("dashboard_summary").then(setData).catch((reason) => setError(String(reason)));
+    invoke("dashboard_summary").then(setData).catch((reason) => setError(errorText(reason)));
   }, [revision]);
 
   // Codex Desktop prompts arrive from another app: reload when the window
   // comes back to the front and every 30 s while the summary is open.
-  const [installs, setInstalls] = useState(0);
   useEffect(() => {
-    const load = () => invoke("desktop_hook_summary").then(setDesktop).catch((reason) => setError(String(reason)));
+    const load = () => invoke("desktop_hook_summary").then(setDesktop).catch((reason) => setError(errorText(reason)));
     const onVisible = () => { if (document.visibilityState === "visible") load(); };
     load();
     const timer = setInterval(load, 30_000);
@@ -156,42 +167,46 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
       .catch(() => {});
   }, [project, rateLimits, setRateLimits]);
 
-  const weeks = useMemo(() => calendar(data?.days ?? []), [data]);
+  const language = locale();
+  const weeks = useMemo(() => calendar(data?.days ?? []), [data, language]);
+  const dayLabels = useMemo(weekdays, [language]);
   const activeDays = data?.days.length ?? 0;
   const yearTotal = data?.year.total ?? 0;
   const top = data?.models[0];
+  const modelTotal = (data?.models ?? []).reduce((sum, model) => sum + model.tokens.total, 0);
   const tierTotal = (data?.tiers ?? []).reduce((sum, tier) => sum + tier.turns, 0);
+  const windowHours = rateLimits?.primary?.windowDurationMins ? `${Math.round(rateLimits.primary.windowDurationMins / 60)} h` : "";
 
   return <div className="page">
     <div className="page-head">
-      <span className="muted">$ roudex resumen --periodo 12m</span>
-      <h1>Resumen</h1>
+      <span className="muted">{t("summary.command")}</span>
+      <h1>{t("summary.title")}</h1>
     </div>
     {error && <p className="error-line" role="alert">{error}</p>}
 
-    <section className="stats" aria-label="Totales">
-      <div className="pane stat"><span className="label">tokens · 12 meses</span><strong>{tokens(yearTotal)}</strong>
-        <span className="muted small">{percent(data?.year.cached_input ?? 0, data?.year.input ?? 0)} servidos desde caché</span></div>
-      <div className="pane stat"><span className="label">hoy</span><strong>{tokens(data?.today_tokens ?? 0)}</strong>
-        <span className="muted small">{data?.today_turns ?? 0} turnos · {data?.today_threads ?? 0} hilos</span></div>
-      <div className="pane stat"><span className="label">turnos</span><strong>{(data?.total_turns ?? 0).toLocaleString("es")}</strong>
-        <span className="muted small">racha actual: {data?.streak_days ?? 0} días</span></div>
-      <div className="pane stat"><span className="label">modelo más usado</span><strong className="stat-model">{top?.model ?? "—"}</strong>
-        <span className="muted small">{top ? `${percent(top.tokens.total, (data?.models ?? []).reduce((s, m) => s + m.tokens.total, 0))} de los tokens` : "sin turnos todavía"}</span></div>
+    <section className="stats" aria-label={t("summary.totals")}>
+      <div className="pane stat"><span className="label">{t("summary.tokensYear")}</span><strong>{tokens(yearTotal)}</strong>
+        <span className="muted small">{t("summary.fromCache", { percent: percent(data?.year.cached_input ?? 0, data?.year.input ?? 0) })}</span></div>
+      <div className="pane stat"><span className="label">{t("summary.today")}</span><strong>{tokens(data?.today_tokens ?? 0)}</strong>
+        <span className="muted small">{t("summary.todayDetail", { turns: data?.today_turns ?? 0, threads: data?.today_threads ?? 0 })}</span></div>
+      <div className="pane stat"><span className="label">{t("summary.turns")}</span><strong>{(data?.total_turns ?? 0).toLocaleString(locale())}</strong>
+        <span className="muted small">{t("summary.streak", { days: data?.streak_days ?? 0 })}</span></div>
+      <div className="pane stat"><span className="label">{t("summary.topModel")}</span><strong className="stat-model">{top?.model ?? "—"}</strong>
+        <span className="muted small">{top ? t("summary.topShare", { percent: percent(top.tokens.total, modelTotal) }) : t("summary.noTurnsYet")}</span></div>
     </section>
 
     <SavingsCard />
 
     <section className="pane" aria-labelledby="heat-title">
       <div className="row-wrap">
-        <h2 id="heat-title">Actividad · tokens por día</h2>
-        <span className="muted small">{activeDays} días con actividad en el último año</span>
+        <h2 id="heat-title">{t("summary.activity")}</h2>
+        <span className="muted small">{t("summary.activeDays", { days: activeDays })}</span>
         <span className="grow" />
-        <span className="legend muted small">menos {[0, 1, 2, 3, 4].map((level) => <span key={level} className={`cell l${level}`} />)} más</span>
+        <span className="legend muted small">{t("summary.less")} {[0, 1, 2, 3, 4].map((level) => <span key={level} className={`cell l${level}`} />)} {t("summary.more")}</span>
       </div>
       <div className="heatmap-scroll">
         <div className="heatmap">
-          <div className="heat-days"><span /><span>lun</span><span /><span>mié</span><span /><span>vie</span><span /><span /></div>
+          <div className="heat-days"><span />{dayLabels.map((name, index) => <span key={index}>{index % 2 === 0 && index < 6 ? name : ""}</span>)}</div>
           {weeks.map((week, index) => <div key={index} className="heat-week">
             <span className="heat-month">{week.month}</span>
             {week.days.map((day, d) => day ? <span key={day.key} className={`cell l${day.level}`} title={day.title} /> : <span key={`x${d}`} className="cell empty" />)}
@@ -202,52 +217,52 @@ export default function Summary({ project, onOpenThread, onOpenThreads }) {
 
     <div className="grid-2">
       <section className="pane" aria-labelledby="models-title">
-        <h2 id="models-title">Tokens por modelo</h2>
+        <h2 id="models-title">{t("summary.byModel")}</h2>
         {data?.models.length ? data.models.map((model) => <div key={model.model} className="meter">
           <div className="row-between"><span>{model.model}</span>
-            <span className="muted">{tokens(model.tokens.total)} · {percent(model.tokens.total, data.models.reduce((s, m) => s + m.tokens.total, 0))}</span></div>
-          <div className="bar"><div className="bar-fill model" style={{ width: percent(model.tokens.total, data.models.reduce((s, m) => s + m.tokens.total, 0)) }} /></div>
-        </div>) : <p className="muted">Aún no hay turnos registrados.</p>}
+            <span className="muted">{tokens(model.tokens.total)} · {percent(model.tokens.total, modelTotal)}</span></div>
+          <div className="bar"><div className="bar-fill model" style={{ width: percent(model.tokens.total, modelTotal) }} /></div>
+        </div>) : <p className="muted">{t("summary.noTurnsRecorded")}</p>}
       </section>
 
       <section className="pane" aria-labelledby="tiers-title">
-        <h2 id="tiers-title">Turnos por tier</h2>
+        <h2 id="tiers-title">{t("summary.byTier")}</h2>
         {tierTotal ? <>
           <div className="stack-bar">
             {data.tiers.map((tier) => <div key={tier.tier} style={{ width: percent(tier.turns, tierTotal), background: TIER_COLOR[tier.tier] }} />)}
           </div>
           <div className="tier-grid">
             {["economico", "estandar", "fuerte"].map((name) => {
-              const tier = data.tiers.find((t) => t.tier === name);
+              const tier = data.tiers.find((item) => item.tier === name);
               return <div key={name} className="tier-stat">
                 <span style={{ color: TIER_COLOR[name] }}>● {name}</span>
                 <strong>{percent(tier?.turns ?? 0, tierTotal)}</strong>
-                <span className="muted small">{tier ? tier.by_source.map(([source, count]) => `${SOURCE_SHORT[source] ?? source} ${percent(count, tierTotal)}`).join(" · ") : "sin turnos"}</span>
+                <span className="muted small">{tier ? tier.by_source.map(([source, count]) => `${t(`sourceShort.${source}`)} ${percent(count, tierTotal)}`).join(" · ") : t("summary.noTurns")}</span>
               </div>;
             })}
           </div>
-        </> : <p className="muted">Aún no hay turnos registrados.</p>}
+        </> : <p className="muted">{t("summary.noTurnsRecorded")}</p>}
       </section>
 
       <section className="pane" aria-labelledby="limits-title">
-        <h2 id="limits-title">Límites de uso</h2>
+        <h2 id="limits-title">{t("summary.limits")}</h2>
         {rateLimits ? <>
-          <LimitBar label={`ventana ${rateLimits.primary?.windowDurationMins ? Math.round(rateLimits.primary.windowDurationMins / 60) + " h" : ""}`} window={rateLimits.primary} />
-          <LimitBar label="semanal" window={rateLimits.secondary} />
-        </> : <p className="muted">{project ? "Leyendo límites…" : "Abre un proyecto para leer los límites de Codex."}</p>}
+          <LimitBar label={t("summary.window", { hours: windowHours })} window={rateLimits.primary} />
+          <LimitBar label={t("summary.weekly")} window={rateLimits.secondary} />
+        </> : <p className="muted">{project ? t("summary.readingLimits") : t("summary.openProject")}</p>}
       </section>
 
       <section className="pane" aria-labelledby="recent-title">
         <div className="row-between">
-          <h2 id="recent-title">Hilos recientes</h2>
-          <button type="button" className="link" onClick={onOpenThreads}>ver todos →</button>
+          <h2 id="recent-title">{t("summary.recent")}</h2>
+          <button type="button" className="link" onClick={onOpenThreads}>{t("summary.seeAll")}</button>
         </div>
         {data?.recent.length ? data.recent.map((thread) => <button key={thread.thread_id} type="button" className="recent-thread" onClick={() => onOpenThread(thread)}>
-          <span className="ellipsis">{thread.title || "Sin título"}</span>
+          <span className="ellipsis">{thread.title || t("threads.untitled")}</span>
           <span className={`tier-text tier-${thread.last_tier}`}>{thread.last_tier ?? ""}</span>
           <span className="muted small">{basename(thread.cwd)} · {relativeTime(thread.updated_at)}</span>
           <span className="muted small">{tokens(thread.tokens)}</span>
-        </button>) : <p className="muted">Sin hilos todavía.</p>}
+        </button>) : <p className="muted">{t("summary.noThreads")}</p>}
       </section>
     </div>
 

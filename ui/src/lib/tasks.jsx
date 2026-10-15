@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { receiptLine } from "./format.js";
+import { errorText } from "./i18n.js";
 import { applyLiveEvent, useSession } from "./session.jsx";
 
 const TaskContext = createContext(null);
@@ -59,7 +60,7 @@ export function TaskProvider({ children }) {
       setApprovals((list) => list.filter((item) => item.taskId !== payload.taskId));
       refreshActive();
       bump();
-      notify(payload.type === "failed" ? `${payload.taskId}: ${payload.error}` : receiptLine(payload.taskId, payload.receipt));
+      notify(payload.type === "failed" ? `${payload.taskId}: ${errorText(payload.error)}` : receiptLine(payload.taskId, payload.receipt));
     });
     return () => { unlisten.then((stop) => stop()); };
   }, [notify, refreshActive]);

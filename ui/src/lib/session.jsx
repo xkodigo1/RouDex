@@ -28,7 +28,7 @@ export function applyLiveEvent(all, event) {
         id: item.id,
         type: item.type,
         command: item.command ?? (item.changes ? item.changes.map((c) => c.path).join(", ") : previous?.command),
-        status: event.type === "itemCompleted" ? (item.status ?? "completado") : "en curso",
+        status: event.type === "itemCompleted" ? (item.status ?? "completed") : "inProgress",
         exitCode: item.exitCode ?? previous?.exitCode ?? null,
         output: previous?.output ?? "",
       };
