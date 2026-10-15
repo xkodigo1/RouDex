@@ -63,8 +63,7 @@ por modelo.
 ## Bloquear mensajes de riesgo
 
 Por defecto el hook solo avisa. Para bloquear los mensajes de riesgo enviados
-con un modelo distinto del de `fuerte`, añade a
-`%LOCALAPPDATA%\RouDex\router.toml`:
+con un modelo distinto del de `fuerte`, añade a `~/.roudex/router.toml`:
 
 ```toml
 [desktop_hook]

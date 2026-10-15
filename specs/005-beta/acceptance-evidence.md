@@ -14,7 +14,7 @@ cubren.
 | A05 Codex ausente | `codex::tests::a_missing_codex_lists_every_place_tried`, `task_cli::a_missing_codex_says_where_it_looked_and_how_to_set_codex_path` | OK |
 | A06 instalar el hook desde la app | Instalador NSIS real en Windows, app aislada y pulsada por DevTools (abajo); `hook_cli::install_*` | OK |
 | A07 sin binario incluido | Fixture sin `?bundled=1`; `desktop_hook_install` sin binario devuelve el error con el comando | OK |
-| A08 workflow de release | | Pendiente (R005-T008) |
+| A08 workflow de release | Ejecución 38691686176 del PR #27: los tres trabajos en verde con los cuatro instaladores | OK |
 | A09 ahorro con precios | `savings::tests::*`, `tiers::tests::prices_are_read_by_model_and_must_not_be_negative`; tarjeta en el fixture | OK |
 | A10 sin precios | `savings::tests::without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept`; tarjeta en el fixture | OK |
 | A11 coste del clasificador | `router_classifier::app_server_classifier_runs_an_ephemeral_read_only_turn`, `savings::tests::the_classifier_counts_against_the_savings`, `the_store_adds_chat_turns_task_runs_and_the_classifier` | OK |
@@ -213,3 +213,25 @@ Fixture `?view=resumen`, 2026-10-15:
     «▶ run ready · 2», «verification · exit 1», «─ turn completed · 84k
     tokens», «waiting for approval», horas como «01:02 AM».
   - ES devuelve todo al español.
+
+## A08 · Workflow de release (R005-T008)
+
+- **Primera ejecución en el PR #27:** falló en macOS. Un build universal
+  compila cada arquitectura por separado y cada una busca
+  `binaries/router-cli-<arquitectura>`. `bundle.mjs` deja ahora esas dos
+  copias junto a la universal (commit 75d1b84).
+- **Ejecución 38691686176, 2026-10-15:** los tres trabajos en verde, con
+  estos artefactos:
+  - `installers-windows`: `RouDex_0.8.0_x64-setup.exe` (3,43 MiB);
+  - `installers-macos`: `RouDex_0.8.0_universal.dmg` (12,27 MiB);
+  - `installers-linux`: `RouDex_0.8.0_amd64.deb` (6,63 MiB) y
+    `RouDex_0.8.0_amd64.AppImage` (81,03 MiB).
+
+  La versión todavía era 0.8.0; sube a 0.9.0 con R005-T010.
+- **Linux:**
+  - La app compilada siguió en marcha bajo `xvfb` hasta el límite de 15 s,
+    sin cerrarse.
+  - El `control` del `.deb` declara `Package: rou-dex` y
+    `Depends: libwebkit2gtk-4.1-0, libgtk-3-0`.
+- **Release:** al publicar una release, el mismo workflow adjunta los
+  instaladores con `gh release upload`; se comprueba con `v0.9.0`.

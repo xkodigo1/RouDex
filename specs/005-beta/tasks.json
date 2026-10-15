@@ -562,7 +562,7 @@
       "depends_on": [
         "R005-T007"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -587,7 +587,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        ".github/workflows/release.yml: release published, workflow_dispatch and pull requests touching the packaging; windows-latest (NSIS), macos-latest (universal DMG), ubuntu-22.04 (deb and AppImage); installers kept as artifacts and attached with gh release upload on a release; contents: write only there; xvfb start of the Linux app for 15 s.",
+        "First run on PR #27 failed on macOS: a universal build checks binaries/router-cli-<arch> for each architecture; bundle.mjs now leaves the aarch64 and x86_64 copies next to the universal one (commit 75d1b84).",
+        "Run 38691686176 on PR #27 (2026-10-15): all three jobs green; artifacts installers-windows (RouDex_0.8.0_x64-setup.exe, 3.43 MiB), installers-macos (RouDex_0.8.0_universal.dmg, 12.27 MiB), installers-linux (RouDex_0.8.0_amd64.deb 6.63 MiB, RouDex_0.8.0_amd64.AppImage 81.03 MiB); the Linux app kept running under xvfb until the timeout. The deb control declares Package rou-dex and Depends libwebkit2gtk-4.1-0, libgtk-3-0.",
+        "Merged as PR #27 (adf3976)."
+      ],
       "release_target": "v0.9.0"
     },
     {
