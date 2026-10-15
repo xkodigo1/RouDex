@@ -322,7 +322,7 @@
       "depends_on": [
         "R005-T002"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -354,7 +354,14 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "router.toml language (es|en), English when unset; RouterConfig loads partial files; RouterConfig::write_setting edits or adds one line, keeps comments and the rest, refuses a result that does not load (tiers::tests x3).",
+        "Router reasons, the classifier's requested reason, task routes and the Desktop hook's context, warning and block message follow language (desktop_hook::tests::the_hook_writes_in_the_chosen_language_and_in_english_when_unset, hook_cli::the_hook_follows_the_language_in_router_toml).",
+        "UI: ui/src/lib/i18n.js (dictionaries, t, locale, systemLanguage), LanguageProvider, settings_set_language command, language picker in the top bar; shell, navigation and notices translated. Fixture check: system es-419 -> Spanish and language stored; switching to en and back translates the shell and stores the choice; systemLanguage maps en-US/fr-FR/pt-BR to en and es-ES/es-419 to es.",
+        "cargo test --workspace: 139 passed; clippy -D warnings and fmt clean; pnpm --dir ui build passes.",
+        "Commit ebaf1a4."
+      ],
       "release_target": "v0.9.0"
     },
     {
