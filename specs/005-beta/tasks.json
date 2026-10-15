@@ -419,7 +419,7 @@
       "depends_on": [
         "R005-T004"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "fuerte",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -446,7 +446,15 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "codex_sessions module: reads $CODEX_HOME/sessions/YYYY/MM/DD rollout files of the last 31 days; a line's kind comes from its start (before the payload), only turn_context and token_usage_record lines are parsed; stores thread, turn, model, time and token counts; incremental index by size and mtime.",
+        "codex_sessions::tests: lines_are_told_apart_by_their_start_only; desktop_turns_count_once_without_keeping_any_text (RouDex thread excluded, requests of a turn add up, no message text or cwd stored, unchanged files skipped, a changed file replaces its rows); the_summary_reads_sessions_only_when_asked (A13: option off opens no file); old_folders_are_not_read.",
+        "[savings] include_codex_desktop in router.toml (off by default) and settings_set_codex_desktop command; savings_summary passes the sessions folder only when it is on.",
+        "Real data probe (temporary ignored test, removed before commit): 112 rollout files of the last 30 days read in 1.3 s, re-check 12 ms with 112 unchanged, 399 turns over 5 models; only counts printed.",
+        "cargo test --workspace: 149 passed; clippy -D warnings and fmt clean.",
+        "Commit 0bfe9cf."
+      ],
       "release_target": "v0.9.0"
     },
     {

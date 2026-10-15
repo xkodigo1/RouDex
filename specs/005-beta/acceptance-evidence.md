@@ -18,8 +18,8 @@ cubren.
 | A09 ahorro con precios | `savings::tests::*`, `tiers::tests::prices_are_read_by_model_and_must_not_be_negative`; tarjeta en R005-T006 | OK (cálculo) |
 | A10 sin precios | `savings::tests::without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept`; tarjeta en R005-T006 | OK (cálculo) |
 | A11 coste del clasificador | `router_classifier::app_server_classifier_runs_an_ephemeral_read_only_turn`, `savings::tests::the_classifier_counts_against_the_savings`, `the_store_adds_chat_turns_task_runs_and_the_classifier` | OK |
-| A12 Codex Desktop activado | | Pendiente (R005-T005, R005-T006) |
-| A13 Codex Desktop apagado | | Pendiente (R005-T005) |
+| A12 Codex Desktop activado | `codex_sessions::tests::desktop_turns_count_once_without_keeping_any_text`, `lines_are_told_apart_by_their_start_only`; sesiones reales (conteos); tarjeta en R005-T006 | OK (lectura) |
+| A13 Codex Desktop apagado | `codex_sessions::tests::the_summary_reads_sessions_only_when_asked` | OK |
 | A14 cambiar de idioma | Fixture (marco, navegación y avisos); pantallas en R005-T009 | En curso |
 | A15 idioma del sistema | `tiers::tests::a_setting_changes_one_line_and_keeps_the_rest`, `a_setting_in_an_empty_or_missing_file_is_all_the_file_holds`; fixture | OK |
 | A16 hook en el idioma elegido | `desktop_hook::tests::the_hook_writes_in_the_chosen_language_and_in_english_when_unset`, `hook_cli::the_hook_follows_the_language_in_router_toml` | OK |
@@ -114,3 +114,27 @@ cubren.
   - Coste, base y ahorro valen 0.
   - Se cuentan los turnos sin precio y se listan los modelos sin precio; los
     tokens por tier siguen disponibles.
+
+## A12–A13 · Detalle (R005-T005)
+
+- **Qué se lee:**
+  - Solo se analizan las líneas `turn_context` y `token_usage_record`; el
+    tipo se lee del inicio de la línea, antes del `payload`.
+  - Un mensaje cuyo texto contiene `"type":"token_usage_record"` sigue
+    siendo `response_item` y no se analiza.
+- **Privacidad:** la prueba mete un texto secreto y un `cwd` en las sesiones
+  y comprueba que nada de eso llega a la base.
+- **Conteo:**
+  - Los hilos de RouDex (chats y ejecuciones de tareas) no se cuentan dos
+    veces.
+  - Las peticiones de un mismo turno se suman.
+- **Índice incremental:** la segunda pasada no relee archivos sin cambios; un
+  archivo modificado reemplaza sus filas sin duplicarlas.
+- **Opción apagada:** el resumen no abre ningún archivo de sesión y no aparece
+  Codex Desktop. Encendida, aparece como origen propio.
+- **Sesiones reales del usuario, 2026-10-15:**
+  - 112 archivos de los últimos 30 días leídos en 1,3 s; la segunda pasada
+    tarda 12 ms y no relee ninguno.
+  - 399 turnos de 5 modelos.
+  - Se imprimieron solo conteos, con una prueba temporal que se retiró antes
+    del commit.
