@@ -1,7 +1,8 @@
 use router_core::{
     desktop_hook, escalate_local, project_dir, route_local, AccessMode, AppServerClient,
     AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision,
-    RouterConfig, RouterStore, SentTurn, ThreadSummary,
+    RouterConfig, RouterStore, SentTurn, SpecFile, StoredSpec, TaskBoard, TaskExecutionReceipt,
+    TaskService, ThreadSummary, Tier,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -10,9 +11,13 @@ use tauri::{Emitter, Manager};
 
 /// Every session event is emitted to the UI under this name.
 const SESSION_EVENT: &str = "roudex://session";
+/// Events of spec task runs (session events tagged with their task, and the
+/// end of each run).
+const TASK_EVENT: &str = "roudex://task";
 
 struct AppState {
     chat: Arc<ChatService>,
+    tasks: Arc<TaskService>,
 }
 
 /// Run blocking work (process I/O, SQLite) off the async runtime.
@@ -256,6 +261,132 @@ async fn usage_summary(
     .await
 }
 
+/// Specs under `<project>/specs/*/tasks.json`.
+#[tauri::command]
+async fn spec_files(
+    state: tauri::State<'_, AppState>,
+    project: String,
+) -> Result<Vec<SpecFile>, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.spec_files(&project_dir(Path::new(&project))?)).await
+}
+
+/// Import (or re-import) a spec manifest.
+#[tauri::command]
+async fn spec_load(state: tauri::State<'_, AppState>, path: String) -> Result<StoredSpec, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.load_spec(Path::new(&path))).await
+}
+
+/// Loaded specs, most recent first.
+#[tauri::command]
+async fn spec_list(state: tauri::State<'_, AppState>) -> Result<Vec<StoredSpec>, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.specs()).await
+}
+
+/// A spec's tasks with the route each would take now.
+#[tauri::command]
+async fn task_board(
+    state: tauri::State<'_, AppState>,
+    spec_id: String,
+) -> Result<TaskBoard, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.board(&spec_id)).await
+}
+
+/// Choose a task's tier by hand; `null` returns to the spec's.
+#[tauri::command]
+async fn task_set_tier(
+    state: tauri::State<'_, AppState>,
+    task_id: String,
+    tier: Option<Tier>,
+) -> Result<(), String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.set_tier(&task_id, tier)).await
+}
+
+#[tauri::command]
+async fn task_decide(
+    state: tauri::State<'_, AppState>,
+    task_id: String,
+    approved: bool,
+) -> Result<(), String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.decide(&task_id, approved)).await
+}
+
+/// Start a task in the background; its events arrive on `roudex://task`.
+#[tauri::command]
+fn task_dispatch(state: tauri::State<'_, AppState>, task_id: String) -> Result<(), String> {
+    state.tasks.dispatch(&task_id)
+}
+
+/// Run every ready task of a spec, one after another, in the background.
+#[tauri::command]
+fn task_dispatch_ready(state: tauri::State<'_, AppState>, spec_id: String) -> Result<(), String> {
+    state.tasks.dispatch_ready(&spec_id)
+}
+
+/// Continue an interrupted run on its thread, in the background.
+#[tauri::command]
+fn task_resume(state: tauri::State<'_, AppState>, run_id: String) -> Result<(), String> {
+    state.tasks.resume(&run_id)
+}
+
+#[tauri::command]
+async fn task_interrupt(state: tauri::State<'_, AppState>, task_id: String) -> Result<(), String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.interrupt(&task_id)).await
+}
+
+/// Answer an approval request of a running task.
+#[tauri::command]
+async fn task_approval(
+    state: tauri::State<'_, AppState>,
+    task_id: String,
+    request_id: Value,
+    decision: ApprovalDecision,
+) -> Result<(), String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.respond(&task_id, request_id, decision)).await
+}
+
+#[tauri::command]
+async fn task_retry(
+    state: tauri::State<'_, AppState>,
+    task_id: String,
+) -> Result<TaskExecutionReceipt, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.retry(&task_id)).await
+}
+
+/// Mark a task left running by a closed app as interrupted.
+#[tauri::command]
+async fn task_recover(
+    state: tauri::State<'_, AppState>,
+    task_id: String,
+) -> Result<TaskExecutionReceipt, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.recover(&task_id)).await
+}
+
+/// Persisted events of a run, for its transcript and verification output.
+#[tauri::command]
+async fn task_run_events(
+    state: tauri::State<'_, AppState>,
+    run_id: String,
+) -> Result<Vec<router_core::EventRecord>, String> {
+    let tasks = state.tasks.clone();
+    blocking(move || tasks.run_events(&run_id)).await
+}
+
+/// What is running now, if anything.
+#[tauri::command]
+fn task_active(state: tauri::State<'_, AppState>) -> Option<String> {
+    state.tasks.active()
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -268,8 +399,17 @@ fn main() {
                     let _ = handle.emit(SESSION_EVENT, &event);
                 }),
             );
+            let handle = app.handle().clone();
+            let tasks = TaskService::new(
+                RouterStore::default_path(),
+                Arc::new(|cwd: &Path| AppServerConfig::local(cwd)),
+                Arc::new(move |event| {
+                    let _ = handle.emit(TASK_EVENT, &event);
+                }),
+            );
             app.manage(AppState {
                 chat: Arc::new(chat),
+                tasks: Arc::new(tasks),
             });
             Ok(())
         })
@@ -288,6 +428,21 @@ fn main() {
             usage_summary,
             dashboard_summary,
             desktop_hook_summary,
+            spec_files,
+            spec_load,
+            spec_list,
+            task_board,
+            task_set_tier,
+            task_decide,
+            task_dispatch,
+            task_dispatch_ready,
+            task_resume,
+            task_interrupt,
+            task_approval,
+            task_retry,
+            task_recover,
+            task_run_events,
+            task_active,
             thread_list,
             chat_projects,
             thread_rename,

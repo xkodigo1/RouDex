@@ -2,7 +2,7 @@ use crate::domain::{TaskDefinition, TaskStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 /// A spec's executable contract (`specs/<slug>/tasks.json`). Fields the
@@ -77,10 +77,37 @@ impl TaskManifest {
         Ok(manifest)
     }
 
+    /// Load a manifest file. A relative task `cwd` refers to the project
+    /// root (see [`TaskManifest::project_root`]) and becomes absolute.
     pub fn load(path: impl AsRef<Path>) -> Result<Self, ManifestError> {
+        let path = path.as_ref();
         let contents =
             std::fs::read_to_string(path).map_err(|error| ManifestError::Io(error.to_string()))?;
-        Self::from_json(&contents)
+        let mut manifest = Self::from_json(&contents)?;
+        let root = Self::project_root(path);
+        for task in &mut manifest.tasks {
+            if Path::new(&task.cwd).is_relative() {
+                let joined = root.join(&task.cwd);
+                task.cwd = crate::chat::project_dir(&joined)
+                    .unwrap_or(joined)
+                    .to_string_lossy()
+                    .into_owned();
+            }
+        }
+        Ok(manifest)
+    }
+
+    /// The project a manifest belongs to: the folder holding
+    /// `specs/<slug>/tasks.json`, or else the manifest's own folder.
+    pub fn project_root(path: &Path) -> PathBuf {
+        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let folder = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        match folder.parent() {
+            Some(specs) if specs.file_name().is_some_and(|name| name == "specs") => {
+                specs.parent().unwrap_or(specs).to_path_buf()
+            }
+            _ => folder,
+        }
     }
 
     pub fn validate(&self) -> Result<(), ManifestError> {
@@ -189,7 +216,7 @@ fn legacy_warnings(value: &Value) -> Vec<String> {
     let mut warnings = Vec::new();
     for task in tasks {
         let id = task["id"].as_str().unwrap_or("?");
-        if task.get("tier").is_none() {
+        if task.get("tier").is_none_or(Value::is_null) {
             if let Some(profile) = task["profile"].as_str() {
                 if let Some(tier) = crate::domain::tier_for_profile(profile) {
                     warnings.push(format!(
@@ -404,6 +431,30 @@ mod tests {
             with(json!([{ "id": "H1", "task_ids": ["T-7"] }]), "H1"),
             Err(ManifestError::MilestoneTask { .. })
         ));
+    }
+
+    #[test]
+    fn relative_cwds_resolve_against_the_project() {
+        let root = std::env::temp_dir().join(format!("roudex-project-{}", uuid::Uuid::new_v4()));
+        let spec_dir = root.join("specs").join("001-demo");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        let manifest = json!({ "spec_id": "s", "title": "S", "version": 1,
+            "tasks": [task_json(json!({ "tier": "estandar" }))] });
+        let in_specs = spec_dir.join("tasks.json");
+        std::fs::write(&in_specs, manifest.to_string()).unwrap();
+        let elsewhere = root.join("tasks.json");
+        std::fs::write(&elsewhere, manifest.to_string()).unwrap();
+
+        let project = crate::chat::project_dir(&root).unwrap();
+        assert_eq!(
+            TaskManifest::project_root(&in_specs),
+            std::fs::canonicalize(&root).unwrap()
+        );
+        let loaded = TaskManifest::load(&in_specs).unwrap();
+        assert_eq!(Path::new(&loaded.tasks[0].cwd), project);
+        let loaded = TaskManifest::load(&elsewhere).unwrap();
+        assert_eq!(Path::new(&loaded.tasks[0].cwd), project);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

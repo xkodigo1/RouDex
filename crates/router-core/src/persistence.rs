@@ -21,6 +21,20 @@ pub enum StoreError {
     InvalidTerminalEvent,
 }
 
+/// A spec loaded into the store, with its task counts.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredSpec {
+    pub spec_id: String,
+    pub title: String,
+    pub path: Option<String>,
+    pub milestones: Vec<crate::task_manifest::Milestone>,
+    pub warnings: Vec<String>,
+    pub loaded_at: String,
+    pub tasks: i64,
+    pub completed: i64,
+}
+
 pub struct RouterStore {
     pub(crate) connection: Connection,
     path: PathBuf,
@@ -34,6 +48,9 @@ impl RouterStore {
                 .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         }
         let connection = Connection::open(&path)?;
+        // The chat, task runs and the UI share this file; wait
+        // for a writer instead of failing at once.
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
         let store = Self { connection, path };
         store.migrate()?;
         Ok(store)
@@ -146,9 +163,70 @@ impl RouterStore {
                  ELSE 'estandar' END
              WHERE tier IS NULL;",
         )?;
+        self.connection.execute_batch(
+            "CREATE TABLE IF NOT EXISTS specs (
+                 spec_id TEXT PRIMARY KEY,
+                 title TEXT NOT NULL,
+                 path TEXT,
+                 milestones TEXT NOT NULL,
+                 warnings TEXT NOT NULL,
+                 loaded_at TEXT NOT NULL
+             );",
+        )?;
         crate::chat::migrate(&self.connection)?;
         crate::desktop_hook::migrate(&self.connection)?;
         Ok(())
+    }
+
+    /// Remember a loaded spec: where it came from, its milestones and the
+    /// warnings loading it produced.
+    pub fn upsert_spec(
+        &self,
+        manifest: &crate::task_manifest::TaskManifest,
+        path: Option<&Path>,
+    ) -> Result<(), StoreError> {
+        self.connection.execute(
+            "INSERT INTO specs (spec_id, title, path, milestones, warnings, loaded_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(spec_id) DO UPDATE SET title = excluded.title, path = excluded.path,
+                 milestones = excluded.milestones, warnings = excluded.warnings,
+                 loaded_at = excluded.loaded_at",
+            params![
+                manifest.spec_id,
+                manifest.title,
+                path.map(|path| path.to_string_lossy().into_owned()),
+                serde_json::to_string(&manifest.milestones)?,
+                serde_json::to_string(&manifest.warnings)?,
+                now_string(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Loaded specs, most recent first.
+    pub fn specs(&self) -> Result<Vec<StoredSpec>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT s.spec_id, s.title, s.path, s.milestones, s.warnings, s.loaded_at,
+                    count(t.task_id), coalesce(sum(t.status = 'completed'), 0)
+             FROM specs s LEFT JOIN tasks t ON t.spec_id = s.spec_id
+             GROUP BY s.spec_id ORDER BY CAST(s.loaded_at AS INTEGER) DESC, s.rowid DESC",
+        )?;
+        let specs = statement
+            .query_map([], |row| {
+                let json = |index: usize| -> rusqlite::Result<String> { row.get(index) };
+                Ok(StoredSpec {
+                    spec_id: row.get(0)?,
+                    title: row.get(1)?,
+                    path: row.get(2)?,
+                    milestones: serde_json::from_str(&json(3)?).map_err(to_sql_error)?,
+                    warnings: serde_json::from_str(&json(4)?).map_err(to_sql_error)?,
+                    loaded_at: row.get(5)?,
+                    tasks: row.get(6)?,
+                    completed: row.get(7)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(specs)
     }
 
     /// Choose a task's tier by hand (`None` returns to the spec's). Refused
