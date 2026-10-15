@@ -472,6 +472,11 @@ mod tests {
         assert_eq!(orchestrator.tasks.len(), 7);
         assert_eq!(orchestrator.milestones[0].task_ids.len(), 7);
         assert!(orchestrator.warnings.is_empty());
+        let beta =
+            TaskManifest::from_json(include_str!("../../../specs/005-beta/tasks.json")).unwrap();
+        assert_eq!(beta.tasks.len(), 10);
+        assert_eq!(beta.milestones[0].task_ids.len(), 10);
+        assert!(beta.warnings.is_empty());
         let example = TaskManifest::from_json(include_str!(
             "../../../examples/hello-orchestrator/specs/001-notes/tasks.json"
         ))

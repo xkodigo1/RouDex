@@ -1,0 +1,637 @@
+{
+  "spec_id": "005-beta",
+  "title": "Cross-platform beta: three systems, installers, savings estimate and two languages",
+  "version": 1,
+  "status": "draft",
+  "planning_assumption": "Plan to v1.0.0 (Codex only) approved in chat on 2026-10-14. The user chose on 2026-10-14: user prices in router.toml, all data in ~/.roudex, NSIS + universal DMG + deb + AppImage, and the system language with a selector that the hook follows. Tasks run outside the coordinator (D8) and declare tier instead of profile/model/effort, so the validator's routed-field warnings are expected. No task starts until the user approves this spec.",
+  "execution_policy": {
+    "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D8)",
+    "network_access": true,
+    "network_scope": "Installing @tauri-apps/cli and the bundler tooling Tauri downloads (R005-T007), and GitHub Actions runs (R005-T008). Nothing else.",
+    "future_task_approval": "manual",
+    "publication_authorized": false,
+    "framework_or_dependency_changes": "@tauri-apps/cli as a ui dev dependency (approved in the plan to v1.0.0). No new Rust crates and no new runtime dependencies."
+  },
+  "milestones": [
+    {
+      "id": "H1",
+      "title": "Beta multiplataforma",
+      "status": "planned",
+      "release_target": "v0.9.0",
+      "depends_on": [],
+      "task_ids": [
+        "R005-T001",
+        "R005-T002",
+        "R005-T003",
+        "R005-T004",
+        "R005-T005",
+        "R005-T006",
+        "R005-T007",
+        "R005-T008",
+        "R005-T009",
+        "R005-T010"
+      ],
+      "release_gate_task": "R005-T010",
+      "exit_criteria": [
+        "Every task completed with verify evidence.",
+        "Every scenario has evidence in acceptance-evidence.md, including the Windows installer smoke test with real Codex (A17) and the macOS/Linux CI evidence (A18).",
+        "Manifests at 0.9.0, CI green on main, signed tag and a release with the four installers attached."
+      ]
+    }
+  ],
+  "acceptance_scenarios": [
+    {
+      "id": "A01",
+      "precondition": "A new install on Windows, macOS or Linux with no RouDex data.",
+      "action": "Open the app, use the chat and the CLI.",
+      "observable_result": "router.toml, router.sqlite3 and the hook files live in ~/.roudex (or $ROUDEX_HOME); nothing is written next to the working directory.",
+      "task_ids": [
+        "R005-T001"
+      ],
+      "verification": "cargo test --workspace on the three CI systems"
+    },
+    {
+      "id": "A02",
+      "precondition": "Windows with v0.8.0 data in %LOCALAPPDATA%\\RouDex and no ~/.roudex/router.sqlite3.",
+      "action": "Start the app or any CLI command; start it again.",
+      "observable_result": "Threads, tasks and router.toml appear in ~/.roudex; the originals are unchanged; the second start copies nothing; existing ~/.roudex data is never overwritten.",
+      "task_ids": [
+        "R005-T001"
+      ],
+      "verification": "cargo test --workspace (Windows); real migration in R005-T010"
+    },
+    {
+      "id": "A03",
+      "precondition": "ROUDEX_HOME set to another folder.",
+      "action": "Run the app, the CLI and the hook.",
+      "observable_result": "All of them read and write only there.",
+      "task_ids": [
+        "R005-T001"
+      ],
+      "verification": "cargo test --workspace"
+    },
+    {
+      "id": "A04",
+      "precondition": "Codex installed only through its desktop app (macOS layouts, Windows copies) or only on PATH or ~/.local/bin; codex_path set in router.toml.",
+      "action": "Start a chat or a task.",
+      "observable_result": "RouDex finds the binary in the documented order; codex_path wins over automatic discovery and ROUDEX_CODEX_BIN over both.",
+      "task_ids": [
+        "R005-T002"
+      ],
+      "verification": "cargo test -p router-core app_server"
+    },
+    {
+      "id": "A05",
+      "precondition": "No Codex anywhere.",
+      "action": "Start a chat or run router-cli models.",
+      "observable_result": "A clear error lists the places tried and how to set codex_path; no process is spawned.",
+      "task_ids": [
+        "R005-T002"
+      ],
+      "verification": "cargo test --workspace"
+    },
+    {
+      "id": "A06",
+      "precondition": "An installed build (NSIS on Windows).",
+      "action": "Press Instalar hook in Resumen; press it again.",
+      "observable_result": "router-cli is copied from the app folder to ~/.roudex/bin, hooks.json gets one RouDex entry, the second press changes nothing, and the card shows the hook as installed.",
+      "task_ids": [
+        "R005-T007"
+      ],
+      "verification": "Windows installer smoke recorded in acceptance-evidence.md"
+    },
+    {
+      "id": "A07",
+      "precondition": "The app running from source, without a bundled router-cli.",
+      "action": "Open Resumen.",
+      "observable_result": "Instalar hook is unavailable and explains how to use router-cli hook-install.",
+      "task_ids": [
+        "R005-T007"
+      ],
+      "verification": "Browser fixture and cargo test --workspace"
+    },
+    {
+      "id": "A08",
+      "precondition": "The release workflow.",
+      "action": "Run it manually; publish a release.",
+      "observable_result": "Windows, macOS and Linux jobs produce the NSIS installer, the universal DMG, the deb and the AppImage; on a published release they are attached to it; the Linux app starts under xvfb.",
+      "task_ids": [
+        "R005-T008"
+      ],
+      "verification": "GitHub Actions run"
+    },
+    {
+      "id": "A09",
+      "precondition": "Chat and task turns of the last 30 days and prices for their models and for the fuerte model.",
+      "action": "Open Resumen.",
+      "observable_result": "Cost, cost at fuerte, savings and router overhead match the D5 formula; turns without prices are counted apart; the card says it is an estimate.",
+      "task_ids": [
+        "R005-T004",
+        "R005-T006"
+      ],
+      "verification": "cargo test --workspace; fixture"
+    },
+    {
+      "id": "A10",
+      "precondition": "No [prices] in router.toml.",
+      "action": "Open Resumen.",
+      "observable_result": "No money is shown; tokens by tier and the snippet to add prices are.",
+      "task_ids": [
+        "R005-T004",
+        "R005-T006"
+      ],
+      "verification": "cargo test --workspace; fixture"
+    },
+    {
+      "id": "A11",
+      "precondition": "Turns routed by the classifier.",
+      "action": "Compute savings.",
+      "observable_result": "The classifier's own tokens are recorded and subtracted as router overhead.",
+      "task_ids": [
+        "R005-T004"
+      ],
+      "verification": "cargo test --workspace"
+    },
+    {
+      "id": "A12",
+      "precondition": "include_codex_desktop enabled and rollout files with Codex Desktop turns, some of them RouDex threads.",
+      "action": "Open Resumen twice; change one file.",
+      "observable_result": "Codex Desktop appears as its own source with model and token totals; RouDex threads are not counted twice; no message text is stored; the second read skips unchanged files.",
+      "task_ids": [
+        "R005-T005",
+        "R005-T006"
+      ],
+      "verification": "cargo test --workspace; fixture"
+    },
+    {
+      "id": "A13",
+      "precondition": "include_codex_desktop disabled (default).",
+      "action": "Open Resumen.",
+      "observable_result": "No file under $CODEX_HOME/sessions is opened.",
+      "task_ids": [
+        "R005-T005"
+      ],
+      "verification": "cargo test --workspace"
+    },
+    {
+      "id": "A14",
+      "precondition": "The app in English.",
+      "action": "Switch to Spanish and back.",
+      "observable_result": "Every screen changes language at once, dates and numbers follow it, and the choice survives a restart.",
+      "task_ids": [
+        "R005-T003",
+        "R005-T009"
+      ],
+      "verification": "Browser fixture in both languages; untranslated-literal check"
+    },
+    {
+      "id": "A15",
+      "precondition": "A first start with no language in router.toml.",
+      "action": "Open the app on an English and on a Spanish system.",
+      "observable_result": "The app starts in the system language and stores it in router.toml without changing any other line.",
+      "task_ids": [
+        "R005-T003"
+      ],
+      "verification": "cargo test --workspace; fixture"
+    },
+    {
+      "id": "A16",
+      "precondition": "language set to en, to es, and unset.",
+      "action": "Send a risky prompt in Codex Desktop through the hook.",
+      "observable_result": "The context and the warning line are in English, Spanish and English respectively.",
+      "task_ids": [
+        "R005-T003"
+      ],
+      "verification": "cargo test -p router-cli --test hook_cli"
+    },
+    {
+      "id": "A17",
+      "precondition": "The Windows installer from the release workflow and real Codex.",
+      "action": "Install, migrate v0.8.0 data, chat, run the example spec, install the hook, uninstall.",
+      "observable_result": "Everything works without administrator rights and the data survives the uninstall.",
+      "task_ids": [
+        "R005-T010"
+      ],
+      "verification": "specs/005-beta/acceptance-evidence.md"
+    },
+    {
+      "id": "A18",
+      "precondition": "macOS and Linux without a physical machine.",
+      "action": "Run the CI and the release workflow.",
+      "observable_result": "Tests pass on both systems, the installers are produced and the Linux app starts under xvfb; the release notes state that macOS and Linux were verified in CI only.",
+      "task_ids": [
+        "R005-T008",
+        "R005-T010"
+      ],
+      "verification": "specs/005-beta/acceptance-evidence.md"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "R005-T001",
+      "milestone": "H1",
+      "title": "RouDex data in ~/.roudex on every OS",
+      "prompt": "Move router.toml, router.sqlite3 and everything the hook keeps to one home: $ROUDEX_HOME or ~/.roudex (D1). Add a paths module in router-core used by RouterStore::default_path, RouterConfig::default_path and desktop_hook. On Windows, when the new store is absent and %LOCALAPPDATA%\\RouDex\\router.sqlite3 exists, copy the database with SQLite's backup API and copy router.toml, never touching the originals and never overwriting existing data; report what was migrated. Switch tests from LOCALAPPDATA to ROUDEX_HOME. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "crates",
+        "src-tauri"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates",
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "A01-A03 hold on Windows, macOS and Linux (CI).",
+        "Tests isolate state with ROUDEX_HOME; none depends on LOCALAPPDATA except the Windows migration tests."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A01",
+        "A02",
+        "A03"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T002",
+      "milestone": "H1",
+      "title": "Find Codex on macOS and Linux, and codex_path",
+      "prompt": "Extend discover_codex (D2): ROUDEX_CODEX_BIN, then codex_path from router.toml, then PATH, then known locations per OS (Windows: newest Codex Desktop copy; macOS: Codex.app in /Applications or ~/Applications with the three known layouts, then /opt/homebrew/bin, /usr/local/bin, ~/.local/bin; Linux: ~/.local/bin, /usr/local/bin, ~/.npm-global/bin). When nothing is found, fail with a message that lists the places tried and how to set codex_path, before spawning any process. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T001"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "crates"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates"
+        ]
+      },
+      "acceptance": [
+        "A04 and A05 hold, with discovery tests over temporary layouts for each OS.",
+        "The app and the CLI report where they looked when Codex is missing."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A04",
+        "A05"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T003",
+      "milestone": "H1",
+      "title": "Language setting, i18n base and the hook in the chosen language",
+      "prompt": "Add language (es|en) to router.toml and a Tauri command that sets it by editing or adding only that line (D6); without a value the app uses the system language and stores it. Add ui/src/lib/i18n.js (dictionaries, t(key, values), Intl formatting) and a language selector; translate the shell, navigation and notices. The Desktop hook writes its context and warning in the chosen language, English when unset. Other screens are translated in R005-T009. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T002"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "crates",
+        "src-tauri",
+        "ui/src",
+        "ui/tests"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates",
+          "src-tauri",
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "A14-A16 hold; the shell, navigation and notices are translated.",
+        "router.toml edits keep every other line as it was (test)."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A14",
+        "A15",
+        "A16"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T004",
+      "milestone": "H1",
+      "title": "Cost per turn, user prices and router overhead",
+      "prompt": "Parse [prices.<model>] (input, cached_input, output in USD per 1M tokens) from router.toml (D5). Compute each turn's cost and its baseline at the current fuerte model; turns without both prices are counted apart. Record task-run token usage and the classifier's own token usage from now on, and expose a 30-day savings summary (cost, baseline, savings, router overhead, unpriced turns, by day and by source) through a Tauri command. No default prices. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T003"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "crates",
+        "src-tauri"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates",
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "A09-A11 hold with tests for the cost formula, missing prices and the classifier overhead."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A09",
+        "A10",
+        "A11"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T005",
+      "milestone": "H1",
+      "title": "Opt-in Codex Desktop usage from ~/.codex/sessions",
+      "prompt": "When [savings] include_codex_desktop is true (D5), read $CODEX_HOME/sessions rollout files from the last 30 days, parsing only turn_context (turn -> model) and token_usage_record (turn -> tokens) lines and skipping every other line unparsed. Keep an incremental index (path, size, mtime) in SQLite, exclude threads RouDex already records, and add the result to the savings summary as its own source. When disabled, no file under $CODEX_HOME/sessions is opened. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T004"
+      ],
+      "status": "planned",
+      "tier": "fuerte",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "crates",
+        "src-tauri"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "crates",
+          "src-tauri"
+        ]
+      },
+      "acceptance": [
+        "A12 and A13 hold with fixture rollouts that contain message text the tests prove is never stored."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A12",
+        "A13"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T006",
+      "milestone": "H1",
+      "title": "Savings card in Resumen",
+      "prompt": "Add a savings card to Resumen from the R005-T004 summary, in both languages: estimated cost, cost at fuerte, savings and router overhead for 30 days, by source, plus how many turns had no price. Offer the include_codex_desktop toggle (written to router.toml like language). Without prices, show tokens by tier and the router.toml snippet to add them. Extend ui/tests/chat-fixture.html and record a browser check. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T003",
+        "R005-T004",
+        "R005-T005"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "ui/src",
+        "ui/tests"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "The card shows cost, baseline, savings and overhead with an estimate note, the unpriced-turn count, and a Codex Desktop toggle; with no prices it explains how to add them.",
+        "Checked in the browser fixture in both languages; recorded in acceptance-evidence.md."
+      ],
+      "verify": "pnpm --dir ui build",
+      "scenario_ids": [
+        "A09",
+        "A10",
+        "A12"
+      ],
+      "verification_artifact": "specs/005-beta/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T007",
+      "milestone": "H1",
+      "title": "Installers with router-cli and an Instalar hook button",
+      "prompt": "Add @tauri-apps/cli as a dev dependency of ui (approved in the plan) and bundle settings (D3): NSIS per user, universal DMG with ad-hoc signing, deb and AppImage, with router-cli as externalBin built per target (a script prepares binaries/router-cli-<triple>, lipo on macOS). Add a Tauri command and a Resumen button that installs the Codex hook from the router-cli next to the app executable with the same router-core function as hook-install; in development, without a bundled binary, the button explains how to use router-cli hook-install. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T001",
+        "R005-T003"
+      ],
+      "status": "planned",
+      "tier": "fuerte",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "ui/package.json",
+        "ui/pnpm-lock.yaml",
+        "ui/src",
+        "src-tauri",
+        "crates",
+        "scripts"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "."
+        ]
+      },
+      "acceptance": [
+        "A06 and A07 hold.",
+        "A local NSIS build on Windows installs per user, opens, installs the hook from the bundled router-cli and uninstalls cleanly; recorded in acceptance-evidence.md."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A06",
+        "A07"
+      ],
+      "verification_artifact": "specs/005-beta/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T008",
+      "milestone": "H1",
+      "title": "Release workflow that attaches the installers",
+      "prompt": "Add .github/workflows/release.yml (D4): on release published and workflow_dispatch, build on windows-latest, macos-latest and the oldest Ubuntu LTS image available, with the Linux libraries from ci.yml, prepare the router-cli sidecar, run the Tauri build and upload the installers with gh release upload (contents: write only here); manual runs keep them as artifacts. Start the Linux build under xvfb for a few seconds and fail on a crash. No third-party actions beyond the ones ci.yml already uses. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T007"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        ".github/workflows"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          ".github"
+        ]
+      },
+      "acceptance": [
+        "A manual run produces the NSIS installer, the universal DMG, the deb and the AppImage as artifacts.",
+        "On Linux the built app starts under xvfb without errors."
+      ],
+      "verify": "gh run list --workflow release.yml --limit 1 --json conclusion --jq \"if .[0].conclusion == \\\"success\\\" then \\\"ok\\\" else error(\\\"release workflow not green\\\") end\"",
+      "scenario_ids": [
+        "A08"
+      ],
+      "verification_artifact": null,
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T009",
+      "milestone": "H1",
+      "title": "Every screen in Spanish and English",
+      "prompt": "Move every user-visible string of Resumen, Hilos, Proyectos, Tareas, the transcript and the approval cards into the dictionaries, including the translation maps for backend messages (coordinator reasons, errors). Dates and numbers follow the chosen language. Add a check that fails on untranslated literals in ui/src and record a browser check in both languages. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T003",
+        "R005-T006",
+        "R005-T007"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "ui/src",
+        "ui/tests"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "ui"
+        ]
+      },
+      "acceptance": [
+        "No user-visible Spanish or English literal is left outside the dictionaries (a check script or test lists them).",
+        "Resumen, Hilos, Proyectos and Tareas checked in the fixture in both languages; recorded in acceptance-evidence.md."
+      ],
+      "verify": "pnpm --dir ui build",
+      "scenario_ids": [
+        "A14"
+      ],
+      "verification_artifact": "specs/005-beta/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    },
+    {
+      "id": "R005-T010",
+      "milestone": "H1",
+      "title": "Docs, beta smoke test and the v0.9.0 release",
+      "prompt": "Update docs/installation.md for the three systems (installers, unsigned warnings, where data lives, migration, codex_path), document prices, the savings estimate and the Codex Desktop option, and the language setting. Run the beta smoke test on Windows with the installer from the release workflow and real Codex, record the macOS and Linux CI evidence, bump the workspace and UI versions to 0.9.0 and prepare the release notes. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
+      "depends_on": [
+        "R005-T001",
+        "R005-T002",
+        "R005-T003",
+        "R005-T004",
+        "R005-T005",
+        "R005-T006",
+        "R005-T007",
+        "R005-T008",
+        "R005-T009"
+      ],
+      "status": "planned",
+      "tier": "estandar",
+      "approval": "not_required",
+      "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
+      "scope": [
+        "docs",
+        "README.md",
+        "ROADMAP.md",
+        "specs/005-beta",
+        "Cargo.toml",
+        "Cargo.lock",
+        "ui/package.json"
+      ],
+      "cwd": ".",
+      "sandbox": {
+        "type": "workspaceWrite",
+        "writable_roots": [
+          "."
+        ]
+      },
+      "acceptance": [
+        "acceptance-evidence.md covers A01-A18.",
+        "Manifests at 0.9.0 and cargo test --workspace passes."
+      ],
+      "verify": "cargo test --workspace",
+      "scenario_ids": [
+        "A17",
+        "A18"
+      ],
+      "verification_artifact": "specs/005-beta/acceptance-evidence.md",
+      "route_id": null,
+      "run_id": null,
+      "evidence": [],
+      "release_target": "v0.9.0"
+    }
+  ],
+  "revision_history": []
+}
