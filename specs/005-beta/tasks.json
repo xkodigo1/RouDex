@@ -600,7 +600,7 @@
         "R005-T006",
         "R005-T007"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -626,7 +626,14 @@
       "verification_artifact": "specs/005-beta/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "Dictionaries in ui/src/lib/locales/es.js and en.js (300 keys each); tn() for plurals; errorText() for known backend errors (task service, missing Codex, codex_path, no bundled router-cli); format.js labels (sources, task statuses, access modes, coordinator reasons, relative times) follow the language; months, weekdays, dates and numbers via Intl.",
+        "Resumen, Hilos, Proyectos, Tareas, the transcript and approval cards use t(); live command states are inProgress/completed instead of Spanish words.",
+        "ui/tests/check-i18n.mjs: key and placeholder parity between es and en, and no JSX text or aria-label/title/placeholder/alt literal with words outside the dictionaries; it caught a probe file with three leftovers (text, aria-label, title) and ignores code and comparisons; pnpm --dir ui build runs it (i18n: 300 keys in es and en).",
+        "Fixture check in English (2026-10-15): summary, threads, projects and tasks with no Spanish interface word left (only fixture data); task detail, run with verification exit 1 and thread transcript in English; switching back to Spanish restores the text.",
+        "Commit 35a13cb."
+      ],
       "release_target": "v0.9.0"
     },
     {
