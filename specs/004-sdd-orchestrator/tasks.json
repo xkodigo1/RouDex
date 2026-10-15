@@ -316,7 +316,7 @@
       "depends_on": [
         "R004-T003"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "fuerte",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -345,7 +345,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "cargo test -p router-core --test task_service: 4 passed (specs listed with broken manifests reported, legacy spec loaded with warnings and project-relative cwd, board route preview for spec/risk/manual with approvals and dependencies (A01, A05, A06), background run with task-tagged session events, UI-answered approval and one run at a time (A07), ready tasks in dependency order (A09)).",
+        "cargo check -p roudex-desktop: 15 Tauri commands and roudex://task events; the window capability is unchanged.",
+        "cargo test --workspace: 133 passed; clippy -D warnings clean.",
+        "Commit d735143."
+      ],
       "release_target": "v0.8.0"
     },
     {
