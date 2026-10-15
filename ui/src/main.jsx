@@ -22,7 +22,7 @@ function Notices() {
 }
 
 function Shell() {
-  const { rateLimits } = useSession();
+  const { rateLimits, notify } = useSession();
   const tasks = useTasks();
   const [view, setView] = useState(() => {
     const stored = readStored("roudex.view", "resumen");
@@ -35,6 +35,12 @@ function Shell() {
   const [config, setConfig] = useState(null);
 
   useEffect(() => { invoke("router_config").then(setConfig).catch(() => setConfig(null)); }, []);
+  // Data from before 0.9.0 is copied to ~/.roudex once; say so that start.
+  useEffect(() => {
+    invoke("startup_migration").then((migration) => {
+      if (migration) notify(`Se copiaron tus datos de ${migration.from} a ${migration.to}; el original queda como respaldo.`);
+    }).catch(() => {});
+  }, [notify]);
   useEffect(() => { invoke("chat_projects").then(setKnown).catch(() => setKnown([])); }, [view]);
 
   const go = useCallback((id) => {

@@ -62,7 +62,7 @@ impl Sandbox {
     }
 
     fn router_toml(&self, contents: &str) {
-        let dir = self.0.join("appdata").join("RouDex");
+        let dir = self.home();
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("router.toml"), contents).unwrap();
     }

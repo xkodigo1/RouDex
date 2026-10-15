@@ -66,12 +66,9 @@ impl RouterStore {
         Ok(store)
     }
 
+    /// `~/.roudex/router.sqlite3` (see [`crate::paths`]).
     pub fn default_path() -> PathBuf {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("RouDex")
-            .join("router.sqlite3")
+        crate::paths::store_path()
     }
 
     pub fn path(&self) -> &Path {

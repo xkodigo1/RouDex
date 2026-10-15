@@ -21,6 +21,17 @@ fn main() {
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let command = args.next();
+    // The hook runs inside Codex Desktop, where AppData is a private copy:
+    // it never migrates. Every other command does, before opening the store.
+    if command.as_deref() != Some("hook") {
+        if let Some(migration) = router_core::paths::migrate_legacy()? {
+            eprintln!(
+                "RouDex: copied the data in {} to {} (the original stays as a backup)",
+                migration.from.display(),
+                migration.to.display()
+            );
+        }
+    }
     if matches!(
         command.as_deref(),
         Some(

@@ -16,6 +16,11 @@ fn temp_root(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!("roudex-{label}-{}-{stamp}", std::process::id()))
 }
 
+/// An empty LOCALAPPDATA, so no test ever migrates the real pre-0.9.0 data.
+fn no_legacy(root: &Path) -> PathBuf {
+    root.join("no-legacy")
+}
+
 fn binary() -> PathBuf {
     PathBuf::from(
         std::env::var("CARGO_BIN_EXE_router-cli")
@@ -27,7 +32,8 @@ fn run(args: &[&str], body: &str, state_root: &Path, extra_env: &[(&str, &str)])
     let mut command = Command::new(binary());
     command
         .args(args)
-        .env("LOCALAPPDATA", state_root)
+        .env("ROUDEX_HOME", state_root)
+        .env("LOCALAPPDATA", no_legacy(state_root))
         .env("CODEX_HOME", state_root.join("codex"))
         .env_remove("ROUDEX_ROUTER_INTERNAL")
         .env_remove("ROUDEX_ACTIVE_TASK_ID")
@@ -68,7 +74,8 @@ fn either_worker_marker_prevents_nested_lifecycle_commands() {
             let root = temp_root("nested-worker");
             let output = Command::new(binary())
                 .args(&args)
-                .env("LOCALAPPDATA", &root)
+                .env("ROUDEX_HOME", &root)
+                .env("LOCALAPPDATA", no_legacy(&root))
                 .env_remove("ROUDEX_ROUTER_INTERNAL")
                 .env_remove("ROUDEX_ACTIVE_TASK_ID")
                 .env(marker, "1")
@@ -109,7 +116,7 @@ fn lifecycle_task() -> TaskDefinition {
 #[test]
 fn cli_approval_denial_and_runtime_failure_keep_the_task_closed() {
     let root = temp_root("approval-lifecycle");
-    let db = root.join("RouDex/router.sqlite3");
+    let db = root.join("router.sqlite3");
     let task = lifecycle_task();
     RouterStore::open(&db)
         .unwrap()
@@ -151,7 +158,7 @@ fn cli_approval_denial_and_runtime_failure_keep_the_task_closed() {
 fn cli_continuation_uses_coordinator_approval_and_terminal_replay_gates() {
     for completed in [false, true] {
         let root = temp_root("task-continuation");
-        let db = root.join("RouDex/router.sqlite3");
+        let db = root.join("router.sqlite3");
         let task = lifecycle_task();
         let store = RouterStore::open(&db).unwrap();
         store.upsert_task("spec", &task).unwrap();
@@ -286,7 +293,7 @@ fn task_plan_imports_manifest_and_reports_ready_tasks() {
     assert_eq!(response["readyTaskIds"], serde_json::json!(["T-002"]));
     let loaded = run(&["spec-load", manifest_arg.as_str()], "", &root, &[]);
     assert_eq!(loaded, response);
-    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).expect("state store");
+    let store = RouterStore::open(root.join("router.sqlite3")).expect("state store");
     assert_eq!(
         store
             .get_task("T-002")
@@ -343,7 +350,8 @@ fn assert_invalid_graph_is_not_imported(tasks: Vec<TaskDefinition>, expected_err
     let output = Command::new(binary())
         .arg("spec-load")
         .arg(&path)
-        .env("LOCALAPPDATA", &root)
+        .env("ROUDEX_HOME", &root)
+        .env("LOCALAPPDATA", no_legacy(&root))
         .env_remove("ROUDEX_ROUTER_INTERNAL")
         .env_remove("ROUDEX_ACTIVE_TASK_ID")
         .output()
@@ -351,7 +359,7 @@ fn assert_invalid_graph_is_not_imported(tasks: Vec<TaskDefinition>, expected_err
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains(expected_error));
     // Validation must stop before opening the store or reaching dispatch.
-    assert!(!root.join("RouDex/router.sqlite3").exists());
+    assert!(!root.join("router.sqlite3").exists());
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -382,7 +390,7 @@ fn spec_load_rejects_cycle_before_importing_any_tasks() {
 #[test]
 fn batch_cli_observes_dependencies_approvals_and_exposes_persisted_status() {
     let root = temp_root("batch-cli");
-    let db = root.join("RouDex/router.sqlite3");
+    let db = root.join("router.sqlite3");
     let task = lifecycle_task();
     let mut dependent = task.clone();
     dependent.id = "dependent".into();
@@ -441,7 +449,8 @@ fn neutral_commands_reject_missing_extra_and_empty_arguments() {
         let root = temp_root("arguments");
         let output = Command::new(binary())
             .args(&args)
-            .env("LOCALAPPDATA", &root)
+            .env("ROUDEX_HOME", &root)
+            .env("LOCALAPPDATA", no_legacy(&root))
             .env_remove("ROUDEX_ROUTER_INTERNAL")
             .env_remove("ROUDEX_ACTIVE_TASK_ID")
             .output()
@@ -457,7 +466,8 @@ fn batch_dispatch_rejects_unknown_spec_without_starting_runtime() {
     let root = temp_root("unknown-spec");
     let output = Command::new(binary())
         .args(["task-dispatch", "unknown"])
-        .env("LOCALAPPDATA", &root)
+        .env("ROUDEX_HOME", &root)
+        .env("LOCALAPPDATA", no_legacy(&root))
         .env("ROUDEX_CODEX_BIN", "missing-codex-binary")
         .env_remove("ROUDEX_ROUTER_INTERNAL")
         .env_remove("ROUDEX_ACTIVE_TASK_ID")
@@ -465,7 +475,7 @@ fn batch_dispatch_rejects_unknown_spec_without_starting_runtime() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("spec not found"));
-    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    let store = RouterStore::open(root.join("router.sqlite3")).unwrap();
     assert_eq!(store.count_runs().unwrap(), 0);
     drop(store);
     fs::remove_dir_all(root).unwrap();
@@ -513,10 +523,90 @@ fn spec_load_translates_legacy_profiles_and_reports_it() {
     assert!(warnings
         .iter()
         .any(|warning| warning.as_str().unwrap().contains("tier estandar")));
-    let store = RouterStore::open(root.join("RouDex/router.sqlite3")).unwrap();
+    let store = RouterStore::open(root.join("router.sqlite3")).unwrap();
     let task = store.get_task("R003-T001").unwrap().unwrap().definition;
     assert_eq!(task.tier, Tier::Estandar);
     assert!(task.model.is_empty(), "router.toml chooses the model");
     drop(store);
     fs::remove_dir_all(root).unwrap();
+}
+
+/// Run the CLI with RouDex's home left to its default, from `work`.
+fn cli_with_user_home(
+    args: &[&str],
+    user: &Path,
+    work: &Path,
+    local: &Path,
+) -> std::process::Output {
+    Command::new(binary())
+        .args(args)
+        .current_dir(work)
+        .env_remove("ROUDEX_HOME")
+        .env("USERPROFILE", user)
+        .env("HOME", user)
+        .env("LOCALAPPDATA", local)
+        .env_remove("ROUDEX_ROUTER_INTERNAL")
+        .env_remove("ROUDEX_ACTIVE_TASK_ID")
+        .output()
+        .expect("run router-cli")
+}
+
+#[test]
+fn state_lives_in_dot_roudex_in_the_user_folder() {
+    let root = temp_root("default-home");
+    let (user, work) = (root.join("user"), root.join("work"));
+    fs::create_dir_all(&user).unwrap();
+    fs::create_dir_all(&work).unwrap();
+    let output = cli_with_user_home(&["status"], &user, &work, &no_legacy(&root));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let expected = user.join(".roudex").join("router.sqlite3");
+    assert_eq!(Path::new(status["statePath"].as_str().unwrap()), expected);
+    assert!(expected.is_file());
+    assert_eq!(
+        fs::read_dir(&work).unwrap().count(),
+        0,
+        "nothing is written next to the working directory"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(windows)]
+#[test]
+fn data_from_before_0_9_is_copied_once_and_left_in_place() {
+    let root = temp_root("migration");
+    let (user, work, local) = (root.join("user"), root.join("work"), root.join("local"));
+    fs::create_dir_all(&user).unwrap();
+    fs::create_dir_all(&work).unwrap();
+    let legacy = local.join("RouDex");
+    let store = RouterStore::open(legacy.join("router.sqlite3")).unwrap();
+    store.upsert_task("legacy-spec", &lifecycle_task()).unwrap();
+    drop(store);
+    fs::write(legacy.join("router.toml"), "version = 1\n").unwrap();
+    let original = fs::read(legacy.join("router.sqlite3")).unwrap();
+
+    let first = cli_with_user_home(&["task-list", "legacy-spec"], &user, &work, &local);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(String::from_utf8_lossy(&first.stderr).contains("copied the data"));
+    let listed: Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(listed["tasks"][0]["task"]["id"], "T-lifecycle");
+    let home = user.join(".roudex");
+    assert_eq!(
+        fs::read_to_string(home.join("router.toml")).unwrap(),
+        "version = 1\n"
+    );
+    assert_eq!(fs::read(legacy.join("router.sqlite3")).unwrap(), original);
+
+    let second = cli_with_user_home(&["task-list", "legacy-spec"], &user, &work, &local);
+    assert!(second.status.success());
+    assert!(!String::from_utf8_lossy(&second.stderr).contains("copied"));
+    let _ = fs::remove_dir_all(root);
 }
