@@ -15,8 +15,8 @@ pendientes se cierran en las tareas que los cubren.
 | A07 ejecución en la app | `task_coordinator::app_runs_wait_for_the_ui_to_answer_approvals`, `stopping_a_running_task_interrupts_its_turn`, `task_service::runs_stream_to_the_app_and_only_one_runs_at_a_time`; fixture | OK (fixture); app real en R004-T007 |
 | A08 verificación | `task_coordinator::stdio_dispatch_persists_route_turn_deltas_and_independent_verification`, `protocol_errors_and_verification_failure_never_complete_tasks` | OK |
 | A09 ejecutar listas | `task_coordinator::batch_rechecks_dependencies_and_never_constructs_unapproved_runtime`, `task_service::ready_tasks_run_in_dependency_order` | OK |
-| A10 reanudar y reintentar | `task_coordinator::resume_reuses_run_and_thread_and_is_idempotent_after_completion`; reintento tras `thread.resume.failed` | Pendiente (R004-T006) |
-| A11 CLI | `task_cli::*` | Pendiente (R004-T006) |
+| A10 reanudar y reintentar | `task_coordinator::resume_reuses_run_and_thread_and_is_idempotent_after_completion`, `missing_recovery_identity_is_durably_blocked_until_an_explicit_retry`; fixture | OK |
+| A11 CLI | `task_cli::spec_load_translates_legacy_profiles_and_reports_it`, `cli_approval_denial_and_runtime_failure_keep_the_task_closed`, `batch_cli_observes_dependencies_approvals_and_exposes_persisted_status`; `task_coordinator::cli_runs_decline_approvals_and_keep_them_as_evidence` | OK |
 | A12 turnos internos | `task_cli::either_worker_marker_prevents_nested_lifecycle_commands`, `app_server_protocol` (entorno de la verificación) | OK |
 | A13 spec de ejemplo con Codex real | App real | Pendiente (R004-T007) |
 
@@ -77,3 +77,29 @@ tareas simulados y los eventos de `roudex://task` emitidos como lo hace
   - A 1280×720 no hay desbordamiento horizontal.
   - La lista de tareas y la transcripción hacen scroll por separado, y una
     tarea completada no muestra la barra de acciones vacía.
+
+## A10 y A11 · Detalle
+
+- **Reintentar tras `thread.resume.failed` (A10):**
+  - En `missing_recovery_identity_is_durably_blocked_until_an_explicit_retry`,
+    a cada ejecución le falta una pieza: la definición, el hilo o el turno.
+  - Reanudar y despachar siguen bloqueados y no tocan la ejecución.
+  - `retry_interrupted_task` deja la tarea lista; el siguiente despacho crea
+    una ejecución nueva que termina verificada.
+  - La ejecución bloqueada conserva sus eventos tal cual.
+- **Reintentar en la app (A10):**
+  - En el fixture, `R1-T7` (bloqueada) muestra «no se pudo reanudar el hilo:
+    el historial reanudado no coincide con el turno guardado; reintenta la
+    tarea».
+  - Ofrece «reintentar» en lugar de «ejecutar»; al pulsarlo corre una
+    ejecución nueva hasta «verificación · salida 0».
+- **CLI (A11):**
+  - `spec-load` traduce perfiles a tiers y lo avisa.
+  - Las compuertas de aprobación y dependencias se cumplen desde la CLI.
+  - La CLI construye `LocalTaskRuntime::start`, que rechaza las aprobaciones
+    de Codex y las guarda como evidencia; ese modo lo prueba
+    `cli_runs_decline_approvals_and_keep_them_as_evidence`.
+- **Sin estilos heredados:**
+  - `styles.css` se retiró y `theme.css` es la única hoja.
+  - Con la ventana emulada a 1280×720 no hay desbordamiento; la barra superior
+    mide 44 px y la lista 340 px, igual que antes.
