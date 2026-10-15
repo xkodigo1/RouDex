@@ -348,7 +348,7 @@ export default function Tasks({ project }) {
             <span>{group.cards.filter((item) => item.task.status === "completed").length}/{group.cards.length}</span></div>
           {group.cards.map((item) => <button key={item.task.id} type="button" className="thread-item" aria-pressed={item.task.id === selected}
             onClick={() => select(item.task.id)}>
-            <span className="row-start"><StatusMark status={item.task.status} /><span className="muted">{item.task.id}</span><span className="ellipsis">{item.task.title}</span></span>
+            <span className="row-start"><StatusMark status={item.task.status} /><span className="muted task-id">{item.task.id}</span><span className="ellipsis">{item.task.title}</span></span>
             <span className="row-between muted small">
               <span>{waiting.has(item.task.id) ? "esperando tu respuesta" : TASK_STATUS_LABEL[item.task.status] ?? item.task.status}
                 {needsApproval(item.task) && OPEN.includes(item.task.status) && item.approval?.decision !== "approved" ? " · pide aprobación" : ""}</span>

@@ -191,6 +191,8 @@ button.link:hover { color: var(--accent-soft); }
 .milestone + .milestone { margin-top: 10px; }
 .milestone-head { display: flex; justify-content: space-between; gap: 10px; padding: 6px 12px 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .status-mark { width: 12px; flex: none; text-align: center; color: var(--muted); }
+.task-id { flex: none; white-space: nowrap; }
+.thread-head .tier-chip { font-size: 12px; white-space: nowrap; }
 .status-completed { color: var(--good); } .status-failed { color: var(--bad); } .status-running { color: var(--accent); }
 .status-interrupted, .status-awaiting_approval, .status-blocked { color: #D6A64B; }
 .task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 22px; border-bottom: 1px solid var(--line); }
