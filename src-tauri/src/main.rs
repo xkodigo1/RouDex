@@ -1,8 +1,8 @@
 use router_core::{
     desktop_hook, escalate_local, project_dir, route_local, AccessMode, AppServerClient,
-    AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, RouteDecision,
-    RouterConfig, RouterStore, SentTurn, SpecFile, StoredSpec, TaskBoard, TaskExecutionReceipt,
-    TaskService, ThreadSummary, Tier,
+    AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, Migration,
+    RouteDecision, RouterConfig, RouterStore, SentTurn, SpecFile, StoredSpec, TaskBoard,
+    TaskExecutionReceipt, TaskService, ThreadSummary, Tier,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -18,6 +18,8 @@ const TASK_EVENT: &str = "roudex://task";
 struct AppState {
     chat: Arc<ChatService>,
     tasks: Arc<TaskService>,
+    /// Data copied from the pre-0.9.0 location at this start, if any.
+    migration: Option<Migration>,
 }
 
 /// Run blocking work (process I/O, SQLite) off the async runtime.
@@ -371,6 +373,12 @@ async fn task_run_events(
     blocking(move || tasks.run_events(&run_id)).await
 }
 
+/// Data this start copied from the pre-0.9.0 location, to tell the user once.
+#[tauri::command]
+fn startup_migration(state: tauri::State<'_, AppState>) -> Option<Migration> {
+    state.migration.clone()
+}
+
 /// What is running now, if anything.
 #[tauri::command]
 fn task_active(state: tauri::State<'_, AppState>) -> Option<String> {
@@ -380,6 +388,9 @@ fn task_active(state: tauri::State<'_, AppState>) -> Option<String> {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
+            // Before anything opens the store: a failed copy must not leave
+            // an empty store that would stop the next start from retrying.
+            let migration = router_core::paths::migrate_legacy()?;
             let handle = app.handle().clone();
             let store = RouterStore::open(RouterStore::default_path())?;
             let chat = ChatService::new(
@@ -400,6 +411,7 @@ fn main() {
             app.manage(AppState {
                 chat: Arc::new(chat),
                 tasks: Arc::new(tasks),
+                migration,
             });
             Ok(())
         })
@@ -431,6 +443,7 @@ fn main() {
             task_recover,
             task_run_events,
             task_active,
+            startup_migration,
             thread_list,
             chat_projects,
             thread_rename,

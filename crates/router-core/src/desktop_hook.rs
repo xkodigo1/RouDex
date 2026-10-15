@@ -51,19 +51,13 @@ pub fn input_shape(text: &str) -> String {
     }
 }
 
-/// Where the hook keeps its binary and data: `$ROUDEX_HOME`, by default
-/// `~/.roudex`. Codex Desktop is a packaged (MSIX) app and Windows redirects
-/// what its child processes read and write under AppData to a private copy,
-/// so nothing the hook needs may live under `%LOCALAPPDATA%` or `%APPDATA%`.
+/// Where the hook keeps its binary and data: RouDex's home (`$ROUDEX_HOME`,
+/// by default `~/.roudex`). Codex Desktop is a packaged (MSIX) app and Windows
+/// redirects what its child processes read and write under AppData to a
+/// private copy, so nothing the hook needs may live under `%LOCALAPPDATA%` or
+/// `%APPDATA%`.
 pub fn home() -> PathBuf {
-    std::env::var_os("ROUDEX_HOME")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("USERPROFILE")
-                .or_else(|| std::env::var_os("HOME"))
-                .map(|home| PathBuf::from(home).join(".roudex"))
-        })
-        .unwrap_or_else(|| PathBuf::from(".roudex"))
+    crate::paths::home()
 }
 
 /// The copy of `router-cli` that Codex runs.

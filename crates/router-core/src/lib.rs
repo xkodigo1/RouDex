@@ -5,6 +5,7 @@ pub mod coordinator;
 pub mod dashboard;
 pub mod desktop_hook;
 pub mod domain;
+pub mod paths;
 pub mod persistence;
 pub mod risk;
 pub mod session;
@@ -32,6 +33,7 @@ pub use domain::{
     EventRecord, RoutePromptInput, RouteReceipt, RouteStatus, StoredRun, StoredTask, TaskApproval,
     TaskDefinition, TaskSandbox, TaskStatus,
 };
+pub use paths::Migration;
 pub use persistence::{RouterStore, StoreError, StoredSpec};
 pub use risk::{RiskMatch, RiskRules, RiskRulesError};
 pub use session::{

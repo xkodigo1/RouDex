@@ -131,13 +131,9 @@ impl RouterConfig {
         }
     }
 
-    /// `%LOCALAPPDATA%\RouDex\router.toml`, next to the local store.
+    /// `~/.roudex/router.toml`, next to the local store (see [`crate::paths`]).
     pub fn default_path() -> PathBuf {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("RouDex")
-            .join("router.toml")
+        crate::paths::config_path()
     }
 
     pub fn target(&self, tier: Tier) -> &ModelTarget {
