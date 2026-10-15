@@ -3,9 +3,12 @@ use router_core::{
     RiskRules, RouteReceipt, RouteStatus, RouterConfig, RouterStore, TaskApproval, TaskCoordinator,
     TaskDefinition, TaskSandbox, TaskStatus, Tier,
 };
+use router_core::{ApprovalDecision, EventSink, SessionEvent, TaskRuns};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 struct Fixture {
@@ -44,7 +47,11 @@ impl Fixture {
     }
 
     fn runtime(&self, scenario: &str) -> LocalTaskRuntime {
-        LocalTaskRuntime::with_config(AppServerConfig {
+        LocalTaskRuntime::with_config(self.config(scenario))
+    }
+
+    fn config(&self, scenario: &str) -> AppServerConfig {
+        AppServerConfig {
             program: PathBuf::from(env!("CARGO_BIN_EXE_fake-app-server")),
             arguments: vec![
                 scenario.into(),
@@ -53,7 +60,7 @@ impl Fixture {
             working_directory: self.cwd.clone(),
             service_name: "coordinator-test".into(),
             active_task_id: Some("T-004".into()),
-        })
+        }
     }
 
     fn log_path(&self) -> PathBuf {
@@ -142,7 +149,7 @@ fn stdio_dispatch_persists_route_turn_deltas_and_independent_verification() {
     let params = &turns[0]["message"]["params"];
     assert_eq!(params["model"], "gpt-6.1-sol");
     assert_eq!(params["effort"], "high");
-    assert_eq!(params["approvalPolicy"], "never");
+    assert_eq!(params["approvalPolicy"], "on-request");
     assert_eq!(params["sandboxPolicy"]["networkAccess"], false);
     assert_eq!(
         params["sandboxPolicy"]["writableRoots"]
@@ -1071,4 +1078,116 @@ fn invalid_runtime_identity_or_status_fails_without_verification() {
             .iter()
             .any(|event| event.event_type == "turn.completed"));
     }
+}
+
+/// A UI stand-in: every session event of the task lands in the receiver.
+fn ui_events() -> (EventSink, mpsc::Receiver<SessionEvent>) {
+    let (sender, receiver) = mpsc::channel();
+    let sender = Mutex::new(sender);
+    let sink: EventSink = Arc::new(move |event| {
+        let _ = sender.lock().unwrap().send(event);
+    });
+    (sink, receiver)
+}
+
+/// Dispatch T-004 on another thread, as the app does, with a file store.
+fn dispatch_in_background(
+    fixture: &Fixture,
+    runtime: LocalTaskRuntime,
+) -> std::thread::JoinHandle<router_core::TaskExecutionReceipt> {
+    let db = fixture.cwd.join("router.sqlite3");
+    RouterStore::open(&db)
+        .unwrap()
+        .upsert_task("spec", &fixture.task("T-004"))
+        .unwrap();
+    std::thread::spawn(move || {
+        let store = RouterStore::open(&db).unwrap();
+        let mut runtime = runtime;
+        TaskCoordinator::new(&store)
+            .with_router(RouterConfig::default())
+            .dispatch_task("T-004", &mut runtime)
+            .unwrap()
+    })
+}
+
+#[test]
+fn cli_runs_decline_approvals_and_keep_them_as_evidence() {
+    let fixture = Fixture::new();
+    let store = RouterStore::in_memory().unwrap();
+    store.upsert_task("spec", &fixture.task("T-004")).unwrap();
+    let receipt = TaskCoordinator::new(&store)
+        .with_router(RouterConfig::default())
+        .dispatch_task("T-004", &mut fixture.runtime("approval"))
+        .unwrap();
+    assert_eq!(receipt.status, TaskStatus::Completed);
+    assert_eq!(receipt.text.as_deref(), Some("decision=decline"));
+    let events = store
+        .events_for_run(receipt.run_id.as_ref().unwrap())
+        .unwrap();
+    let approval = events
+        .iter()
+        .find(|event| event.event_type == "item/commandExecution/requestApproval")
+        .expect("the approval request is evidence");
+    assert_eq!(approval.payload["command"], "cargo publish");
+    // Task processes are marked as internal workers of this task.
+    let started = &fixture.requests("thread/start")[0];
+    assert_eq!(started["internal"], "1");
+    assert_eq!(started["activeTask"], "T-004");
+}
+
+#[test]
+fn app_runs_wait_for_the_ui_to_answer_approvals() {
+    let fixture = Fixture::new();
+    let runs = Arc::new(TaskRuns::default());
+    let (ui, events) = ui_events();
+    let worker = dispatch_in_background(
+        &fixture,
+        LocalTaskRuntime::interactive(fixture.config("approval"), ui, runs.clone()),
+    );
+    let request_id = loop {
+        match events
+            .recv_timeout(Duration::from_secs(10))
+            .expect("approval event")
+        {
+            SessionEvent::ApprovalRequested {
+                request_id,
+                command,
+                ..
+            } => {
+                assert_eq!(command.as_deref(), Some("cargo publish"));
+                break request_id;
+            }
+            _ => continue,
+        }
+    };
+    assert!(runs.is_running("T-004"));
+    runs.respond("T-004", request_id, ApprovalDecision::Accept)
+        .unwrap();
+    let receipt = worker.join().unwrap();
+    assert_eq!(receipt.status, TaskStatus::Completed);
+    assert_eq!(receipt.text.as_deref(), Some("decision=accept"));
+    assert!(
+        !runs.is_running("T-004"),
+        "finished runs leave the registry"
+    );
+}
+
+#[test]
+fn stopping_a_running_task_interrupts_its_turn() {
+    let fixture = Fixture::new();
+    let runs = Arc::new(TaskRuns::default());
+    let (ui, _events) = ui_events();
+    let worker = dispatch_in_background(
+        &fixture,
+        LocalTaskRuntime::interactive(fixture.config("hang"), ui, runs.clone()),
+    );
+    // The turn id is known once turn/start answers; retry until then.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while let Err(error) = runs.interrupt("T-004") {
+        assert!(Instant::now() < deadline, "could not interrupt: {error}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let receipt = worker.join().unwrap();
+    assert_eq!(receipt.status, TaskStatus::Interrupted);
+    assert!(runs.interrupt("T-004").is_err(), "nothing left to stop");
 }

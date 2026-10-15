@@ -1,5 +1,7 @@
+//! Task verification through the task runtime's session.
+
 use router_core::{
-    AppServerClient, AppServerConfig, TaskDefinition, TaskSandbox, TaskStatus, Tier, TurnSettings,
+    AppServerConfig, LocalTaskRuntime, TaskDefinition, TaskRuntime, TaskSandbox, TaskStatus, Tier,
 };
 use serde_json::Value;
 use std::fs;
@@ -40,13 +42,10 @@ fn verification_passes_a_deterministic_isolated_cargo_target_per_task() {
         verify: "cargo test --workspace".into(),
     };
     {
-        let mut client = AppServerClient::start(&config).expect("start fake app server");
+        let mut runtime = LocalTaskRuntime::with_config(config);
         for id in ["T-004", "T-004", "../T-004"] {
             task.id = id.into();
-            assert_eq!(
-                client.verify_task(&task).expect("verify task")["exitCode"],
-                0
-            );
+            assert_eq!(runtime.verify(&task).expect("verify task")["exitCode"], 0);
         }
     }
     let requests: Vec<Value> = fs::read_to_string(&log_path)
@@ -77,39 +76,4 @@ fn verification_passes_a_deterministic_isolated_cargo_target_per_task() {
         assert_eq!(request["sandboxPolicy"]["networkAccess"], false);
     }
     fs::remove_dir_all(&cwd).expect("remove test cwd");
-}
-
-#[test]
-fn app_server_stdio_receives_assigned_model_and_effort() {
-    let cwd = std::env::temp_dir().join(format!("roudex-app-server-{}", Uuid::new_v4()));
-    fs::create_dir_all(&cwd).expect("create test cwd");
-    let config = AppServerConfig {
-        program: PathBuf::from(env!("CARGO_BIN_EXE_fake-app-server")),
-        arguments: Vec::new(),
-        working_directory: cwd.clone(),
-        service_name: "protocol-test".to_owned(),
-        active_task_id: Some("T-004".to_owned()),
-    };
-
-    {
-        let mut client = AppServerClient::start(&config).expect("start fake app server");
-        let thread_id = client
-            .start_thread("gpt-6.1-sol", &cwd, "never", "workspace-write")
-            .expect("start thread");
-        let settings = TurnSettings {
-            model: "gpt-6.1-sol",
-            effort: "high",
-            cwd: &cwd,
-            approval_policy: "never",
-            sandbox: "workspace-write",
-        };
-        let turn = client
-            .run_turn(&thread_id, "run the protocol test", &settings)
-            .expect("run turn");
-        assert_eq!(thread_id, "fake-thread");
-        assert_eq!(turn.turn_id, "fake-turn");
-        assert_eq!(turn.status, "completed");
-        assert_eq!(turn.text, "fake completion");
-    }
-    let _ = fs::remove_dir_all(&cwd);
 }

@@ -269,7 +269,7 @@
       "depends_on": [
         "R004-T002"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "fuerte",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -299,7 +299,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "cargo test -p router-core --test task_coordinator: 24 passed. The 21 existing coordinator tests (gates, resume, superseded runs, idempotent terminal events, transactional claims, verification) pass unchanged on the session runtime; new: cli_runs_decline_approvals_and_keep_them_as_evidence (A07 CLI, A12 markers), app_runs_wait_for_the_ui_to_answer_approvals (A07), stopping_a_running_task_interrupts_its_turn (A07).",
+        "cargo test -p router-core --test app_server_protocol: verification isolation through LocalTaskRuntime::verify (A08 env and per-task target).",
+        "cargo test --workspace: 128 passed; cargo clippy --workspace --all-targets -D warnings: clean.",
+        "Commit 7e439a3."
+      ],
       "release_target": "v0.8.0"
     },
     {

@@ -32,6 +32,17 @@ fn main() {
         }
         let method = message["method"].as_str().unwrap_or_default();
         let id = message["id"].as_u64();
+        // Task scenarios that wait for the client: an approval answer or an interrupt.
+        if method.is_empty() && id == Some(TASK_APPROVAL_ID) {
+            let decision = message["result"]["decision"].as_str().unwrap_or("none");
+            complete_task_turn(&mut stdout, &format!("decision={decision}"), "completed");
+            continue;
+        }
+        if method == "turn/interrupt" && message["params"]["threadId"] == "fake-thread" {
+            respond(&mut stdout, json!({ "id": id, "result": {} }));
+            complete_task_turn(&mut stdout, "", "interrupted");
+            continue;
+        }
         if chat.handle(&mut stdout, &message) {
             continue;
         }
@@ -170,6 +181,19 @@ fn main() {
                 if scenario == "disconnect" {
                     break;
                 }
+                if scenario == "approval" {
+                    respond(
+                        &mut stdout,
+                        json!({ "id": TASK_APPROVAL_ID, "method": "item/commandExecution/requestApproval",
+                            "params": { "threadId": "fake-thread", "turnId": "fake-turn",
+                                "itemId": "cmd-1", "command": "cargo publish", "cwd": ".",
+                                "reason": "needs network" } }),
+                    );
+                    continue;
+                }
+                if scenario == "hang" {
+                    continue;
+                }
                 respond(
                     &mut stdout,
                     json!({ "method": "turn/completed", "params": {
@@ -212,6 +236,25 @@ fn main() {
             _ => panic!("unexpected app server method: {method}"),
         }
     }
+}
+
+/// Id of the approval request the `approval` task scenario sends.
+const TASK_APPROVAL_ID: u64 = 950;
+
+/// Finish the task turn `fake-turn` with `text` and `status`.
+fn complete_task_turn(stdout: &mut impl Write, text: &str, status: &str) {
+    if !text.is_empty() {
+        respond(
+            stdout,
+            json!({ "method": "item/agentMessage/delta", "params": {
+                "threadId": "fake-thread", "turnId": "fake-turn", "delta": text } }),
+        );
+    }
+    respond(
+        stdout,
+        json!({ "method": "turn/completed", "params": {
+            "threadId": "fake-thread", "turn": { "id": "fake-turn", "status": status } } }),
+    );
 }
 
 fn respond(stdout: &mut impl Write, message: Value) {
