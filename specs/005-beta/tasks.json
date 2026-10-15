@@ -233,7 +233,7 @@
       "title": "RouDex data in ~/.roudex on every OS",
       "prompt": "Move router.toml, router.sqlite3 and everything the hook keeps to one home: $ROUDEX_HOME or ~/.roudex (D1). Add a paths module in router-core used by RouterStore::default_path, RouterConfig::default_path and desktop_hook. On Windows, when the new store is absent and %LOCALAPPDATA%\\RouDex\\router.sqlite3 exists, copy the database with SQLite's backup API and copy router.toml, never touching the originals and never overwriting existing data; report what was migrated. Switch tests from LOCALAPPDATA to ROUDEX_HOME. Implement only the declared scope. Do not read environment files or other repositories, publish, or grant approvals. Stop with a concrete blocked reason if a requirement cannot be met.",
       "depends_on": [],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -262,7 +262,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "router-core paths module: home() ($ROUDEX_HOME, else .roudex in USERPROFILE/HOME), store_path, config_path; RouterStore, RouterConfig and the Desktop hook use it.",
+        "Windows migration from LOCALAPPDATA/RouDex with VACUUM INTO into a temporary file then rename; originals untouched, existing files never overwritten; run by the app before opening the store and by every CLI command except hook.",
+        "cargo test --workspace: 129 passed (paths::tests x3, task_cli::state_lives_in_dot_roudex_in_the_user_folder, task_cli::data_from_before_0_9_is_copied_once_and_left_in_place); clippy -D warnings and fmt clean; pnpm --dir ui build passes.",
+        "Commit 06676a1."
+      ],
       "release_target": "v0.9.0"
     },
     {
