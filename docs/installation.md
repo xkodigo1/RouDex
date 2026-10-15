@@ -99,7 +99,8 @@ Summary estimates what routing saved once you add model prices to
   removes the program and keeps `~/.roudex`. Windows keeps the install
   location under `HKCU\Software\roudex` unless you tick "delete app data".
 - **macOS:** move RouDex from Applications to the Trash.
-- **Linux:** `sudo apt remove roudex-desktop`, or delete the AppImage.
+- **Linux:** `sudo apt remove rou-dex` (the package name of the `.deb`), or
+  delete the AppImage.
 
 Your data stays in `~/.roudex` until you delete it.
 
