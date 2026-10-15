@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { t } from "./i18n.js";
 
 const SessionContext = createContext(null);
 
@@ -89,7 +90,7 @@ export function SessionProvider({ children }) {
           notify(event.message);
           break;
         case "closed":
-          notify(`La sesión con Codex se cerró: ${event.reason}`);
+          notify(t("notice.sessionClosed", { reason: event.reason }));
           break;
         default:
           break;

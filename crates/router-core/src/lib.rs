@@ -48,6 +48,6 @@ pub use task_service::{
     SpecFile, TaskBoard, TaskCard, TaskConfigFactory, TaskEvent, TaskService, TaskSink,
 };
 pub use tiers::{
-    CatalogModel, DesktopHookConfig, ModelTarget, RouterConfig, RouterConfigError, Tier,
+    CatalogModel, DesktopHookConfig, Language, ModelTarget, RouterConfig, RouterConfigError, Tier,
     TierTargets, ROUTER_CONFIG_VERSION,
 };

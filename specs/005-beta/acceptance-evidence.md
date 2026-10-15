@@ -20,9 +20,9 @@ cubren.
 | A11 coste del clasificador | | Pendiente (R005-T004) |
 | A12 Codex Desktop activado | | Pendiente (R005-T005, R005-T006) |
 | A13 Codex Desktop apagado | | Pendiente (R005-T005) |
-| A14 cambiar de idioma | | Pendiente (R005-T003, R005-T009) |
-| A15 idioma del sistema | | Pendiente (R005-T003) |
-| A16 hook en el idioma elegido | | Pendiente (R005-T003) |
+| A14 cambiar de idioma | Fixture (marco, navegación y avisos); pantallas en R005-T009 | En curso |
+| A15 idioma del sistema | `tiers::tests::a_setting_changes_one_line_and_keeps_the_rest`, `a_setting_in_an_empty_or_missing_file_is_all_the_file_holds`; fixture | OK |
+| A16 hook en el idioma elegido | `desktop_hook::tests::the_hook_writes_in_the_chosen_language_and_in_english_when_unset`, `hook_cli::the_hook_follows_the_language_in_router_toml` | OK |
 | A17 instalador de Windows con Codex real | | Pendiente (R005-T010) |
 | A18 macOS y Linux en CI | | Pendiente (R005-T008, R005-T010) |
 
@@ -65,3 +65,26 @@ cubren.
 - **Sin Codex:** con `PATH`, `HOME` y `LOCALAPPDATA` vacíos,
   `router-cli models` falla con «Codex was not found», la lista de lugares,
   `codex_path` y la ruta de `router.toml`. No se lanza ningún proceso.
+
+## A14–A16 · Detalle (R005-T003)
+
+- **`router.toml`:**
+  - Acepta archivos parciales; las claves que faltan toman su valor por
+    defecto.
+  - Fijar `language` cambia o añade solo esa línea y conserva comentarios y
+    tablas.
+  - Una sección nueva va al final, y un resultado inválido no se escribe.
+- **Hook:**
+  - Sin `language` y con `en`, el aviso dice «this chat uses …» y pide
+    «Start your reply with this line».
+  - Con `es`, dice «este chat usa …» y «Empieza tu respuesta con esta
+    línea».
+  - El bloqueo y el contexto sin regla siguen el mismo idioma.
+- **Fixture, 2026-10-14:**
+  - Con el sistema en `es-419`, la app arranca en español y guarda
+    `language = "es"`.
+  - EN traduce al momento la navegación («summary, threads, projects,
+    tasks»), los tiers activos y la barra de límites («plus plan · 5 h window
+    at 37%»), y guarda `en`; ES lo devuelve.
+  - `systemLanguage()` da `en` para en-US, fr-FR y pt-BR, y `es` para
+    es-ES y es-419.

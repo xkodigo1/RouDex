@@ -1,3 +1,5 @@
+import { locale } from "./i18n.js";
+
 export const TIERS = ["economico", "estandar", "fuerte"];
 
 export const SOURCE_LABEL = {
@@ -55,10 +57,21 @@ export function receiptLine(taskId, receipt) {
   return `${taskId} ${status}${text ? `: ${text.length > 200 ? `${text.slice(0, 200)}…` : text}` : ""}`;
 }
 
+// How router reasons name their source, in either language.
+const REASON_SOURCE = {
+  risk: ["regla de riesgo", "risk rule"],
+  rule: ["mensaje", "message"],
+  manual: ["manual", "by hand"],
+  spec: ["spec"],
+  fallback: ["clasificador", "classifier", "regla", "rule"],
+  model: [],
+};
+
 /** "regla de riesgo: x", without repeating the source the reason already names. */
 export function routeReason(route) {
   const label = SOURCE_LABEL[route.source] ?? route.source;
-  return route.reason.includes(label) ? route.reason : `${label}: ${route.reason}`;
+  const named = [label, ...(REASON_SOURCE[route.source] ?? [])].some((name) => route.reason.includes(name));
+  return named ? route.reason : `${label}: ${route.reason}`;
 }
 
 /** Thread access modes, in the order the composer offers them. */
@@ -91,13 +104,13 @@ export function relativeTime(epochSeconds) {
   if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
   if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
   if (diff < 172800) return "ayer";
-  return new Date(seconds * 1000).toLocaleDateString("es", { day: "numeric", month: "short" });
+  return new Date(seconds * 1000).toLocaleDateString(locale(), { day: "numeric", month: "short" });
 }
 
 export function clockTime(epochSeconds) {
   const seconds = Number(epochSeconds);
   if (!Number.isFinite(seconds)) return "";
-  return new Date(seconds * 1000).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  return new Date(seconds * 1000).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
 }
 
 export function readStored(key, fallback) {

@@ -5,7 +5,7 @@
 use crate::classifier::{describe, DecisionSource, RouteDecision, Router};
 use crate::persistence::{now_string, RouterStore, StoreError};
 use crate::risk::RiskRules;
-use crate::tiers::{RouterConfig, Tier};
+use crate::tiers::{Language, RouterConfig, Tier};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -170,20 +170,33 @@ pub fn evaluate(input: &PromptSubmit, config: &RouterConfig, rules: &RiskRules) 
         (DecisionSource::Risk, true) => HookAction::Warn,
         _ => HookAction::Context,
     };
-    let chat_model = input.model.as_deref().unwrap_or("un modelo desconocido");
-    let warning = format!(
-        "RouDex: mensaje de riesgo ({}). Se recomienda el tier fuerte ({} {}); este chat usa {chat_model}.",
-        describe(&decision.risk),
-        strong.model,
-        strong.effort
-    );
+    let language = config.language();
+    let chat_model = input
+        .model
+        .as_deref()
+        .unwrap_or(language.pick("an unknown model", "un modelo desconocido"));
+    let risk = describe(&decision.risk, language);
+    let (model, effort) = (&strong.model, &strong.effort);
+    let warning = match language {
+        Language::En => format!(
+            "RouDex: risky message ({risk}). The fuerte tier is recommended ({model} {effort}); this chat uses {chat_model}."
+        ),
+        Language::Es => format!(
+            "RouDex: mensaje de riesgo ({risk}). Se recomienda el tier fuerte ({model} {effort}); este chat usa {chat_model}."
+        ),
+    };
     let mut additional = context(&decision, config);
     if action == HookAction::Warn {
         // Codex Desktop does not show a hook's systemMessage, so the model
         // repeats the warning where the user reads it.
-        additional.push_str(&format!(
-            " Empieza tu respuesta con esta línea, tal cual, y luego atiende el mensaje con normalidad: «⚠ {warning}»"
-        ));
+        additional.push_str(&match language {
+            Language::En => format!(
+                " Start your reply with this line, exactly as written, then handle the message normally: «⚠ {warning}»"
+            ),
+            Language::Es => format!(
+                " Empieza tu respuesta con esta línea, tal cual, y luego atiende el mensaje con normalidad: «⚠ {warning}»"
+            ),
+        });
     }
     let context = json!({
         "hookEventName": "UserPromptSubmit",
@@ -197,10 +210,14 @@ pub fn evaluate(input: &PromptSubmit, config: &RouterConfig, rules: &RiskRules) 
         }),
         HookAction::Block => json!({
             "decision": "block",
-            "reason": format!(
-                "RouDex bloqueó este mensaje por riesgo ({}). Cambia el chat a {} con esfuerzo {} y vuelve a enviarlo; este chat usa {chat_model}. Para solo avisar, pon block_high_risk = false en router.toml.",
-                describe(&decision.risk), strong.model, strong.effort
-            ),
+            "reason": match language {
+                Language::En => format!(
+                    "RouDex blocked this message because of its risk ({risk}). Switch the chat to {model} with {effort} effort and send it again; this chat uses {chat_model}. To only warn, set block_high_risk = false in router.toml."
+                ),
+                Language::Es => format!(
+                    "RouDex bloqueó este mensaje por riesgo ({risk}). Cambia el chat a {model} con esfuerzo {effort} y vuelve a enviarlo; este chat usa {chat_model}. Para solo avisar, pon block_high_risk = false en router.toml."
+                ),
+            },
         }),
     };
     HookOutcome {
@@ -211,14 +228,26 @@ pub fn evaluate(input: &PromptSubmit, config: &RouterConfig, rules: &RiskRules) 
 }
 
 fn context(decision: &RouteDecision, config: &RouterConfig) -> String {
-    match decision.source {
-        DecisionSource::Fallback => format!(
-            "RouDex: ninguna regla de riesgo ni regla rápida aplica a este mensaje; sin recomendación de tier (por defecto: {}).",
-            config.fallback_tier
+    let RouteDecision {
+        tier,
+        model,
+        effort,
+        reason,
+        ..
+    } = decision;
+    let fallback = config.fallback_tier;
+    match (decision.source, config.language()) {
+        (DecisionSource::Fallback, Language::En) => format!(
+            "RouDex: no risk rule or fast rule applies to this message; no tier recommendation (default: {fallback})."
         ),
-        _ => format!(
-            "RouDex recomienda el tier {} ({} {}) para este mensaje ({}).",
-            decision.tier, decision.model, decision.effort, decision.reason
+        (DecisionSource::Fallback, Language::Es) => format!(
+            "RouDex: ninguna regla de riesgo ni regla rápida aplica a este mensaje; sin recomendación de tier (por defecto: {fallback})."
+        ),
+        (_, Language::En) => format!(
+            "RouDex recommends the {tier} tier ({model} {effort}) for this message ({reason})."
+        ),
+        (_, Language::Es) => format!(
+            "RouDex recomienda el tier {tier} ({model} {effort}) para este mensaje ({reason})."
         ),
     }
 }
@@ -490,8 +519,15 @@ mod tests {
         }
     }
 
+    fn spanish() -> RouterConfig {
+        RouterConfig {
+            language: Some(Language::Es),
+            ..RouterConfig::default()
+        }
+    }
+
     fn blocking() -> RouterConfig {
-        let mut config = RouterConfig::default();
+        let mut config = spanish();
         config.desktop_hook.block_high_risk = true;
         config
     }
@@ -502,7 +538,7 @@ mod tests {
     fn risky_prompt_on_a_lower_model_warns_without_blocking() {
         let outcome = evaluate(
             &input(RISKY, Some("gpt-6-luna")),
-            &RouterConfig::default(),
+            &spanish(),
             &RiskRules::default(),
         );
         assert_eq!(outcome.action, HookAction::Warn);
@@ -597,6 +633,70 @@ mod tests {
             .unwrap();
         assert!(context.contains("sin recomendación"), "{context}");
         assert!(context.contains("estandar"), "{context}");
+    }
+
+    #[test]
+    fn the_hook_writes_in_the_chosen_language_and_in_english_when_unset() {
+        let cases = [
+            (
+                None,
+                "this chat uses gpt-6-luna",
+                "Start your reply with this line",
+                "with high effort",
+                "no tier recommendation",
+            ),
+            (
+                Some(Language::En),
+                "this chat uses gpt-6-luna",
+                "Start your reply with this line",
+                "with high effort",
+                "no tier recommendation",
+            ),
+            (
+                Some(Language::Es),
+                "este chat usa gpt-6-luna",
+                "Empieza tu respuesta con esta línea",
+                "con esfuerzo high",
+                "sin recomendación de tier",
+            ),
+        ];
+        for (language, warning, line, block, fallback) in cases {
+            let mut config = RouterConfig {
+                language,
+                ..RouterConfig::default()
+            };
+            let warned = evaluate(
+                &input(RISKY, Some("gpt-6-luna")),
+                &config,
+                &RiskRules::default(),
+            );
+            let message = warned.response["systemMessage"].as_str().unwrap();
+            assert!(message.contains(warning), "{language:?}: {message}");
+            let context = warned.response["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap();
+            assert!(context.contains(line), "{language:?}: {context}");
+            let unruled = evaluate(
+                &input(
+                    "agrega paginación por cursor al listado de hilos y su test",
+                    None,
+                ),
+                &config,
+                &RiskRules::default(),
+            );
+            let context = unruled.response["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap();
+            assert!(context.contains(fallback), "{language:?}: {context}");
+            config.desktop_hook.block_high_risk = true;
+            let blocked = evaluate(
+                &input(RISKY, Some("gpt-6-luna")),
+                &config,
+                &RiskRules::default(),
+            );
+            let reason = blocked.response["reason"].as_str().unwrap();
+            assert!(reason.contains(block), "{language:?}: {reason}");
+        }
     }
 
     #[test]

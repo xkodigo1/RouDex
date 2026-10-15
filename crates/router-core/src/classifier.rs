@@ -1,6 +1,6 @@
 use crate::app_server::{AppServerClient, AppServerConfig, AppServerError};
 use crate::risk::{words, RiskMatch, RiskRules};
-use crate::tiers::{ModelTarget, RouterConfig, Tier};
+use crate::tiers::{Language, ModelTarget, RouterConfig, Tier};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -81,10 +81,15 @@ impl<'a> Router<'a> {
     pub fn decide(&self, prompt: &str, classifier: &mut dyn ModelClassifier) -> RouteDecision {
         let risk = self.rules.matches(prompt);
         if !risk.is_empty() {
-            let reason = format!("regla de riesgo: {}", describe(&risk));
+            let language = self.config.language();
+            let reason = format!(
+                "{} {}",
+                language.pick("risk rule:", "regla de riesgo:"),
+                describe(&risk, language)
+            );
             return self.decision(Tier::Fuerte, DecisionSource::Risk, reason, risk);
         }
-        if let Some((tier, reason)) = fast_rule(prompt) {
+        if let Some((tier, reason)) = fast_rule(prompt, self.config.language()) {
             return self.decision(tier, DecisionSource::Rule, reason, risk);
         }
         match classifier.classify(prompt, &self.config.classifier) {
@@ -92,7 +97,12 @@ impl<'a> Router<'a> {
             Err(error) => self.decision(
                 self.config.fallback_tier,
                 DecisionSource::Fallback,
-                format!("clasificador no disponible: {error}"),
+                format!(
+                    "{} {error}",
+                    self.config
+                        .language()
+                        .pick("classifier unavailable:", "clasificador no disponible:")
+                ),
                 risk,
             ),
         }
@@ -103,7 +113,14 @@ impl<'a> Router<'a> {
     pub fn decide_by_rules(&self, prompt: &str) -> RouteDecision {
         let mut decision = self.decide(prompt, &mut NoClassifier);
         if decision.source == DecisionSource::Fallback {
-            decision.reason = "ninguna regla aplica; sin clasificador".into();
+            decision.reason = self
+                .config
+                .language()
+                .pick(
+                    "no rule applies; no classifier",
+                    "ninguna regla aplica; sin clasificador",
+                )
+                .into();
         }
         decision
     }
@@ -113,7 +130,13 @@ impl<'a> Router<'a> {
         self.decision(
             Tier::Fuerte,
             DecisionSource::Manual,
-            format!("escalado manual desde {}", previous.tier),
+            format!(
+                "{} {}",
+                self.config
+                    .language()
+                    .pick("escalated by hand from", "escalado manual desde"),
+                previous.tier
+            ),
             previous.risk.clone(),
         )
     }
@@ -145,21 +168,24 @@ impl ModelClassifier for NoClassifier {
     }
 }
 
-pub(crate) fn describe(risk: &[RiskMatch]) -> String {
+pub(crate) fn describe(risk: &[RiskMatch], language: Language) -> String {
     risk.iter()
         .map(|item| match item {
             RiskMatch::Keyword(keyword) => keyword.clone(),
-            RiskMatch::Path(path) => format!("ruta {path}"),
+            RiskMatch::Path(path) => format!("{} {path}", language.pick("path", "ruta")),
         })
         .collect::<Vec<_>>()
         .join(", ")
 }
 
 /// Settle obvious cases locally. `None` means the prompt needs the classifier.
-pub fn fast_rule(prompt: &str) -> Option<(Tier, String)> {
+pub fn fast_rule(prompt: &str, language: Language) -> Option<(Tier, String)> {
     let tokens = words(prompt);
     if tokens.is_empty() {
-        return Some((Tier::Economico, "mensaje vacío".into()));
+        return Some((
+            Tier::Economico,
+            language.pick("empty message", "mensaje vacío").into(),
+        ));
     }
     if tokens.len() > LIGHT_MAX_WORDS || prompt.contains("```") {
         return None;
@@ -171,17 +197,28 @@ pub fn fast_rule(prompt: &str) -> Option<(Tier, String)> {
         .map(|intent| {
             (
                 Tier::Economico,
-                format!("mensaje corto de tipo «{}»", intent.join(" ")),
+                match language {
+                    Language::En => format!("short «{}» message", intent.join(" ")),
+                    Language::Es => format!("mensaje corto de tipo «{}»", intent.join(" ")),
+                },
             )
         })
 }
 
-pub const CLASSIFIER_INSTRUCTIONS: &str = "Eres el clasificador de RouDex. Decide qué tier de modelo necesita la tarea del usuario. No ejecutes herramientas ni leas archivos: responde solo con JSON.
+const CLASSIFIER_INSTRUCTIONS: &str = "Eres el clasificador de RouDex. Decide qué tier de modelo necesita la tarea del usuario. No ejecutes herramientas ni leas archivos: responde solo con JSON.
 - economico: preguntas, explicaciones, texto, formato, cambios pequeños y acotados, tareas mecánicas.
 - estandar: implementación o depuración habitual en código existente, cambios en varios archivos, integraciones con contratos conocidos.
 - fuerte: arquitectura o diseño de sistemas, incidentes y causa raíz, seguridad, datos o dinero, refactors amplios, o cualquier tarea donde un error sea caro.
 Si dudas entre dos tiers, elige el más alto.
-Responde exactamente: {\"tier\": \"economico|estandar|fuerte\", \"reason\": \"<una frase en español>\"}";
+Responde exactamente: {\"tier\": \"economico|estandar|fuerte\", \"reason\": \"<REASON>\"}";
+
+/// The classifier's instructions, asking for the reason in `language`.
+pub fn classifier_instructions(language: Language) -> String {
+    CLASSIFIER_INSTRUCTIONS.replace(
+        "<REASON>",
+        language.pick("<one sentence in English>", "<una frase en español>"),
+    )
+}
 
 pub fn classification_input(prompt: &str) -> String {
     format!("Tarea a clasificar:\n<<<\n{prompt}\n>>>")
@@ -220,6 +257,7 @@ pub fn parse_classification(text: &str) -> Result<Classification, String> {
 pub struct AppServerClassifier {
     client: AppServerClient,
     cwd: PathBuf,
+    language: Language,
 }
 
 impl AppServerClassifier {
@@ -227,7 +265,14 @@ impl AppServerClassifier {
         Self {
             client,
             cwd: cwd.as_ref().to_path_buf(),
+            language: Language::default(),
         }
+    }
+
+    /// Ask for the reason in `language`.
+    pub fn with_language(mut self, language: Language) -> Self {
+        self.language = language;
+        self
     }
 }
 
@@ -238,7 +283,7 @@ impl ModelClassifier for AppServerClassifier {
             .classify(
                 target,
                 &self.cwd,
-                CLASSIFIER_INSTRUCTIONS,
+                &classifier_instructions(self.language),
                 &classification_input(prompt),
                 classification_schema(),
             )
@@ -251,13 +296,15 @@ impl ModelClassifier for AppServerClassifier {
 /// settle the prompt.
 pub struct LocalClassifier {
     cwd: PathBuf,
+    language: Language,
     inner: Option<AppServerClassifier>,
 }
 
 impl LocalClassifier {
-    pub fn new(cwd: impl AsRef<Path>) -> Self {
+    pub fn new(cwd: impl AsRef<Path>, language: Language) -> Self {
         Self {
             cwd: cwd.as_ref().to_path_buf(),
+            language,
             inner: None,
         }
     }
@@ -268,7 +315,8 @@ impl ModelClassifier for LocalClassifier {
         if self.inner.is_none() {
             let client = AppServerClient::start(&AppServerConfig::local(&self.cwd))
                 .map_err(|error| error.to_string())?;
-            self.inner = Some(AppServerClassifier::new(client, &self.cwd));
+            self.inner =
+                Some(AppServerClassifier::new(client, &self.cwd).with_language(self.language));
         }
         self.inner
             .as_mut()
@@ -283,7 +331,7 @@ pub fn route_local(project: &Path, prompt: &str) -> Result<RouteDecision, String
     let config = RouterConfig::load_or_default(&RouterConfig::default_path())
         .map_err(|error| error.to_string())?;
     let rules = RiskRules::for_project(project).map_err(|error| error.to_string())?;
-    let mut classifier = LocalClassifier::new(project);
+    let mut classifier = LocalClassifier::new(project, config.language());
     Ok(Router::new(&config, &rules).decide(prompt.trim(), &mut classifier))
 }
 
@@ -366,9 +414,15 @@ mod tests {
     #[test]
     fn long_or_code_prompts_are_not_settled_by_fast_rules() {
         let long = format!("explica {}", "palabra ".repeat(40));
-        assert_eq!(fast_rule(&long), None);
-        assert_eq!(fast_rule("explica esto\n```rust\nfn main() {}\n```"), None);
-        assert_eq!(fast_rule("implementa el endpoint de exportación"), None);
+        assert_eq!(fast_rule(&long, Language::Es), None);
+        assert_eq!(
+            fast_rule("explica esto\n```rust\nfn main() {}\n```", Language::Es),
+            None
+        );
+        assert_eq!(
+            fast_rule("implementa el endpoint de exportación", Language::Es),
+            None
+        );
     }
 
     #[test]

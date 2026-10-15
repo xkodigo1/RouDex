@@ -392,6 +392,7 @@ mockIPC(async (cmd, args) => {
   if (cmd.startsWith("spec_") || cmd.startsWith("task_")) return structuredClone(taskCommand(cmd, args));
   switch (cmd) {
     case "router_config": return config;
+    case "settings_set_language": config.language = args.language; return config;
     // ?migrated=1 shows the notice of a first start that copied old data.
     case "startup_migration": return new URLSearchParams(location.search).get("migrated")
       ? { from: String.raw`C:\Users\dev\AppData\Local\RouDex`, to: String.raw`C:\Users\dev\.roudex`, store: true, config: true } : null;
