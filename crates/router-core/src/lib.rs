@@ -2,6 +2,7 @@ pub mod app_server;
 pub mod chat;
 pub mod classifier;
 pub mod codex;
+pub mod codex_sessions;
 pub mod coordinator;
 pub mod dashboard;
 pub mod desktop_hook;
@@ -51,5 +52,5 @@ pub use task_service::{
 };
 pub use tiers::{
     CatalogModel, DesktopHookConfig, Language, ModelPrice, ModelTarget, RouterConfig,
-    RouterConfigError, Tier, TierTargets, ROUTER_CONFIG_VERSION,
+    RouterConfigError, SavingsConfig, Tier, TierTargets, ROUTER_CONFIG_VERSION,
 };
