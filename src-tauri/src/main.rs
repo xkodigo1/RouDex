@@ -1,8 +1,8 @@
 use router_core::{
     desktop_hook, escalate_local, project_dir, route_local, AccessMode, AppServerClient,
     AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, Language,
-    Migration, RouteDecision, RouterConfig, RouterStore, SentTurn, SpecFile, StoredSpec, TaskBoard,
-    TaskExecutionReceipt, TaskService, ThreadSummary, Tier,
+    Migration, RouteDecision, RouterConfig, RouterStore, SavingsSummary, SentTurn, SpecFile,
+    StoredSpec, TaskBoard, TaskExecutionReceipt, TaskService, ThreadSummary, Tier,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -33,8 +33,37 @@ async fn blocking<T: Send + 'static>(
 
 /// Router decision for a prompt; nothing is executed.
 #[tauri::command]
-async fn router_decide(project: String, prompt: String) -> Result<RouteDecision, String> {
-    blocking(move || route_local(&project_dir(Path::new(&project))?, &prompt)).await
+async fn router_decide(
+    state: tauri::State<'_, AppState>,
+    project: String,
+    prompt: String,
+) -> Result<RouteDecision, String> {
+    let chat = state.chat.clone();
+    blocking(move || {
+        let decision = route_local(&project_dir(Path::new(&project))?, &prompt)?;
+        if let Some(usage) = &decision.router_usage {
+            // The decision still counts if its cost cannot be kept.
+            let _ = chat
+                .recorder()
+                .with_store(|store| store.record_router_usage(usage));
+        }
+        Ok(decision)
+    })
+    .await
+}
+
+/// Estimated cost and savings of the last 30 days (spec 005, D5).
+#[tauri::command]
+async fn savings_summary(state: tauri::State<'_, AppState>) -> Result<SavingsSummary, String> {
+    let chat = state.chat.clone();
+    blocking(move || {
+        let config = RouterConfig::load_or_default(&RouterConfig::default_path())
+            .map_err(|error| error.to_string())?;
+        chat.recorder()
+            .with_store(|store| store.savings(&config))
+            .map_err(|error| error.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -429,6 +458,7 @@ fn main() {
             router_escalate,
             router_config,
             settings_set_language,
+            savings_summary,
             router_models,
             chat_send,
             chat_approval,

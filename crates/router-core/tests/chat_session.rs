@@ -75,6 +75,7 @@ fn decision() -> RouteDecision {
         source: DecisionSource::Model,
         reason: "test".into(),
         risk: vec![],
+        router_usage: None,
     }
 }
 

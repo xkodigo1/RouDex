@@ -175,7 +175,7 @@ impl AppServerClient {
         instructions: &str,
         input: &str,
         output_schema: Value,
-    ) -> Result<String, AppServerError> {
+    ) -> Result<(String, Option<crate::chat::TokenCounts>), AppServerError> {
         let response = self.request(
             "thread/start",
             json!({
@@ -192,6 +192,7 @@ impl AppServerClient {
             .as_str()
             .ok_or_else(|| AppServerError::Protocol("thread/start returned no thread id".into()))?
             .to_owned();
+        let mut usage = None;
         let turn = self.run_turn_params(
             json!({
                 "threadId": thread_id,
@@ -203,7 +204,14 @@ impl AppServerClient {
                 "effort": target.effort,
                 "outputSchema": output_schema
             }),
-            &mut |_| Ok(()),
+            &mut |message| {
+                if message["method"] == "thread/tokenUsage/updated" {
+                    usage = Some(crate::chat::TokenCounts::from_breakdown(
+                        &message["params"]["tokenUsage"]["total"],
+                    ));
+                }
+                Ok(())
+            },
         )?;
         if turn.status != "completed" {
             return Err(AppServerError::Turn(match turn.error {
@@ -211,7 +219,7 @@ impl AppServerClient {
                 None => turn.status,
             }));
         }
-        Ok(turn.text)
+        Ok((turn.text, usage))
     }
 
     fn run_turn_params(

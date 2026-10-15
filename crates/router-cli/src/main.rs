@@ -114,6 +114,12 @@ fn route(args: Vec<String>) -> Result<(), String> {
         .read_to_string(&mut prompt)
         .map_err(|error| format!("could not read prompt: {error}"))?;
     let decision = route_local(&cwd, &prompt)?;
+    if let Some(usage) = &decision.router_usage {
+        // The classifier's cost counts against the savings estimate.
+        if let Ok(store) = RouterStore::open(RouterStore::default_path()) {
+            let _ = store.record_router_usage(usage);
+        }
+    }
     write_json(&serde_json::to_value(decision).map_err(|error| error.to_string())?)
 }
 

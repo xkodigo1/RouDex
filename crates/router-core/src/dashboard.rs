@@ -260,6 +260,7 @@ mod tests {
             source,
             reason: "test".into(),
             risk: vec![],
+            router_usage: None,
         }
     }
 
