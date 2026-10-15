@@ -125,7 +125,7 @@ fn risky_prompts_warn_and_are_recorded() {
     let response = stdout_json(&sandbox.hook(RISKY, "gpt-6-luna", "turn-1"));
     let message = response["systemMessage"].as_str().unwrap();
     assert!(
-        message.contains("tier fuerte (gpt-6.1-sol high)"),
+        message.contains("fuerte tier is recommended (gpt-6.1-sol high)"),
         "{message}"
     );
     assert!(response.get("decision").is_none());
@@ -138,6 +138,23 @@ fn risky_prompts_warn_and_are_recorded() {
 }
 
 #[test]
+fn the_hook_follows_the_language_in_router_toml() {
+    for (setting, expected) in [
+        (None, "this chat uses gpt-6-luna"),
+        (Some("en"), "this chat uses gpt-6-luna"),
+        (Some("es"), "este chat usa gpt-6-luna"),
+    ] {
+        let sandbox = Sandbox::new("language");
+        if let Some(language) = setting {
+            sandbox.router_toml(&format!("language = \"{language}\"\n"));
+        }
+        let response = stdout_json(&sandbox.hook(RISKY, "gpt-6-luna", "turn-1"));
+        let message = response["systemMessage"].as_str().unwrap();
+        assert!(message.contains(expected), "{setting:?}: {message}");
+    }
+}
+
+#[test]
 fn the_blocking_option_blocks_risky_prompts() {
     let sandbox = Sandbox::new("block");
     sandbox.router_toml(BLOCKING);
@@ -146,7 +163,7 @@ fn the_blocking_option_blocks_risky_prompts() {
     assert!(response["reason"]
         .as_str()
         .unwrap()
-        .contains("gpt-6.1-sol con esfuerzo high"));
+        .contains("gpt-6.1-sol with high effort"));
     // The same prompt on the strong model passes with context only.
     let strong = stdout_json(&sandbox.hook(RISKY, "gpt-6.1-sol", "turn-2"));
     assert!(strong.get("decision").is_none());

@@ -39,6 +39,33 @@ impl fmt::Display for Tier {
     }
 }
 
+/// Language of what RouDex writes: the app, router reasons and the Desktop
+/// hook's context and warning (spec 005, D6). English when unset.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    #[default]
+    En,
+    Es,
+}
+
+impl Language {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Language::En => "en",
+            Language::Es => "es",
+        }
+    }
+
+    /// The text for this language.
+    pub fn pick<T>(self, en: T, es: T) -> T {
+        match self {
+            Language::En => en,
+            Language::Es => es,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelTarget {
@@ -63,10 +90,11 @@ pub struct TierTargets {
     pub fuerte: ModelTarget,
 }
 
-/// Router configuration (`router.toml`). Absence selects the defaults; an
-/// existing invalid document is an error, never a silent fallback.
+/// Router configuration (`router.toml`). Absence selects the defaults, and a
+/// file may set only some keys; an invalid document is an error, never a
+/// silent fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct RouterConfig {
     pub version: u32,
     /// Tier used when the model classifier is unavailable or answers badly.
@@ -80,6 +108,9 @@ pub struct RouterConfig {
     /// The Codex executable, when RouDex cannot find it on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_path: Option<PathBuf>,
+    /// Chosen by the user in the app; unset means English.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<Language>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,6 +134,7 @@ impl Default for RouterConfig {
             classifier: ModelTarget::new("gpt-6-luna", "low"),
             desktop_hook: DesktopHookConfig::default(),
             codex_path: None,
+            language: None,
         }
     }
 }
@@ -120,6 +152,36 @@ pub enum RouterConfigError {
 }
 
 impl RouterConfig {
+    pub fn language(&self) -> Language {
+        self.language.unwrap_or_default()
+    }
+
+    /// Set one key of `router.toml` (`section` is a table such as
+    /// `savings`, or `None` for the top level) and keep every other line,
+    /// comments included. The result must still be a valid configuration;
+    /// otherwise nothing is written.
+    pub fn write_setting(
+        path: &Path,
+        section: Option<&str>,
+        key: &str,
+        value: &str,
+    ) -> Result<Self, RouterConfigError> {
+        let contents = match std::fs::read_to_string(path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(error.into()),
+        };
+        let updated = set_line(&contents, section, key, value);
+        let config = Self::from_toml(&updated)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let partial = path.with_extension("toml.partial");
+        std::fs::write(&partial, updated)?;
+        std::fs::rename(&partial, path)?;
+        Ok(config)
+    }
+
     pub fn from_toml(contents: &str) -> Result<Self, RouterConfigError> {
         let config: RouterConfig = toml::from_str(contents)
             .map_err(|error| RouterConfigError::Parse(error.to_string()))?;
@@ -208,9 +270,165 @@ impl CatalogModel {
     }
 }
 
+/// `contents` with `key = value` in `section`: the existing line replaced,
+/// or a new line after the section's last setting, or a new section at the
+/// end. Top-level keys go before the first table.
+fn set_line(contents: &str, section: Option<&str>, key: &str, value: &str) -> String {
+    let line = format!("{key} = {value}");
+    let mut lines: Vec<String> = contents.lines().map(str::to_owned).collect();
+    let header = |text: &str| {
+        let text = text.trim();
+        (text.starts_with('[') && !text.starts_with("[[")).then(|| {
+            text.trim_start_matches('[')
+                .split(']')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_owned()
+        })
+    };
+    let is_key = |text: &str| {
+        text.trim_start()
+            .strip_prefix(key)
+            .is_some_and(|rest| rest.trim_start().starts_with('='))
+    };
+    // The section's lines: from its header (or the top) to the next header.
+    let start = match section {
+        None => Some(0),
+        Some(name) => lines
+            .iter()
+            .position(|text| header(text).as_deref() == Some(name))
+            .map(|index| index + 1),
+    };
+    let Some(start) = start else {
+        if lines.last().is_some_and(|last| !last.trim().is_empty()) {
+            lines.push(String::new());
+        }
+        lines.push(format!("[{}]", section.unwrap_or_default()));
+        lines.push(line);
+        return lines.join(
+            "
+",
+        ) + "
+";
+    };
+    let end = lines[start..]
+        .iter()
+        .position(|text| header(text).is_some())
+        .map_or(lines.len(), |offset| start + offset);
+    if let Some(index) = (start..end).find(|&index| is_key(&lines[index])) {
+        lines[index] = line;
+    } else {
+        let after = (start..end)
+            .rev()
+            .find(|&index| {
+                !lines[index].trim().is_empty() && !lines[index].trim_start().starts_with('#')
+            })
+            .map_or(start, |index| index + 1);
+        lines.insert(after, line);
+    }
+    lines.join(
+        "
+",
+    ) + "
+"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const COMMENTED: &str = "# My router
+version = 1 # keep
+fallback_tier = \"estandar\"
+
+[tiers.economico]
+model = \"gpt-6-luna\"
+effort = \"high\"
+
+[tiers.estandar]
+model = \"gpt-6.1-sol\"
+effort = \"medium\"
+
+[tiers.fuerte]
+model = \"gpt-6.1-sol\"
+effort = \"high\"
+
+[classifier]
+model = \"gpt-6-luna\"
+effort = \"low\"
+";
+
+    #[test]
+    fn a_setting_changes_one_line_and_keeps_the_rest() {
+        let added = set_line(COMMENTED, None, "language", "\"es\"");
+        let expected = COMMENTED.replacen(
+            "fallback_tier = \"estandar\"
+",
+            "fallback_tier = \"estandar\"
+language = \"es\"
+",
+            1,
+        );
+        assert_eq!(added, expected, "added after the last top-level setting");
+        let changed = set_line(&added, None, "language", "\"en\"");
+        assert_eq!(
+            changed,
+            expected.replace("language = \"es\"", "language = \"en\"")
+        );
+        assert_eq!(
+            RouterConfig::from_toml(&changed).unwrap().language(),
+            Language::En
+        );
+
+        let section = set_line(&changed, Some("savings"), "include_codex_desktop", "true");
+        assert!(section.starts_with(&changed), "a new table goes at the end");
+        assert!(section.ends_with(
+            "
+[savings]
+include_codex_desktop = true
+"
+        ));
+        let toggled = set_line(&section, Some("savings"), "include_codex_desktop", "false");
+        assert_eq!(toggled, section.replace("= true", "= false"));
+    }
+
+    #[test]
+    fn a_setting_in_an_empty_or_missing_file_is_all_the_file_holds() {
+        assert_eq!(
+            set_line("", None, "language", "\"es\""),
+            "language = \"es\"
+"
+        );
+        let dir = std::env::temp_dir().join(format!("roudex-config-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("router.toml");
+        let config = RouterConfig::write_setting(&path, None, "language", "\"es\"").unwrap();
+        assert_eq!(config.language(), Language::Es);
+        assert_eq!(
+            config.tiers,
+            RouterConfig::default().tiers,
+            "the rest stays default"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "language = \"es\"
+"
+        );
+        assert!(RouterConfig::write_setting(&path, None, "language", "\"fr\"").is_err());
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "language = \"es\"
+",
+            "an invalid result is never written"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unset_language_means_english() {
+        assert_eq!(RouterConfig::default().language(), Language::En);
+        assert_eq!(Language::Es.pick("hi", "hola"), "hola");
+    }
 
     fn catalog() -> Vec<CatalogModel> {
         let entry = |id: &str, efforts: &[&str]| CatalogModel {

@@ -5,7 +5,7 @@
 use crate::classifier::{describe, DecisionSource, RouteDecision};
 use crate::domain::TaskDefinition;
 use crate::risk::RiskRules;
-use crate::tiers::{RouterConfig, Tier};
+use crate::tiers::{Language, RouterConfig, Tier};
 
 /// Route a task. A manual tier wins; otherwise a risk match forces `fuerte`.
 pub fn resolve_task_route(
@@ -15,28 +15,40 @@ pub fn resolve_task_route(
     rules: &RiskRules,
 ) -> RouteDecision {
     let risk = rules.matches(&format!("{}\n{}", task.title, task.prompt));
+    let language = config.language();
+    let described = describe(&risk, language);
     let (tier, source, reason) = match tier_override {
         Some(tier) if risk.is_empty() => (
             tier,
             DecisionSource::Manual,
-            format!("elegido manualmente (la spec pide {})", task.tier),
+            match language {
+                Language::En => format!("chosen by hand (the spec asks for {})", task.tier),
+                Language::Es => format!("elegido manualmente (la spec pide {})", task.tier),
+            },
         ),
         Some(tier) => (
             tier,
             DecisionSource::Manual,
-            format!("elegido manualmente pese al riesgo ({})", describe(&risk)),
+            match language {
+                Language::En => format!("chosen by hand despite the risk ({described})"),
+                Language::Es => format!("elegido manualmente pese al riesgo ({described})"),
+            },
         ),
         None if !risk.is_empty() => (
             Tier::Fuerte,
             DecisionSource::Risk,
-            format!("regla de riesgo: {}", describe(&risk)),
+            match language {
+                Language::En => format!("risk rule: {described}"),
+                Language::Es => format!("regla de riesgo: {described}"),
+            },
         ),
         None => (
             task.tier,
             DecisionSource::Spec,
-            match &task.profile {
-                Some(profile) => format!("perfil {profile} de la spec"),
-                None => "tier de la spec".to_owned(),
+            match (&task.profile, language) {
+                (Some(profile), Language::En) => format!("spec profile {profile}"),
+                (Some(profile), Language::Es) => format!("perfil {profile} de la spec"),
+                (None, _) => language.pick("spec tier", "tier de la spec").to_owned(),
             },
         ),
     };
@@ -104,7 +116,10 @@ mod tests {
     #[test]
     fn risk_forces_the_strong_tier_unless_chosen_by_hand() {
         let risky = task(Tier::Economico, "aplica la migración en producción");
-        let config = RouterConfig::default();
+        let config = RouterConfig {
+            language: Some(Language::Es),
+            ..RouterConfig::default()
+        };
         let rules = RiskRules::default();
         let route = resolve_task_route(&risky, None, &config, &rules);
         assert_eq!(
@@ -121,6 +136,18 @@ mod tests {
         );
         assert!(manual.reason.contains("pese al riesgo"));
         assert!(!manual.risk.is_empty(), "the risk stays on the record");
+
+        let english = resolve_task_route(
+            &risky,
+            Some(Tier::Economico),
+            &RouterConfig::default(),
+            &rules,
+        );
+        assert!(
+            english.reason.contains("despite the risk"),
+            "{}",
+            english.reason
+        );
     }
 
     #[test]
@@ -133,6 +160,12 @@ mod tests {
             &RouterConfig::default(),
             &RiskRules::default(),
         );
+        assert_eq!(route.reason, "spec profile deep");
+        let spanish = RouterConfig {
+            language: Some(Language::Es),
+            ..RouterConfig::default()
+        };
+        let route = resolve_task_route(&legacy, None, &spanish, &RiskRules::default());
         assert_eq!(route.reason, "perfil deep de la spec");
     }
 }

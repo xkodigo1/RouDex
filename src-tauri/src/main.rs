@@ -1,7 +1,7 @@
 use router_core::{
     desktop_hook, escalate_local, project_dir, route_local, AccessMode, AppServerClient,
-    AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, Migration,
-    RouteDecision, RouterConfig, RouterStore, SentTurn, SpecFile, StoredSpec, TaskBoard,
+    AppServerConfig, ApprovalDecision, ChatService, ChatThread, ChatTurn, Dashboard, Language,
+    Migration, RouteDecision, RouterConfig, RouterStore, SentTurn, SpecFile, StoredSpec, TaskBoard,
     TaskExecutionReceipt, TaskService, ThreadSummary, Tier,
 };
 use serde_json::{json, Value};
@@ -46,6 +46,15 @@ fn router_escalate(decision: RouteDecision) -> Result<RouteDecision, String> {
 #[tauri::command]
 fn router_config() -> Result<RouterConfig, String> {
     RouterConfig::load_or_default(&RouterConfig::default_path()).map_err(|error| error.to_string())
+}
+
+/// Store the interface language in router.toml, where the Desktop hook and
+/// the router read it too. Only that line of the file changes.
+#[tauri::command]
+fn settings_set_language(language: Language) -> Result<RouterConfig, String> {
+    let value = format!("\"{}\"", language.as_str());
+    RouterConfig::write_setting(&RouterConfig::default_path(), None, "language", &value)
+        .map_err(|error| error.to_string())
 }
 
 /// Runtime catalog and problems with the configured tiers.
@@ -419,6 +428,7 @@ fn main() {
             router_decide,
             router_escalate,
             router_config,
+            settings_set_language,
             router_models,
             chat_send,
             chat_approval,

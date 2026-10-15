@@ -59,6 +59,7 @@ button.link:hover { color: var(--accent-soft); }
 /* Shell */
 .app { display: flex; flex-direction: column; height: 100vh; }
 .topbar { display: flex; align-items: center; gap: 16px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
+.language-picker button { min-height: 28px; text-transform: uppercase; }
 .brand { display: flex; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: .02em; }
 .badge-line { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; color: #9AA3A8; font-size: 12px; white-space: nowrap; }
 .body { display: flex; flex: 1; min-height: 0; }
