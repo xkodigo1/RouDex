@@ -43,7 +43,11 @@ if (target === "universal-apple-darwin") {
     // Building for the host under its own triple keeps both outputs apart.
     const cargoArgs = ["build", "--release", "--locked", "-p", "router-cli", "--target", triple];
     run("cargo", cargoArgs);
-    return join(root, "target", triple, "release", "router-cli");
+    const built = join(root, "target", triple, "release", "router-cli");
+    // Tauri builds each architecture on its own first, and each build looks
+    // for the sidecar under its own triple.
+    copyFileSync(built, join(binaries, `router-cli-${triple}`));
+    return built;
   });
   run("lipo", ["-create", "-output", join(binaries, "router-cli-universal-apple-darwin"), ...parts]);
 } else {
