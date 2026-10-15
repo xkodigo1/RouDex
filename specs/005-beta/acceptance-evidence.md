@@ -2,13 +2,13 @@
 
 Tareas ejecutadas fuera del coordinador (decisión D8). Entorno: Windows 11 con
 Rust estable MSVC y la app de Codex Desktop. CI en Windows y Linux; macOS en
-`main` y en tags. Los escenarios pendientes se cierran en las tareas que los
-cubren.
+`main` y en tags. Todos los escenarios están
+cerrados.
 
 | Escenario | Verificación | Resultado |
 | --- | --- | --- |
 | A01 datos en `~/.roudex` | `paths::tests::*`, `task_cli::state_lives_in_dot_roudex_in_the_user_folder` (CI en los tres sistemas) | OK |
-| A02 migración en Windows | `paths::tests::the_first_start_copies_the_store_and_the_config_once`, `existing_data_in_home_is_never_overwritten`, `task_cli::data_from_before_0_9_is_copied_once_and_left_in_place`; migración real en R005-T010 | OK (pruebas) |
+| A02 migración en Windows | `paths::tests::the_first_start_copies_the_store_and_the_config_once`, `existing_data_in_home_is_never_overwritten`, `task_cli::data_from_before_0_9_is_copied_once_and_left_in_place`; migración real con el instalador (A17) | OK |
 | A03 `ROUDEX_HOME` | Todas las pruebas de `task_cli` y `hook_cli` aíslan con `ROUDEX_HOME`; el hook lee `router.toml` de ahí (`hook_cli::the_blocking_option_blocks_risky_prompts`) | OK |
 | A04 encontrar Codex | `codex::tests::windows_uses_the_path_then_the_newest_desktop_copy`, `macos_finds_the_codex_app_in_every_known_layout`, `linux_looks_in_the_usual_user_and_system_folders`, `the_override_and_codex_path_come_first` | OK |
 | A05 Codex ausente | `codex::tests::a_missing_codex_lists_every_place_tried`, `task_cli::a_missing_codex_says_where_it_looked_and_how_to_set_codex_path` | OK |
@@ -23,8 +23,8 @@ cubren.
 | A14 cambiar de idioma | Fixture en las cuatro pantallas; `ui/tests/check-i18n.mjs` en el build | OK |
 | A15 idioma del sistema | `tiers::tests::a_setting_changes_one_line_and_keeps_the_rest`, `a_setting_in_an_empty_or_missing_file_is_all_the_file_holds`; fixture | OK |
 | A16 hook en el idioma elegido | `desktop_hook::tests::the_hook_writes_in_the_chosen_language_and_in_english_when_unset`, `hook_cli::the_hook_follows_the_language_in_router_toml` | OK |
-| A17 instalador de Windows con Codex real | | Pendiente (R005-T010) |
-| A18 macOS y Linux en CI | | Pendiente (R005-T008, R005-T010) |
+| A17 instalador de Windows con Codex real | Prueba del usuario con el instalador de la ejecución 38692654428 (abajo) | OK |
+| A18 macOS y Linux en CI | CI 38692648776 en `main` (tres sistemas) y release 38692654428 (abajo) | OK (solo CI) |
 
 ## A01–A03 · Detalle
 
@@ -235,3 +235,24 @@ Fixture `?view=resumen`, 2026-10-15:
     `Depends: libwebkit2gtk-4.1-0, libgtk-3-0`.
 - **Release:** al publicar una release, el mismo workflow adjunta los
   instaladores con `gh release upload`; se comprueba con `v0.9.0`.
+
+## A17–A18 · Cierre de la beta (R005-T010)
+
+- **A17, Windows con Codex real, 2026-10-15:**
+  - El usuario instaló `RouDex_0.9.0_x64-setup.exe` (3 600 531 bytes, sin
+    firma), generado por el workflow de release en `main` (ejecución
+    38692654428).
+  - El usuario confirmó en el chat que:
+    - el primer arranque copió sus datos de 0.8.0 de
+      `%LOCALAPPDATA%\RouDex` a `~/.roudex`;
+    - el chat respondió con Codex real, que RouDex encontró solo;
+    - «Reinstalar hook» funcionó, y un mensaje de riesgo en Codex Desktop
+      recibió el aviso de RouDex;
+    - la desinstalación conservó sus datos.
+- **A18, macOS y Linux (solo CI, sin máquina física):**
+  - CI 38692648776 sobre `main` (e882e12): pruebas, Clippy y formato en
+    verde en `windows-latest`, `ubuntu-latest` y `macos-latest`.
+  - Release 38692654428 sobre `main`: los tres trabajos en verde, con el
+    instalador NSIS, el DMG universal, el `.deb` y el `.AppImage` de 0.9.0.
+    La app de Linux siguió en marcha bajo `xvfb` hasta el límite.
+  - Las notas de la release dicen que macOS y Linux se verificaron solo en CI.

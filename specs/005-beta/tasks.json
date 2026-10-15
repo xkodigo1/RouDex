@@ -2,7 +2,7 @@
   "spec_id": "005-beta",
   "title": "Cross-platform beta: three systems, installers, savings estimate and two languages",
   "version": 1,
-  "status": "running",
+  "status": "completed",
   "planning_assumption": "Plan to v1.0.0 (Codex only) approved in chat on 2026-10-14. The user chose on 2026-10-14: user prices in router.toml, all data in ~/.roudex, NSIS + universal DMG + deb + AppImage, and the system language with a selector that the hook follows. Tasks run outside the coordinator (D8) and declare tier instead of profile/model/effort, so the validator's routed-field warnings are expected. The user approved this spec and all ten tasks in chat on 2026-10-14.",
   "execution_policy": {
     "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D8)",
@@ -16,7 +16,7 @@
     {
       "id": "H1",
       "title": "Beta multiplataforma",
-      "status": "running",
+      "status": "completed",
       "release_target": "v0.9.0",
       "depends_on": [],
       "task_ids": [
@@ -658,7 +658,7 @@
         "R005-T008",
         "R005-T009"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -690,7 +690,14 @@
       "verification_artifact": "specs/005-beta/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "docs/installation.md rewritten in English for the three systems (installers and unsigned warnings, finding Codex and codex_path, data in ~/.roudex and the migration, language, the install-hook button, uninstalling, building from source); docs/savings.md added; router, hook and orchestrator docs point at ~/.roudex; README describes the beta (PR #29).",
+        "Workspace and UI at 0.9.0; cargo test --workspace: 149 passed, including the version check.",
+        "A17 (2026-10-15): the user installed RouDex_0.9.0_x64-setup.exe from release workflow run 38692654428 on main and confirmed in chat: the first start copied the 0.8.0 data, the chat answered with the real Codex, Reinstalar hook worked, a risky Codex Desktop prompt got the RouDex warning, and uninstalling kept the data.",
+        "A18: CI run 38692648776 on main (e882e12) passed on windows-latest, ubuntu-latest and macos-latest; release workflow run 38692654428 on main built the NSIS installer, the universal DMG, the deb and the AppImage, and the Linux app kept running under xvfb. macOS and Linux were verified in CI only.",
+        "validate-manifest --strict: 0 errors."
+      ],
       "release_target": "v0.9.0"
     }
   ],
