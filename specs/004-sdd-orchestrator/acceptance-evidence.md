@@ -1,8 +1,8 @@
 # Evidencias de aceptación · 004
 
 Tareas ejecutadas fuera del coordinador (decisión D6). Entorno: Windows 11,
-Rust estable MSVC; CI en Windows y Linux. Los escenarios marcados como
-pendientes se cierran en las tareas que los cubren.
+Rust estable MSVC; CI en Windows y Linux. Todos los escenarios están
+cerrados.
 
 | Escenario | Verificación | Resultado |
 | --- | --- | --- |
@@ -12,13 +12,13 @@ pendientes se cierran en las tareas que los cubren.
 | A04 modelo de `router.toml` | `task_coordinator::runs_record_the_model_router_toml_had_at_dispatch` | OK |
 | A05 riesgo y tier manual | `task_coordinator::risk_forces_fuerte_and_a_manual_tier_wins_on_the_record`, `task_service::the_board_shows_the_route_a_dispatch_would_take`; fixture | OK |
 | A06 compuertas | `task_coordinator::batch_rechecks_dependencies_and_never_constructs_unapproved_runtime`, `denial_stays_blocked_until_an_explicit_approval`, `approval_unblocks_dispatch_without_starting_an_early_worker` | OK |
-| A07 ejecución en la app | `task_coordinator::app_runs_wait_for_the_ui_to_answer_approvals`, `stopping_a_running_task_interrupts_its_turn`, `task_service::runs_stream_to_the_app_and_only_one_runs_at_a_time`; fixture | OK (fixture); app real en R004-T007 |
+| A07 ejecución en la app | `task_coordinator::app_runs_wait_for_the_ui_to_answer_approvals`, `stopping_a_running_task_interrupts_its_turn`, `task_service::runs_stream_to_the_app_and_only_one_runs_at_a_time`; fixture; app real (A13) | OK |
 | A08 verificación | `task_coordinator::stdio_dispatch_persists_route_turn_deltas_and_independent_verification`, `protocol_errors_and_verification_failure_never_complete_tasks` | OK |
 | A09 ejecutar listas | `task_coordinator::batch_rechecks_dependencies_and_never_constructs_unapproved_runtime`, `task_service::ready_tasks_run_in_dependency_order` | OK |
 | A10 reanudar y reintentar | `task_coordinator::resume_reuses_run_and_thread_and_is_idempotent_after_completion`, `missing_recovery_identity_is_durably_blocked_until_an_explicit_retry`; fixture | OK |
 | A11 CLI | `task_cli::spec_load_translates_legacy_profiles_and_reports_it`, `cli_approval_denial_and_runtime_failure_keep_the_task_closed`, `batch_cli_observes_dependencies_approvals_and_exposes_persisted_status`; `task_coordinator::cli_runs_decline_approvals_and_keep_them_as_evidence` | OK |
 | A12 turnos internos | `task_cli::either_worker_marker_prevents_nested_lifecycle_commands`, `app_server_protocol` (entorno de la verificación) | OK |
-| A13 spec de ejemplo con Codex real | CLI con Codex real (abajo); app real | OK en la CLI; app pendiente |
+| A13 spec de ejemplo con Codex real | CLI y app real con Codex (abajo) | OK |
 
 ## A01 y A07 · Pantalla Tareas en el fixture
 
@@ -139,3 +139,21 @@ defecto), y Codex `codex-cli 0.162.0-alpha.17.2` de Codex Desktop.
      por tubería espera hasta que termine.
    - No afecta a la app, que lee el protocolo y no espera al cierre de la
      tubería.
+5. **En la app real, 2026-10-14:**
+   - Build de depuración de `main` con #17, contra el almacén real del
+     usuario y el mismo Codex.
+   - El usuario abrió la copia `%TEMP%hello-orchestrator` en
+     **proyectos** y cargó `hello-001-notes` desde «sin cargar» en
+     **tareas**.
+   - Con «▶ ejecutar listas», `HELLO-T1` hizo streaming y terminó verificada.
+     `HELLO-T2` quedó en «espera aprobación».
+   - «aprobar» y «▶ ejecutar» completaron `HELLO-T2`. El usuario confirmó que
+     todo se vio como se esperaba.
+   - En el almacén:
+     - Ejecución `c88b1970` (`HELLO-T1`): turno `completed` en 8,0 s.
+     - Ejecución `df718951` (`HELLO-T2`): turno `completed` en 10,6 s;
+       aprobación «decidido en la app».
+     - Las dos con `economico` → `gpt-6-luna` `high`, `task.verified` con
+       salida 0, y el hook de Codex Desktop en 217–218 ms sin entradas
+       (turnos internos).
+   - `NOTES.md` quedó igual que en la ejecución de la CLI.

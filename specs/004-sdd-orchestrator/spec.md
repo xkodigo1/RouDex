@@ -2,7 +2,7 @@
 
 - **Versión:** 1
 - **Fecha:** 2026-10-14
-- **Estado:** en ejecución
+- **Estado:** completada
 - **Release:** `v0.8.0`
 - Contrato ejecutable: [tasks.json](tasks.json) · Tareas: [tasks.md](tasks.md) ·
   Decisiones: [decisions.md](decisions.md)

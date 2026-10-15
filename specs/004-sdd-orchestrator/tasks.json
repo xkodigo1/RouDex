@@ -2,7 +2,7 @@
   "spec_id": "004-sdd-orchestrator",
   "title": "SDD orchestrator driven by the tier router",
   "version": 1,
-  "status": "running",
+  "status": "completed",
   "planning_assumption": "Plan to v1.0.0 (Codex only) approved in chat on 2026-10-14 with full access. Tasks run outside the coordinator per AGENTS.md (decision D6). Tasks declare tier instead of profile/model/effort (decision D1), so the validator's routed-field warnings are expected.",
   "execution_policy": {
     "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D6)",
@@ -457,7 +457,7 @@
       "depends_on": [
         "R004-T006"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -488,7 +488,14 @@
       "verification_artifact": "specs/004-sdd-orchestrator/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "docs/orchestrator.md (manifest, routing, lifecycle, Tasks screen, CLI) and examples/hello-orchestrator (two economico tasks; loaded by task_manifest::tests::the_repository_specs_load).",
+        "First real run found verify commands with double quotes broken on Windows (cmd.exe does not read \\\" escapes); fixed by passing the command in ROUDEX_VERIFY, with app_server::tests::verify_commands_keep_their_quotes.",
+        "A13 with real Codex (codex-cli 0.162.0-alpha.17.2): CLI on an isolated store completed HELLO-T1 (9 s) and, after task-approve, HELLO-T2 (14 s); the app on the user store completed both from the Tasks screen (runs c88b1970 and df718951, approval decided in the app), all on economico -> gpt-6-luna high with task.verified exit 0. Recorded in acceptance-evidence.md.",
+        "Workspace and UI versions bumped to 0.8.0; cargo test --workspace: 124 passed; clippy -D warnings and fmt clean; pnpm --dir ui build passes.",
+        "PR #17 (docs, example and verify fix) merged at d183f27."
+      ],
       "release_target": "v0.8.0"
     }
   ],
