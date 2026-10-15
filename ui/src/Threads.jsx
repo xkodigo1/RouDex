@@ -1,49 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Composer from "./Composer.jsx";
-import { ACCESS_LABEL, SOURCE_LABEL, basename, clockTime, decisionFromTurn, tokens } from "./lib/format.js";
+import { ApprovalCard, TURN_STATUS_LABEL as STATUS_LABEL, TurnLog } from "./Transcript.jsx";
+import { ACCESS_LABEL, basename, decisionFromTurn, tokens } from "./lib/format.js";
 import { useSession } from "./lib/session.jsx";
 
 const FILTERS = [["todos", "todos"], ["curso", "en curso"], ["aprobacion", "aprobación"], ["fuerte", "fuerte"], ["archivados", "archivados"]];
-const STATUS_LABEL = { running: "en curso", completed: "completado", interrupted: "interrumpido", failed: "falló" };
-const APPROVAL_OPTIONS = [["accept", "aceptar"], ["acceptForSession", "aceptar en la sesión"], ["decline", "rechazar"], ["cancel", "cancelar turno"]];
-
-// The reason often already names its source ("regla de riesgo: …").
-function routerReason(turn) {
-  const label = SOURCE_LABEL[turn.source] ?? turn.source;
-  return turn.reason.startsWith(label) ? turn.reason : `${label}: ${turn.reason}`;
-}
-
-function TurnLog({ turn, live, onEscalate, disabled }) {
-  const running = turn.status === "running" && !(live?.done);
-  const text = live?.text || turn.response;
-  return <div className="log-turn">
-    <span className="log-time">{clockTime(turn.created_at)}</span>
-    <span className="log-prompt"><span className="accent">❯</span> {turn.prompt}</span>
-    <span />
-    <span className="log-router">router  <span className={`tier-text tier-${turn.tier}`}>{turn.tier}</span> · {turn.model} {turn.effort} · {routerReason(turn)}</span>
-    <span />
-    <span className="log-answer">{text || (running ? "" : "sin respuesta")}{running && <span className="caret" aria-hidden="true">▍</span>}</span>
-    {live?.commands?.map((command) => <FragmentCommand key={command.id} command={command} />)}
-    {turn.error && <><span /><span className="log-error">{turn.error}</span></>}
-    {!running && <><span />
-      <span className="log-foot">─ turno {STATUS_LABEL[turn.status] ?? turn.status} · {tokens(turn.tokens.total)} tokens
-        {turn.tier !== "fuerte" && <button type="button" className="link small" disabled={disabled} onClick={() => onEscalate(turn)}>re-ejecutar con fuerte</button>}
-      </span></>}
-  </div>;
-}
-
-function FragmentCommand({ command }) {
-  const ok = command.exitCode === 0 || command.status === "completed";
-  const failed = command.status === "failed" || (command.exitCode !== null && command.exitCode !== 0) || command.status === "declined";
-  return <>
-    <span />
-    <span className="log-command">$ {command.command ?? command.type}
-      <span className={failed ? "bad" : ok ? "good" : "accent"}>   {command.status === "en curso" ? "en curso" : failed ? `✗ ${command.status}` : "✓"}</span>
-      {command.output && <pre>{command.output}</pre>}
-    </span>
-  </>;
-}
 
 export default function Threads({ project, config, selected, onSelect, onNewChat }) {
   const session = useSession();
@@ -171,16 +133,7 @@ export default function Threads({ project, config, selected, onSelect, onNewChat
         <div className="transcript" aria-label="Transcripción">
           {turns.map((turn) => <TurnLog key={turn.turn_id} turn={turn} live={session.live[turn.turn_id]}
             disabled={Boolean(runningTurn)} onEscalate={escalate} />)}
-          {approvals.map((item) => <div key={JSON.stringify(item.requestId)} className="approval" role="alert">
-            <span className="approval-title">aprobación requerida · {item.kind === "fileChange" ? "cambio de archivos" : "comando"}</span>
-            {item.command && <code>{item.command}</code>}
-            {item.reason && <span className="approval-reason">{item.reason}</span>}
-            <div className="row-wrap">
-              {APPROVAL_OPTIONS.map(([decision, label]) => <button key={decision} type="button"
-                className={decision === "accept" ? "primary" : decision === "acceptForSession" ? "amber-ghost" : "ghost"}
-                onClick={() => answer(item, decision)}>{label}</button>)}
-            </div>
-          </div>)}
+          {approvals.map((item) => <ApprovalCard key={JSON.stringify(item.requestId)} item={item} onAnswer={answer} />)}
           <div ref={endRef} />
         </div>
         {error && <p className="error-line pad" role="alert">{error}</p>}

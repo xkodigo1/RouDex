@@ -362,7 +362,7 @@
       "depends_on": [
         "R004-T004"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approved the plan to v1.0.0 and granted full access in chat; this covers implementation, local verification and merging the PR once CI is green. Tagging and the release follow the phase close.",
@@ -389,7 +389,15 @@
       "verification_artifact": "specs/004-sdd-orchestrator/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D6); route_id and run_id stay null.",
+        "pnpm --dir ui build and the fixture build (tests/vite.config.js) pass.",
+        "Browser check of ui/tests/chat-fixture.html?view=tareas recorded in acceptance-evidence.md: spec listing, loading with warnings and broken-manifest errors, milestones and task detail (A01); streamed run with inline approval, verification output, stop and resume (A07); retry, approval gate, manual tier over risk and run all ready.",
+        "Threads keep streaming, inline approvals and re-run with fuerte after sharing Transcript.jsx with the Tasks screen.",
+        "task_service: run all ready frees the run slot before emitting results (regression assertion in ready_tasks_run_in_dependency_order).",
+        "cargo test --workspace: 133 passed; clippy -D warnings and fmt clean.",
+        "Commit 8756e82."
+      ],
       "release_target": "v0.8.0"
     },
     {

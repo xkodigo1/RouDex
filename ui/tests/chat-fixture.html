@@ -4,7 +4,8 @@
 <div id="root"></div>
 <script type="module">
 // Development-only synthetic backend for the desktop app. It mimics the Tauri
-// commands and streams roudex://session events; nothing reaches a runtime.
+// commands and streams roudex://session and roudex://task events; nothing
+// reaches a runtime. ?view=tareas opens the Tasks screen.
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 
@@ -120,7 +121,267 @@ async function finish(threadId, record, answer) {
   session({ type: "turnCompleted", threadId, turnId: record.turn_id, status: "completed", error: null });
 }
 
+// Spec tasks: a loaded spec, an unloaded one and a broken one, with runs that
+// stream on roudex://task the way TaskService does.
+const project = "C:\\proyectos\\api-service";
+const specPath = (slug) => `${project}\\specs\\${slug}\\tasks.json`;
+const taskEvent = (payload) => emit("roudex://task", payload);
+const OPEN = ["planned", "ready", "blocked", "awaiting_approval"];
+const contract = (id, title, extra = {}) => ({ id, title, prompt: `${title}. Implementa solo el alcance declarado y deja la evidencia de verificación.`,
+  depends_on: [], status: "planned", tier: "estandar", model: "", effort: "", approval: "not_required", scope: ["reports"],
+  cwd: project, sandbox: { type: "workspaceWrite", writable_roots: ["reports"] },
+  acceptance: ["El reporte cuadra con el extracto del banco.", "cargo test -p reports pasa."], verify: "cargo test -p reports", ...extra });
+const specFiles = [
+  { slug: "001-comisiones", spec: { specId: "001-comisiones", title: "Reporte mensual de comisiones",
+    milestones: [{ id: "H1", title: "Cálculo", task_ids: ["R1-T1", "R1-T2", "R1-T3"] }, { id: "H2", title: "Entrega", task_ids: ["R1-T4", "R1-T5", "R1-T6"] }],
+    warnings: [], tasks: [
+      contract("R1-T1", "Separa los reembolsos del cálculo de comisiones", { milestone: "H1", status: "completed" }),
+      contract("R1-T2", "Agrega los festivos al corte del día 15", { milestone: "H1", depends_on: ["R1-T1"], tier: "economico", status: "ready" }),
+      contract("R1-T3", "Recalcula comisiones de producción ya liquidadas", { milestone: "H1", depends_on: ["R1-T1"], tier: "economico", approval: "manual" }),
+      contract("R1-T4", "Exporta el reporte a CSV", { milestone: "H2", status: "interrupted" }),
+      contract("R1-T5", "Documenta los campos del reporte", { milestone: "H2", status: "failed", tier: "economico",
+        sandbox: { type: "readOnly", writable_roots: [] }, verify: "node scripts/check-docs.mjs" }),
+      contract("R1-T6", "Publica el reporte en el panel", { milestone: "H2", depends_on: ["R1-T2", "R1-T4"], tier: "fuerte", approval: "manual" }),
+    ] } },
+  { slug: "002-conciliacion", spec: { specId: "002-conciliacion", title: "Conciliación diaria", milestones: [],
+    warnings: ["C2-T1: perfil standard traducido a tier estandar; el model/effort declarados se ignoran"], tasks: [
+      contract("C2-T1", "Concilia los movimientos del día", { profile: "standard" }),
+      contract("C2-T2", "Marca las diferencias para revisión", { depends_on: ["C2-T1"], tier: "economico" }),
+    ] } },
+  { slug: "003-borrador", error: "la tarea D3-T2 depende de D3-T9, que no existe" },
+];
+// How the fake Codex behaves for a task: ask to run a command, or stream slowly.
+const BEHAVIOUR = { "R1-T2": "approval", "R1-T4": "slow" };
+const loadedSpecs = new Map();
+const tasksById = new Map();
+let activeRun = null;
+let loadCounter = 0;
+
+function loadSpec(slug) {
+  const file = specFiles.find((item) => item.slug === slug);
+  if (!file) throw new Error("no existe el manifiesto");
+  if (file.error) throw new Error(file.error);
+  for (const task of file.spec.tasks) {
+    if (!tasksById.has(task.id)) tasksById.set(task.id, { specId: file.spec.specId, task: structuredClone(task), tierOverride: null, approval: null, runs: [] });
+  }
+  loadedSpecs.set(file.spec.specId, { ...file.spec, path: specPath(slug), loadedAt: String(now() + ++loadCounter) });
+  return storedSpec(file.spec.specId);
+}
+
+function storedSpec(specId) {
+  const { tasks, ...spec } = loadedSpecs.get(specId);
+  const own = [...tasksById.values()].filter((item) => item.specId === specId);
+  return { ...spec, tasks: own.length, completed: own.filter((item) => item.task.status === "completed").length };
+}
+
+function route(entry) {
+  const { task, tierOverride } = entry;
+  const risk = /producci[oó]n/i.test(`${task.title}\n${task.prompt}`) ? [{ kind: "keyword", value: "produccion" }] : [];
+  const pick = (tier, source, reason) => ({ tier, ...config.tiers[tier], source, reason, risk });
+  if (tierOverride) return pick(tierOverride, "manual", risk.length ? "elegido manualmente pese al riesgo (produccion)" : `elegido manualmente (la spec pide ${task.tier})`);
+  if (risk.length) return pick("fuerte", "risk", "regla de riesgo: produccion");
+  return pick(task.tier, "spec", task.profile ? `perfil ${task.profile} de la spec` : "tier de la spec");
+}
+
+const depsDone = (entry) => entry.task.depends_on.every((id) => tasksById.get(id)?.task.status === "completed");
+const storedRun = (run) => run && { run_id: run.run_id, route_id: run.route_id, session_id: run.thread_id, turn_id: run.task_id, cwd: project,
+  prompt: run.prompt, profile: run.tier, model: run.model, effort: run.effort, status: run.status };
+
+function board(specId) {
+  if (!loadedSpecs.has(specId)) throw new Error(`la spec ${specId} no está cargada`);
+  const tasks = [...tasksById.values()].filter((item) => item.specId === specId).map((entry) => ({
+    task: entry.task, tierOverride: entry.tierOverride, route: route(entry), routeError: null, dependenciesCompleted: depsDone(entry),
+    approval: entry.approval, latestRun: storedRun(entry.runs.at(-1)), running: activeRun?.taskId === entry.task.id }));
+  return { spec: storedSpec(specId), tasks };
+}
+
+function newRun(entry) {
+  const decision = route(entry);
+  const n = entry.runs.length + 1;
+  const run = { run_id: `${entry.task.id.toLowerCase()}-${n}-${Math.random().toString(16).slice(2, 10)}`, route_id: `route-${entry.task.id}-${n}`,
+    task_id: entry.task.id, thread_id: `thread-${entry.task.id}-${n}`, prompt: entry.task.prompt, tier: decision.tier, model: decision.model,
+    effort: decision.effort, status: "running", events: [] };
+  run.record = (event_type, payload) => run.events.push({ run_id: run.run_id, event_type, payload });
+  run.record("task.started", { taskId: entry.task.id, tier: decision.tier, model: decision.model, effort: decision.effort, route: decision });
+  entry.runs.push(run);
+  return run;
+}
+
+// Past runs, written the way the coordinator records them.
+function seedRun(entry, status, text, verify) {
+  const run = newRun(entry);
+  const turnId = `turn-${entry.task.id}-1`;
+  run.status = status;
+  run.record("turn/started", { threadId: run.thread_id, turn: { id: turnId } });
+  run.record("item/agentMessage/delta", { threadId: run.thread_id, turnId, delta: text });
+  if (status !== "interrupted") run.record("item/completed", { threadId: run.thread_id, turnId, item: { id: "cmd-1", type: "commandExecution",
+    command: "cargo test -p reports refunds", status: "completed", exitCode: 0, aggregatedOutput: "test refunds::partial ... ok\ntest result: ok. 3 passed" } });
+  run.record("turn.completed", { taskId: entry.task.id, threadId: run.thread_id, turnId, status: status === "interrupted" ? "interrupted" : "completed", text });
+  if (verify) run.record(verify.exitCode === 0 ? "task.verified" : "verification.failed", { taskId: entry.task.id, command: entry.task.verify,
+    reason: verify.exitCode === 0 ? undefined : "task verification failed or returned no exit code",
+    result: { exitCode: verify.exitCode, stdout: verify.stdout ?? "", stderr: verify.stderr ?? "" } });
+}
+
+loadSpec("001-comisiones");
+seedRun(tasksById.get("R1-T1"), "completed", "El reembolso se restaba en fees.rs y otra vez en monthly_report.rs. Lo dejé solo en el agregado mensual y añadí un test con un reembolso parcial.",
+  { exitCode: 0, stdout: "running 12 tests\ntest result: ok. 12 passed; 0 failed" });
+seedRun(tasksById.get("R1-T4"), "interrupted", "Generé la cabecera del CSV y empecé con el formato de montos");
+seedRun(tasksById.get("R1-T5"), "failed", "Documenté los campos en docs/reporte.md.", { exitCode: 1, stderr: "falta la descripción de: fee_total, refund_total" });
+
+async function streamTask(entry, run, resumed) {
+  const { task } = entry;
+  const threadId = run.thread_id;
+  const turnId = `turn-${task.id}-${++counter}`;
+  const send = (event) => taskEvent({ type: "session", taskId: task.id, event: { threadId, turnId, ...event } });
+  let text = "";
+  const say = async (words, pause = 30) => {
+    for (const word of words.split(/(?<= )/)) {
+      if (run.stop) return;
+      send({ type: "agentDelta", delta: word });
+      run.record("item/agentMessage/delta", { threadId, turnId, delta: word });
+      text += word;
+      await wait(pause);
+    }
+  };
+  await wait(300);
+  if (resumed) run.record("thread.resumed", { threadId });
+  send({ type: "turnStarted" });
+  run.record("turn/started", { threadId, turn: { id: turnId } });
+  if (BEHAVIOUR[task.id] === "approval") {
+    await say("Agrego el caso de diciembre con dos festivos y verifico el corte del día 15. ");
+    const item = { id: `cmd-${turnId}`, type: "commandExecution", command: "cargo test -p reports holidays" };
+    send({ type: "itemStarted", item });
+    run.record("item/commandExecution/requestApproval", { threadId, turnId, itemId: item.id, command: item.command });
+    send({ type: "approvalRequested", requestId: 950 + counter, kind: "command", itemId: item.id, command: item.command, cwd: project,
+      reason: "fuera de la política del sandbox: necesita escribir en target/ compartido" });
+    const decision = await new Promise((resolve) => { run.answer = resolve; });
+    run.answer = null;
+    const accepted = decision.startsWith("accept");
+    if (accepted) send({ type: "commandOutput", itemId: item.id, delta: "test holidays::december ... ok\n" });
+    const done = { ...item, status: accepted ? "completed" : "declined", exitCode: accepted ? 0 : null, aggregatedOutput: accepted ? "test holidays::december ... ok" : "" };
+    send({ type: "itemCompleted", item: done });
+    run.record("item/completed", { threadId, turnId, item: done });
+    await say(accepted ? "El test pasa con los dos festivos." : "Sin permiso para ejecutar el test; dejo el caso escrito.");
+  } else if (BEHAVIOUR[task.id] === "slow") {
+    await say(`${resumed ? "Retomo desde la cabecera ya escrita. " : ""}Sigo con el formato de montos: separador decimal según la configuración regional, columnas fijas para fee_total y refund_total, y una fila de totales al final que cuadra con el agregado mensual.`, 220);
+  } else {
+    await say("Listo: revisé el código, apliqué el cambio dentro del alcance y dejé la evidencia en los tests.");
+  }
+  const status = run.stop ? "interrupted" : "completed";
+  send({ type: "turnCompleted", status, error: null });
+  run.record("turn.completed", { taskId: task.id, threadId, turnId, status, text });
+  if (status === "completed") {
+    await wait(900);
+    run.record("task.verified", { taskId: task.id, command: task.verify, result: { exitCode: 0, stdout: "test result: ok. 14 passed; 0 failed", stderr: "" } });
+  }
+  run.status = status;
+  task.status = status;
+  return { task_id: task.id, route_id: run.route_id, run_id: run.run_id, thread_id: threadId, status, text };
+}
+
+// The gates of TaskCoordinator::dispatch_task: no turn when one fails.
+function gate(entry) {
+  const { task } = entry;
+  const receipt = (status, text) => ({ task_id: task.id, route_id: null, run_id: null, thread_id: null, status, text });
+  if (!OPEN.includes(task.status)) return receipt(task.status, "task is not ready for dispatch");
+  if (!depsDone(entry)) { task.status = "blocked"; return receipt("blocked", "task has incomplete dependencies"); }
+  if (task.approval !== "not_required" && entry.approval?.decision === "denied") { task.status = "blocked"; return receipt("blocked", "manual approval denied"); }
+  if (task.approval !== "not_required" && entry.approval?.decision !== "approved") { task.status = "awaiting_approval"; return receipt("awaiting_approval", "explicit approval required"); }
+  return null;
+}
+
+async function execute(entry, run, resumed = false) {
+  activeRun.taskId = entry.task.id;
+  activeRun.run = run;
+  entry.task.status = "running";
+  run.status = "running";
+  return streamTask(entry, run, resumed);
+}
+
+function claim(label) {
+  if (activeRun) throw new Error(`ya hay una ejecución en curso: ${activeRun.label}`);
+  activeRun = { label, taskId: null, run: null };
+}
+
+const receiptOnly = (taskId, status, text) => ({ task_id: taskId, route_id: null, run_id: null, thread_id: null, status, text });
+
+function taskCommand(cmd, args) {
+  const entry = args.taskId ? tasksById.get(args.taskId) : null;
+  if (args.taskId && !entry) throw new Error(`la tarea ${args.taskId} no existe`);
+  switch (cmd) {
+    case "spec_files":
+      return specFiles.map((file) => (file.error
+        ? { path: specPath(file.slug), specId: null, title: null, tasks: 0, loaded: false, error: file.error }
+        : { path: specPath(file.slug), specId: file.spec.specId, title: file.spec.title, tasks: file.spec.tasks.length, loaded: loadedSpecs.has(file.spec.specId), error: null }));
+    case "spec_load": return loadSpec(specFiles.find((file) => specPath(file.slug) === args.path)?.slug);
+    case "spec_list": return [...loadedSpecs.keys()].map(storedSpec).sort((a, b) => Number(b.loadedAt) - Number(a.loadedAt));
+    case "task_board": return board(args.specId);
+    case "task_active": return activeRun ? activeRun.taskId ?? activeRun.label : null;
+    case "task_set_tier":
+      if (["running", "completed"].includes(entry.task.status)) throw new Error(`no se puede cambiar el tier de ${args.taskId}: no existe, está en curso o ya terminó`);
+      entry.tierOverride = args.tier ?? null;
+      return null;
+    case "task_decide":
+      entry.approval = { task_id: args.taskId, decision: args.approved ? "approved" : "denied", reason: "decidido en la app" };
+      return null;
+    case "task_run_events": return [...tasksById.values()].flatMap((item) => item.runs).find((run) => run.run_id === args.runId)?.events ?? [];
+    case "task_retry":
+      if (!["interrupted", "failed"].includes(entry.task.status)) return receiptOnly(args.taskId, entry.task.status, "task is not retryable");
+      entry.task.status = "ready";
+      return receiptOnly(args.taskId, "ready", "task ready for retry");
+    case "task_recover":
+      entry.task.status = "interrupted";
+      return receiptOnly(args.taskId, "interrupted", "recuperada desde la app");
+    case "task_interrupt":
+      if (activeRun?.taskId !== args.taskId) throw new Error(`la tarea ${args.taskId} no se está ejecutando`);
+      activeRun.run.stop = true;
+      return null;
+    case "task_approval":
+      if (activeRun?.taskId !== args.taskId || !activeRun.run?.answer) throw new Error(`la tarea ${args.taskId} no se está ejecutando`);
+      activeRun.run.answer(args.decision);
+      return null;
+    case "task_dispatch":
+      claim(args.taskId);
+      (async () => {
+        const receipt = gate(entry) ?? await execute(entry, newRun(entry));
+        activeRun = null;
+        taskEvent({ type: "finished", taskId: entry.task.id, receipt });
+      })();
+      return null;
+    case "task_dispatch_ready":
+      claim(`spec ${args.specId}`);
+      (async () => {
+        const receipts = [];
+        for (;;) {
+          const next = [...tasksById.values()].find((item) => item.specId === args.specId && OPEN.includes(item.task.status)
+            && depsDone(item) && !receipts.some((receipt) => receipt.task_id === item.task.id));
+          if (!next) break;
+          receipts.push(gate(next) ?? await execute(next, newRun(next)));
+        }
+        activeRun = null;
+        for (const receipt of receipts) taskEvent({ type: "finished", taskId: receipt.task_id, receipt });
+      })();
+      return null;
+    case "task_resume": {
+      const owner = [...tasksById.values()].find((item) => item.runs.some((run) => run.run_id === args.runId));
+      const run = owner?.runs.find((item) => item.run_id === args.runId);
+      if (!run) throw new Error(`la ejecución ${args.runId} no existe`);
+      claim(owner.task.id);
+      run.stop = false;
+      (async () => {
+        const receipt = await execute(owner, run, true);
+        activeRun = null;
+        taskEvent({ type: "finished", taskId: owner.task.id, receipt });
+      })();
+      return null;
+    }
+    default: throw new Error(`Unexpected command: ${cmd}`);
+  }
+}
+
 mockIPC(async (cmd, args) => {
+  // Tauri serializes every reply; a clone keeps the mock from sharing state.
+  if (cmd.startsWith("spec_") || cmd.startsWith("task_")) return structuredClone(taskCommand(cmd, args));
   switch (cmd) {
     case "router_config": return config;
     case "router_decide": await wait(400); return decide(args.prompt);
@@ -162,7 +423,6 @@ mockIPC(async (cmd, args) => {
       return null;
     }
     case "chat_interrupt": return null;
-    case "local_snapshot": return { state_path: "fixture.sqlite3", initialized: false, tasks: [], task_total: 0, status_counts: {}, milestones: [], runs: [], approvals: [], errors: [], error_count: 0 };
     default: throw new Error(`Unexpected command: ${cmd}`);
   }
 }, { shouldMockEvents: true });

@@ -310,13 +310,15 @@ impl TaskService {
             });
             match result {
                 Ok(receipts) => {
+                    // As in `finish`: listeners that ask what is running must
+                    // already see the slot free.
+                    work.release();
                     for receipt in receipts {
                         (work.sink)(TaskEvent::Finished {
                             task_id: receipt.task_id.clone(),
                             receipt,
                         });
                     }
-                    work.release();
                 }
                 Err(error) => work.finish(&spec_id, Err(error)),
             }

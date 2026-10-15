@@ -25,7 +25,7 @@ coordinador. Escenarios A06–A10 y A12.
 ## R004-T004 · Comandos Tauri y ejecución en segundo plano
 
 Comandos para listar y cargar specs, aprobar, cambiar tier, ejecutar, detener,
-reintentar, reanudar y recuperar, con eventos en `roudex://session`.
+reintentar, reanudar y recuperar, con eventos en `roudex://task`.
 Escenarios A01, A05–A07 y A09.
 
 ## R004-T005 · Pantalla Tareas
