@@ -588,11 +588,7 @@ fn resume_uses_the_immutable_assignment_when_the_manifest_changes() {
     );
     let verification = fixture.requests("command/exec");
     assert_eq!(
-        verification[0]["message"]["params"]["command"]
-            .as_array()
-            .unwrap()
-            .last()
-            .unwrap(),
+        verification[0]["message"]["params"]["env"]["ROUDEX_VERIFY"],
         "echo verified"
     );
 }

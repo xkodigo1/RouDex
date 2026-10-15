@@ -519,8 +519,11 @@ pub(crate) fn task_verify_params(task: &TaskDefinition) -> Result<Value, AppServ
         .join("target")
         .join("roudex-verification")
         .join(task_directory);
+    // On Windows the command reaches cmd.exe through an environment variable.
+    // As an argument, process quoting would escape its double quotes as \",
+    // which cmd.exe does not read, and any quoted argument would break.
     let command = if cfg!(windows) {
-        vec!["cmd.exe", "/D", "/S", "/C", task.verify.as_str()]
+        vec!["cmd.exe", "/D", "/C", "%ROUDEX_VERIFY%"]
     } else {
         vec!["sh", "-c", task.verify.as_str()]
     };
@@ -528,7 +531,7 @@ pub(crate) fn task_verify_params(task: &TaskDefinition) -> Result<Value, AppServ
         "command": command, "cwd": cwd,
         "sandboxPolicy": task_sandbox_policy(task)?, "timeoutMs": 120000,
         "env": { "ROUDEX_ROUTER_INTERNAL": "1", "ROUDEX_ACTIVE_TASK_ID": task.id,
-            "CARGO_TARGET_DIR": cargo_target_dir }
+            "CARGO_TARGET_DIR": cargo_target_dir, "ROUDEX_VERIFY": task.verify }
     }))
 }
 
@@ -633,5 +636,55 @@ mod tests {
         );
         assert_eq!(discover_codex(None, None), PathBuf::from("codex"));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A verify command reaches the shell as written, quotes included, after
+    /// the same argument quoting Codex applies when it starts the process.
+    #[test]
+    fn verify_commands_keep_their_quotes() {
+        let cwd = std::env::temp_dir().join(format!("roudex-verify-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::write(cwd.join("a b.txt"), "ok").unwrap();
+        let run = |verify: &str| {
+            let task: TaskDefinition = serde_json::from_value(json!({
+                "id": "T-1", "title": "t", "prompt": "p", "depends_on": [], "status": "ready",
+                "tier": "economico", "approval": "not_required", "scope": ["."],
+                "cwd": cwd, "sandbox": { "type": "workspaceWrite", "writable_roots": ["."] },
+                "acceptance": ["a"], "verify": verify
+            }))
+            .unwrap();
+            let params = task_verify_params(&task).unwrap();
+            let argv: Vec<&str> = params["command"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|arg| arg.as_str().unwrap())
+                .collect();
+            let mut command = Command::new(argv[0]);
+            command.args(&argv[1..]).current_dir(&cwd);
+            for (key, value) in params["env"].as_object().unwrap() {
+                command.env(key, value.as_str().unwrap());
+            }
+            let output = command.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            (output.status.code(), stdout)
+        };
+        if cfg!(windows) {
+            assert_eq!(run(r#"echo "a b""#), (Some(0), r#""a b""#.to_owned()));
+            assert_eq!(
+                run(r#"if exist "a b.txt" (exit 0) else (exit 7)"#).0,
+                Some(0)
+            );
+            assert_eq!(
+                run(r#"if exist "c d.txt" (exit 0) else (exit 7)"#).0,
+                Some(7)
+            );
+            assert_eq!(run(r#"echo "x" && exit 3"#).0, Some(3));
+        } else {
+            assert_eq!(run(r#"test -f "a b.txt""#).0, Some(0));
+            assert_eq!(run(r#"test -f "c d.txt""#).0, Some(1));
+            assert_eq!(run(r#"echo "x" && exit 3"#).0, Some(3));
+        }
+        let _ = std::fs::remove_dir_all(cwd);
     }
 }

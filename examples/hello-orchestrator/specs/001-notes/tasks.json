@@ -1,0 +1,50 @@
+{
+  "spec_id": "hello-001-notes",
+  "title": "Notes file for the orchestrator example",
+  "version": 1,
+  "milestones": [
+    {
+      "id": "H1",
+      "title": "Notes",
+      "task_ids": ["HELLO-T1", "HELLO-T2"]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "HELLO-T1",
+      "milestone": "H1",
+      "title": "Create the notes file",
+      "prompt": "Create a file named NOTES.md in the current folder. Its first line must be exactly \"# Notes\" and its second line one sentence saying that RouDex routes each task to the right model. Do not create, change or delete any other file, and do not run commands.",
+      "depends_on": [],
+      "status": "planned",
+      "tier": "economico",
+      "approval": "not_required",
+      "scope": ["NOTES.md"],
+      "cwd": ".",
+      "sandbox": { "type": "workspaceWrite", "writable_roots": ["."] },
+      "acceptance": [
+        "NOTES.md exists and starts with the line \"# Notes\".",
+        "No other file is created or changed."
+      ],
+      "verify": "git grep --no-index -q -e \"# Notes\" -- NOTES.md"
+    },
+    {
+      "id": "HELLO-T2",
+      "milestone": "H1",
+      "title": "List the router tiers",
+      "prompt": "Append to NOTES.md a section titled \"## Tiers\" with the three RouDex tiers as a list, one per line: economico, estandar and fuerte. Keep the existing lines as they are. Do not create, change or delete any other file, and do not run commands.",
+      "depends_on": ["HELLO-T1"],
+      "status": "planned",
+      "tier": "economico",
+      "approval": "manual",
+      "scope": ["NOTES.md"],
+      "cwd": ".",
+      "sandbox": { "type": "workspaceWrite", "writable_roots": ["."] },
+      "acceptance": [
+        "NOTES.md keeps its first two lines.",
+        "NOTES.md lists economico, estandar and fuerte under \"## Tiers\"."
+      ],
+      "verify": "git grep --no-index -q -e fuerte -- NOTES.md"
+    }
+  ]
+}

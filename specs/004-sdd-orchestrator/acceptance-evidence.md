@@ -18,7 +18,7 @@ pendientes se cierran en las tareas que los cubren.
 | A10 reanudar y reintentar | `task_coordinator::resume_reuses_run_and_thread_and_is_idempotent_after_completion`, `missing_recovery_identity_is_durably_blocked_until_an_explicit_retry`; fixture | OK |
 | A11 CLI | `task_cli::spec_load_translates_legacy_profiles_and_reports_it`, `cli_approval_denial_and_runtime_failure_keep_the_task_closed`, `batch_cli_observes_dependencies_approvals_and_exposes_persisted_status`; `task_coordinator::cli_runs_decline_approvals_and_keep_them_as_evidence` | OK |
 | A12 turnos internos | `task_cli::either_worker_marker_prevents_nested_lifecycle_commands`, `app_server_protocol` (entorno de la verificación) | OK |
-| A13 spec de ejemplo con Codex real | App real | Pendiente (R004-T007) |
+| A13 spec de ejemplo con Codex real | CLI con Codex real (abajo); app real | OK en la CLI; app pendiente |
 
 ## A01 y A07 · Pantalla Tareas en el fixture
 
@@ -103,3 +103,39 @@ tareas simulados y los eventos de `roudex://task` emitidos como lo hace
   - `styles.css` se retiró y `theme.css` es la única hoja.
   - Con la ventana emulada a 1280×720 no hay desbordamiento; la barra superior
     mide 44 px y la lista 340 px, igual que antes.
+
+## A13 · Spec de ejemplo con Codex real
+
+`examples/hello-orchestrator`, copiada fuera del repositorio. `router-cli`
+(debug) usa un `LOCALAPPDATA` aislado, sin `router.toml` (tiers por
+defecto), y Codex `codex-cli 0.162.0-alpha.17.2` de Codex Desktop.
+
+1. **Primer intento, 2026-10-14 20:25: falló la verificación de `HELLO-T1`.**
+   - El turno fue correcto: `gpt-6-luna` `high` (economico) creó
+     `NOTES.md` en 12 s.
+   - La verificación `git grep --no-index -q -e "# Notes" -- NOTES.md`
+     terminó con 128: «--no-index or --untracked cannot be used with revs».
+   - Causa: `cmd.exe` recibía `\"# Notes\"`. Se reprodujo fuera de Codex
+     y se corrigió pasando el comando en `ROUDEX_VERIFY` (commit «fix: keep
+     quotes in task verify commands on Windows», con prueba unitaria).
+2. **Segundo intento con el arreglo, 2026-10-14 20:29, desde cero:**
+   - `spec-load` → `readyTaskIds: ["HELLO-T1"]`, sin avisos.
+   - `task-dispatch` (9 s) → `HELLO-T1 completed`, verificado; `HELLO-T2
+     awaiting_approval` («explicit approval required»).
+   - `task-approve HELLO-T2` → `task-dispatch` (14 s) → `HELLO-T2
+     completed`, verificado.
+   - `NOTES.md` quedó con «# Notes», la frase pedida y `## Tiers` con los
+     tres tiers. No hay otros archivos nuevos.
+   - Las dos ejecuciones registran `gpt-6-luna` `high` y el tier
+     `economico`.
+3. **Turnos internos (A12) en real:**
+   - Codex corrió el hook de Codex Desktop del usuario en cada turno
+     (`hook/started` → `hook/completed` en 299 ms, sin entradas).
+   - El hook vio `ROUDEX_ROUTER_INTERNAL` y no añadió contexto.
+4. **Observación sobre el sandbox de Windows:**
+   - Codex dejó corriendo `codex-windows-sandbox-setup.exe`
+     (`read-acls-only`, `refresh_only`) después de terminar la CLI.
+   - Ese proceso heredó la salida estándar, así que un script que lee la CLI
+     por tubería espera hasta que termine.
+   - No afecta a la app, que lee el protocolo y no espera al cierre de la
+     tubería.

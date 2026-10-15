@@ -72,6 +72,7 @@ fn verification_passes_a_deterministic_isolated_cargo_target_per_task() {
         );
         assert_eq!(request["env"]["ROUDEX_ROUTER_INTERNAL"], "1");
         assert_eq!(request["env"]["ROUDEX_ACTIVE_TASK_ID"], id);
+        assert_eq!(request["env"]["ROUDEX_VERIFY"], "cargo test --workspace");
         assert_eq!(request["cwd"], absolute_cwd.to_string_lossy().as_ref());
         assert_eq!(request["sandboxPolicy"]["networkAccess"], false);
     }

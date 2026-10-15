@@ -8,8 +8,8 @@ Se ejecuta sobre `codex app-server` (stdio). Claude será el segundo runtime.
 
 ## Estado
 
-La versión actual es `v0.7.0` (integración con Codex Desktop). La app de
-escritorio tiene tres pantallas:
+La versión actual es `v0.8.0` (orquestador de specs). La app de escritorio
+tiene cuatro pantallas:
 
 - **Resumen**: tokens del año y de hoy, calendario de actividad por día,
   tokens por modelo, turnos por tier, límites de uso, hilos recientes y los
@@ -18,6 +18,11 @@ escritorio tiene tres pantallas:
   decisión del router de cada turno, aprobaciones, renombrar y archivar.
 - **Proyectos**: nuevo chat sobre un fondo ASCII animado; el router analiza el
   mensaje y puedes cambiar el tier antes de enviarlo.
+- **Tareas**: carga las specs del proyecto (`specs/*/tasks.json`) y ejecuta sus
+  tareas con Codex en orden de dependencias. Cada tarea va por el router y se
+  verifica con su comando; puedes aprobar, cambiar el tier, detener, reanudar y
+  reintentar. Consulta [docs/orchestrator.md](docs/orchestrator.md) y el
+  ejemplo [examples/hello-orchestrator](examples/hello-orchestrator).
 
 El hook de Codex Desktop añade a cada mensaje el tier recomendado y avisa de los
 mensajes de riesgo; consulta [docs/desktop-hook.md](docs/desktop-hook.md).
