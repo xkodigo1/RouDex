@@ -2,8 +2,8 @@
   "spec_id": "005-beta",
   "title": "Cross-platform beta: three systems, installers, savings estimate and two languages",
   "version": 1,
-  "status": "draft",
-  "planning_assumption": "Plan to v1.0.0 (Codex only) approved in chat on 2026-10-14. The user chose on 2026-10-14: user prices in router.toml, all data in ~/.roudex, NSIS + universal DMG + deb + AppImage, and the system language with a selector that the hook follows. Tasks run outside the coordinator (D8) and declare tier instead of profile/model/effort, so the validator's routed-field warnings are expected. No task starts until the user approves this spec.",
+  "status": "running",
+  "planning_assumption": "Plan to v1.0.0 (Codex only) approved in chat on 2026-10-14. The user chose on 2026-10-14: user prices in router.toml, all data in ~/.roudex, NSIS + universal DMG + deb + AppImage, and the system language with a selector that the hook follows. Tasks run outside the coordinator (D8) and declare tier instead of profile/model/effort, so the validator's routed-field warnings are expected. The user approved this spec and all ten tasks in chat on 2026-10-14.",
   "execution_policy": {
     "coordinator": "none: implemented directly outside the coordinator (AGENTS.md, decision D8)",
     "network_access": true,
@@ -16,7 +16,7 @@
     {
       "id": "H1",
       "title": "Beta multiplataforma",
-      "status": "planned",
+      "status": "running",
       "release_target": "v0.9.0",
       "depends_on": [],
       "task_ids": [

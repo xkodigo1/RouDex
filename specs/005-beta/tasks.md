@@ -2,7 +2,7 @@
 
 `tasks.json` es el contrato; este archivo lo resume. Las tareas declaran
 `tier` (como en la spec 004) y se implementan fuera del coordinador (decisión
-D8). Ninguna empieza hasta que el usuario apruebe la spec.
+D8). El usuario aprobó la spec el 2026-10-14.
 
 ```text
 T001 datos ─▶ T002 Codex ─▶ T003 idioma ─▶ T004 coste ─▶ T005 Codex Desktop
