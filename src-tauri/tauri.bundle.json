@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "Routes each Codex task to the right model",
+    "longDescription": "RouDex routes each Codex task to the model it needs: simple work goes to cheaper models, complex or risky work to strong ones. Local-first, with a Codex Desktop hook and a spec task orchestrator.",
+    "category": "DeveloperTool",
+    "externalBin": ["binaries/router-cli"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+}

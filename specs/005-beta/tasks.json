@@ -513,7 +513,7 @@
         "R005-T001",
         "R005-T003"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "fuerte",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -544,7 +544,14 @@
       "verification_artifact": "specs/005-beta/acceptance-evidence.md",
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "@tauri-apps/cli 2.12.1 (published 2026-09-30) as a pinned ui dev dependency; scripts/bundle.mjs builds router-cli in release as the externalBin (lipo for universal-apple-darwin) and runs tauri build with src-tauri/tauri.bundle.json (NSIS currentUser, ad-hoc macOS signing, deb and AppImage); src-tauri/binaries is ignored.",
+        "desktop_hook::install shared by router-cli hook-install and the new desktop_hook_install command; desktop_hook_summary reports whether a router-cli is bundled; the Codex Desktop card shows Instalar hook / Reinstalar hook, or the CLI command when running from source (fixture checked both).",
+        "Windows smoke (2026-10-15): node scripts/bundle.mjs --bundles nsis produced RouDex_0.8.0_x64-setup.exe (3.43 MiB); silent install to a temporary folder put roudex-desktop.exe, router-cli.exe and uninstall.exe there; the app, started with temporary ROUDEX_HOME, CODEX_HOME and LOCALAPPDATA and driven through the WebView2 DevTools port, served tauri.localhost, reported bundled=true, stored language es, and its Instalar hook button copied router-cli to the home bin and wrote one hooks.json entry; a second install replaced that entry; silent uninstall removed the install folder and kept the data and the hook binary. The uninstaller keeps HKCU Software/roudex/RouDex (Tauri removes it only with delete app data); the test's key was removed afterwards.",
+        "cargo test --workspace: 149 passed; clippy -D warnings and fmt clean; pnpm --dir ui build passes.",
+        "Commit fa2caae."
+      ],
       "release_target": "v0.9.0"
     },
     {

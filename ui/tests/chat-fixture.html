@@ -48,9 +48,11 @@ function summaries(includeArchived) {
 }
 
 // ?desktop=empty shows the hook as not installed and without prompts.
+let hookInstalled = false;
 function desktopHook() {
   const empty = new URLSearchParams(location.search).get("desktop") === "empty";
-  const hook = { path: "C:\Users\dev\.codex\hooks.json", command: empty ? null : "C:/tools/router-cli.exe hook" };
+  const bundled = new URLSearchParams(location.search).get("bundled") === "1";
+  const hook = { path: String.raw`C:\Users\dev\.codex\hooks.json`, bundled, command: empty && !hookInstalled ? null : "C:/Users/dev/.roudex/bin/router-cli.exe hook" };
   if (empty) return { hook, summary: { days: 30, prompts: 0, today: 0, economico: 0, estandar: 0, fuerte: 0, unruled: 0, warned: 0, blocked: 0, on_recommended_model: 0, last_at: null } };
   return { hook, summary: { days: 30, prompts: 148, today: 9, economico: 61, estandar: 63, fuerte: 24, unruled: 63, warned: 7, blocked: 1, on_recommended_model: 92, last_at: String(now() - 240) } };
 }
@@ -431,6 +433,11 @@ mockIPC(async (cmd, args) => {
     case "chat_turns": return turns[args.threadId] ?? [];
     case "dashboard_summary": return dashboard();
     case "desktop_hook_summary": return desktopHook();
+    case "desktop_hook_install":
+      if (new URLSearchParams(location.search).get("bundled") !== "1") throw new Error("this build has no bundled router-cli; run router-cli hook-install from a terminal");
+      hookInstalled = true;
+      return { hooksPath: String.raw`C:\Users\dev\.codex\hooks.json`, command: "C:/Users/dev/.roudex/bin/router-cli.exe hook",
+        binary: String.raw`C:\Users\dev\.roudex\bin\router-cli.exe`, replaced: 0, removedLegacy: 0, legacyManagedHook: null };
     case "usage_summary": return { models: [], rateLimits: limits };
     case "thread_rename": { const t = threads.find((x) => x.thread_id === args.threadId); if (t) t.title = args.title.trim(); return Boolean(t); }
     case "thread_archive": { const t = threads.find((x) => x.thread_id === args.threadId); if (t) t.archived = args.archived; return Boolean(t); }

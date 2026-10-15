@@ -12,8 +12,8 @@ cubren.
 | A03 `ROUDEX_HOME` | Todas las pruebas de `task_cli` y `hook_cli` aíslan con `ROUDEX_HOME`; el hook lee `router.toml` de ahí (`hook_cli::the_blocking_option_blocks_risky_prompts`) | OK |
 | A04 encontrar Codex | `codex::tests::windows_uses_the_path_then_the_newest_desktop_copy`, `macos_finds_the_codex_app_in_every_known_layout`, `linux_looks_in_the_usual_user_and_system_folders`, `the_override_and_codex_path_come_first` | OK |
 | A05 Codex ausente | `codex::tests::a_missing_codex_lists_every_place_tried`, `task_cli::a_missing_codex_says_where_it_looked_and_how_to_set_codex_path` | OK |
-| A06 instalar el hook desde la app | | Pendiente (R005-T007) |
-| A07 sin binario incluido | | Pendiente (R005-T007) |
+| A06 instalar el hook desde la app | Instalador NSIS real en Windows, app aislada y pulsada por DevTools (abajo); `hook_cli::install_*` | OK |
+| A07 sin binario incluido | Fixture sin `?bundled=1`; `desktop_hook_install` sin binario devuelve el error con el comando | OK |
 | A08 workflow de release | | Pendiente (R005-T008) |
 | A09 ahorro con precios | `savings::tests::*`, `tiers::tests::prices_are_read_by_model_and_must_not_be_negative`; tarjeta en el fixture | OK |
 | A10 sin precios | `savings::tests::without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept`; tarjeta en el fixture | OK |
@@ -158,3 +158,41 @@ Fixture `?view=resumen`, 2026-10-15:
   tokens por tier y el fragmento con `[prices."gpt-6.1-sol"]` y
   `[prices."gpt-6-luna"]` listo para pegar.
 - **Diseño:** a 1280×900 la tarjeta sigue el estilo de Resumen.
+
+## A06–A07 · Instalador de Windows (R005-T007)
+
+2026-10-15, Windows 11:
+
+1. **Build:** `node scripts/bundle.mjs --bundles nsis` compila `router-cli`
+   y la app en release, descarga NSIS 3.11 y produce
+   `RouDex_0.8.0_x64-setup.exe` (3,43 MiB). La versión sube a 0.9.0 en
+   R005-T010.
+2. **Instalación silenciosa** en una carpeta temporal
+   (`/S /D=…\install`): la carpeta queda con `roudex-desktop.exe`,
+   `router-cli.exe` y `uninstall.exe`.
+3. **App instalada** con `ROUDEX_HOME`, `CODEX_HOME` y `LOCALAPPDATA`
+   temporales, manejada por el puerto de DevTools de WebView2:
+   - Sirve la interfaz desde `tauri.localhost` y guarda
+     `language = "es"` (idioma del sistema).
+   - `desktop_hook_summary` informa `bundled: true`, y la tarjeta muestra
+     «hook no instalado · Instalar hook».
+   - Al pulsar el botón:
+     - `router-cli.exe` (3 721 216 bytes, igual que el incluido) se copia
+       a `home\bin`;
+     - `hooks.json` queda con una sola entrada `UserPromptSubmit`;
+     - la tarjeta pasa a «hook instalado · Reinstalar hook» con un aviso.
+   - Una segunda instalación reemplaza esa entrada (`replaced: 1`).
+4. **Desinstalación silenciosa:**
+   - Borra la carpeta de instalación y conserva los datos y la copia del
+     hook. Desinstalar la app no quita el hook; para eso está
+     `router-cli hook-uninstall`.
+   - Deja `HKCU\Software\roudex\RouDex` con la ruta de instalación, como
+     hace Tauri salvo que se marque «borrar datos de la app». La clave de la
+     prueba se borró después.
+   - En una instalación real esa clave es la carpeta por defecto:
+     `%LOCALAPPDATA%\RouDex`. El desinstalador solo borra sus propios
+     archivos, con `RMDir` no recursivo, así que no toca la copia de
+     respaldo de los datos de antes de 0.9.0.
+5. **Sin binario incluido (fixture):** la tarjeta no ofrece el botón y
+   muestra «Sin instalador, instálalo desde una terminal con
+   `router-cli hook-install`».

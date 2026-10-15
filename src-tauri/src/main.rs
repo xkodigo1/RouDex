@@ -221,13 +221,40 @@ fn desktop_hook_summary() -> Result<Value, String> {
         .and_then(|store| store.desktop_summary())
         .map_err(|error| error.to_string())?;
     let path = desktop_hook::hooks_path();
+    let bundled = bundled_router_cli().is_some();
     let hook = match desktop_hook::read_hooks(&path) {
-        Ok(document) => {
-            json!({ "path": path, "command": desktop_hook::installed_command(&document) })
+        Ok(document) => json!({ "path": path, "bundled": bundled,
+            "command": desktop_hook::installed_command(&document) }),
+        Err(error) => {
+            json!({ "path": path, "bundled": bundled, "command": null, "error": error })
         }
-        Err(error) => json!({ "path": path, "command": null, "error": error }),
     };
     Ok(json!({ "summary": summary, "hook": hook }))
+}
+
+/// The router-cli an installer put next to the app, if this is an installed
+/// build (spec 005, D3). Running from source there is none.
+fn bundled_router_cli() -> Option<std::path::PathBuf> {
+    let name = if cfg!(windows) {
+        "router-cli.exe"
+    } else {
+        "router-cli"
+    };
+    let candidate = std::env::current_exe().ok()?.parent()?.join(name);
+    candidate.is_file().then_some(candidate)
+}
+
+/// Install the Codex hook from the bundled router-cli, as
+/// `router-cli hook-install` does.
+#[tauri::command]
+async fn desktop_hook_install() -> Result<desktop_hook::Installed, String> {
+    blocking(|| {
+        let bundled = bundled_router_cli().ok_or(
+            "this build has no bundled router-cli; run router-cli hook-install from a terminal",
+        )?;
+        desktop_hook::install(&bundled)
+    })
+    .await
 }
 
 /// Threads for the thread list; all projects when `project` is omitted.
@@ -485,6 +512,7 @@ fn main() {
             usage_summary,
             dashboard_summary,
             desktop_hook_summary,
+            desktop_hook_install,
             spec_files,
             spec_load,
             spec_list,
