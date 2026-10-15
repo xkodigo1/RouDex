@@ -12,6 +12,9 @@ use thiserror::Error;
 pub enum AppServerError {
     #[error("could not start the local app server: {0}")]
     Start(#[source] std::io::Error),
+    /// Codex is not installed where RouDex looks; the message says where.
+    #[error("{0}")]
+    CodexMissing(String),
     #[error("app server transport error: {0}")]
     Transport(#[source] std::io::Error),
     #[error("app server protocol error: {0}")]
@@ -35,16 +38,8 @@ pub struct AppServerConfig {
 
 impl AppServerConfig {
     pub fn local(working_directory: impl AsRef<Path>) -> Self {
-        let program = std::env::var_os("ROUDEX_CODEX_BIN")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                discover_codex(
-                    std::env::var_os("PATH").as_deref(),
-                    std::env::var_os("LOCALAPPDATA").as_deref(),
-                )
-            });
         Self {
-            program,
+            program: crate::codex::program(),
             arguments: vec!["app-server".to_owned(), "--stdio".to_owned()],
             working_directory: working_directory.as_ref().to_path_buf(),
             service_name: "roudex".to_owned(),
@@ -56,43 +51,6 @@ impl AppServerConfig {
         self.active_task_id = Some(task_id.into());
         self
     }
-}
-
-/// Locate the Codex executable: `codex` on PATH first, then the newest copy
-/// installed by Codex Desktop (`%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\`), whose
-/// folder changes on every update. Falls back to the bare name.
-pub fn discover_codex(
-    path_env: Option<&std::ffi::OsStr>,
-    local_app_data: Option<&std::ffi::OsStr>,
-) -> PathBuf {
-    let names: &[&str] = if cfg!(windows) {
-        &["codex.exe", "codex.cmd"]
-    } else {
-        &["codex"]
-    };
-    if let Some(found) = path_env
-        .into_iter()
-        .flat_map(std::env::split_paths)
-        .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
-        .find(|candidate| candidate.is_file())
-    {
-        return found;
-    }
-    let desktop =
-        local_app_data.map(|root| Path::new(root).join("OpenAI").join("Codex").join("bin"));
-    desktop
-        .and_then(|bin| std::fs::read_dir(bin).ok())
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .map(|entry| entry.path().join(names[0]))
-        .filter_map(|candidate| {
-            let modified = candidate.metadata().ok()?.modified().ok()?;
-            Some((modified, candidate))
-        })
-        .max()
-        .map(|(_, candidate)| candidate)
-        .unwrap_or_else(|| PathBuf::from("codex"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,7 +85,13 @@ impl AppServerClient {
             command.env("ROUDEX_ACTIVE_TASK_ID", task_id);
         }
 
-        let mut child = command.spawn().map_err(AppServerError::Start)?;
+        let mut child = command.spawn().map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                AppServerError::CodexMissing(crate::codex::start_error(&error))
+            } else {
+                AppServerError::Start(error)
+            }
+        })?;
         let stdin = child
             .stdin
             .take()
@@ -608,35 +572,6 @@ impl Drop for AppServerClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, SystemTime};
-
-    fn executable(dir: &Path, name: &str, age_secs: u64) -> PathBuf {
-        std::fs::create_dir_all(dir).unwrap();
-        let path = dir.join(name);
-        let file = std::fs::File::create(&path).unwrap();
-        file.set_modified(SystemTime::now() - Duration::from_secs(age_secs))
-            .unwrap();
-        path
-    }
-
-    #[test]
-    fn discovers_codex_on_path_before_desktop_copies() {
-        let root = std::env::temp_dir().join(format!("roudex-discover-{}", uuid::Uuid::new_v4()));
-        let name = if cfg!(windows) { "codex.exe" } else { "codex" };
-        let bin = root.join("OpenAI").join("Codex").join("bin");
-        executable(&bin.join("old-hash"), name, 3600);
-        let newest = executable(&bin.join("new-hash"), name, 10);
-        assert_eq!(discover_codex(None, Some(root.as_os_str())), newest);
-
-        let on_path = executable(&root.join("path-dir"), name, 7200);
-        let path_env = std::env::join_paths([root.join("missing"), root.join("path-dir")]).unwrap();
-        assert_eq!(
-            discover_codex(Some(path_env.as_os_str()), Some(root.as_os_str())),
-            on_path
-        );
-        assert_eq!(discover_codex(None, None), PathBuf::from("codex"));
-        let _ = std::fs::remove_dir_all(root);
-    }
 
     /// A verify command reaches the shell as written, quotes included, after
     /// the same argument quoting Codex applies when it starts the process.

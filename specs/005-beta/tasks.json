@@ -279,7 +279,7 @@
       "depends_on": [
         "R005-T001"
       ],
-      "status": "planned",
+      "status": "completed",
       "tier": "estandar",
       "approval": "not_required",
       "approval_requirements": "The user approves this spec in chat before any task starts; that approval covers implementation, local verification and merging each PR once CI is green. Tagging and the release follow the phase close (R005-T010).",
@@ -305,7 +305,13 @@
       "verification_artifact": null,
       "route_id": null,
       "run_id": null,
-      "evidence": [],
+      "evidence": [
+        "Executed outside the coordinator at the user's request (AGENTS.md, decision D8); route_id and run_id stay null.",
+        "router-core codex module: CodexSearch (ROUDEX_CODEX_BIN, codex_path in router.toml, PATH, then per-OS places: newest Codex Desktop copy on Windows; Codex.app in /Applications or ~/Applications with three layouts, Homebrew, /usr/local/bin and ~/.local/bin on macOS; ~/.local/bin, /usr/local/bin and ~/.npm-global/bin on Linux).",
+        "A missing Codex fails the app-server start with the places tried and how to set codex_path (AppServerError::CodexMissing, SessionError::Start).",
+        "cargo test --workspace: 134 passed (codex::tests x5 covering the three OS layouts, overrides and the error; task_cli::a_missing_codex_says_where_it_looked_and_how_to_set_codex_path); clippy -D warnings and fmt clean.",
+        "Commit 723d93b."
+      ],
       "release_target": "v0.9.0"
     },
     {
