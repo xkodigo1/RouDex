@@ -75,6 +75,30 @@ impl RouterStore {
         &self.path
     }
 
+    /// Keep what the classifier spent on one decision (the router's cost).
+    pub fn record_router_usage(
+        &self,
+        usage: &crate::classifier::RouterUsage,
+    ) -> Result<(), StoreError> {
+        let tokens = &usage.tokens;
+        self.connection.execute(
+            "INSERT INTO router_usage (created_at, model, effort, input_tokens, cached_input_tokens,
+                 output_tokens, reasoning_tokens, total_tokens)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                now_string(),
+                usage.model,
+                usage.effort,
+                tokens.input,
+                tokens.cached_input,
+                tokens.output,
+                tokens.reasoning,
+                tokens.total
+            ],
+        )?;
+        Ok(())
+    }
+
     fn migrate(&self) -> Result<(), StoreError> {
         self.connection.execute_batch(
             "PRAGMA foreign_keys = ON;
@@ -100,6 +124,16 @@ impl RouterStore {
                  created_at TEXT NOT NULL
              );
              CREATE INDEX IF NOT EXISTS idx_events_run_id ON events(run_id);
+             CREATE TABLE IF NOT EXISTS router_usage (
+                 created_at TEXT NOT NULL,
+                 model TEXT NOT NULL,
+                 effort TEXT NOT NULL,
+                 input_tokens INTEGER NOT NULL,
+                 cached_input_tokens INTEGER NOT NULL,
+                 output_tokens INTEGER NOT NULL,
+                 reasoning_tokens INTEGER NOT NULL,
+                 total_tokens INTEGER NOT NULL
+             );
              CREATE INDEX IF NOT EXISTS idx_runs_session_id ON runs(session_id);
              CREATE TABLE IF NOT EXISTS tasks (
                  task_id TEXT PRIMARY KEY,

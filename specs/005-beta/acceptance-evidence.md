@@ -15,9 +15,9 @@ cubren.
 | A06 instalar el hook desde la app | | Pendiente (R005-T007) |
 | A07 sin binario incluido | | Pendiente (R005-T007) |
 | A08 workflow de release | | Pendiente (R005-T008) |
-| A09 ahorro con precios | | Pendiente (R005-T004, R005-T006) |
-| A10 sin precios | | Pendiente (R005-T004, R005-T006) |
-| A11 coste del clasificador | | Pendiente (R005-T004) |
+| A09 ahorro con precios | `savings::tests::*`, `tiers::tests::prices_are_read_by_model_and_must_not_be_negative`; tarjeta en R005-T006 | OK (cálculo) |
+| A10 sin precios | `savings::tests::without_prices_no_money_is_estimated_but_tokens_by_tier_are_kept`; tarjeta en R005-T006 | OK (cálculo) |
+| A11 coste del clasificador | `router_classifier::app_server_classifier_runs_an_ephemeral_read_only_turn`, `savings::tests::the_classifier_counts_against_the_savings`, `the_store_adds_chat_turns_task_runs_and_the_classifier` | OK |
 | A12 Codex Desktop activado | | Pendiente (R005-T005, R005-T006) |
 | A13 Codex Desktop apagado | | Pendiente (R005-T005) |
 | A14 cambiar de idioma | Fixture (marco, navegación y avisos); pantallas en R005-T009 | En curso |
@@ -88,3 +88,29 @@ cubren.
     at 37%»), y guarda `en`; ES lo devuelve.
   - `systemLanguage()` da `en` para en-US, fr-FR y pt-BR, y `es` para
     es-ES y es-419.
+
+## A09–A11 · Detalle (R005-T004)
+
+- **Fórmula:**
+  - 1 M de entrada con 400 k en caché y 100 k de salida, a 2 / 0,5 / 10 USD
+    por millón, cuestan 0,6 × 2 + 0,4 × 0,5 + 0,1 × 10 = 2,4 USD.
+  - La entrada en caché nunca se cobra dos veces ni da negativa.
+- **Base:**
+  - Cada turno se compara con los mismos tokens al precio del modelo de
+    `fuerte`.
+  - Un turno de chat en `gpt-6-luna` (0,7) y uno de tareas en
+    `gpt-6.1-sol` (3,0) dan un coste de 3,7, una base de 6,0 y un ahorro
+    de 2,3.
+- **Clasificador:**
+  - El turno de clasificación del servidor falso informa 1230 tokens.
+  - La decisión los lleva en `router_usage`, y el ahorro los resta.
+- **Base local:**
+  - Se cuentan los turnos de chat de los últimos 30 días con tokens; uno de
+    hace 40 días y uno sin tokens quedan fuera.
+  - Las ejecuciones de tareas cuentan con la última notificación de tokens
+    de su evidencia.
+  - Se suman los registros de `router_usage`.
+- **Sin precios:**
+  - Coste, base y ahorro valen 0.
+  - Se cuentan los turnos sin precio y se listan los modelos sin precio; los
+    tokens por tier siguen disponibles.

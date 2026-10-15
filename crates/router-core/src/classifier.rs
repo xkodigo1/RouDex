@@ -1,4 +1,5 @@
 use crate::app_server::{AppServerClient, AppServerConfig, AppServerError};
+use crate::chat::TokenCounts;
 use crate::risk::{words, RiskMatch, RiskRules};
 use crate::tiers::{Language, ModelTarget, RouterConfig, Tier};
 use serde::{Deserialize, Serialize};
@@ -31,12 +32,27 @@ pub struct RouteDecision {
     pub source: DecisionSource,
     pub reason: String,
     pub risk: Vec<RiskMatch>,
+    /// What the classifier spent deciding, when it ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub router_usage: Option<RouterUsage>,
+}
+
+/// Tokens the model classifier used for one decision: the router's own cost.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouterUsage {
+    pub model: String,
+    pub effort: String,
+    pub tokens: TokenCounts,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Classification {
     pub tier: Tier,
     pub reason: String,
+    /// Tokens the classification turn used, when the runtime reported them.
+    #[serde(skip)]
+    pub usage: Option<TokenCounts>,
 }
 
 /// A model that classifies a prompt into a tier.
@@ -93,7 +109,16 @@ impl<'a> Router<'a> {
             return self.decision(tier, DecisionSource::Rule, reason, risk);
         }
         match classifier.classify(prompt, &self.config.classifier) {
-            Ok(result) => self.decision(result.tier, DecisionSource::Model, result.reason, risk),
+            Ok(result) => {
+                let mut decision =
+                    self.decision(result.tier, DecisionSource::Model, result.reason, risk);
+                decision.router_usage = result.usage.map(|tokens| RouterUsage {
+                    model: self.config.classifier.model.clone(),
+                    effort: self.config.classifier.effort.clone(),
+                    tokens,
+                });
+                decision
+            }
             Err(error) => self.decision(
                 self.config.fallback_tier,
                 DecisionSource::Fallback,
@@ -156,6 +181,7 @@ impl<'a> Router<'a> {
             source,
             reason,
             risk,
+            router_usage: None,
         }
     }
 }
@@ -278,7 +304,7 @@ impl AppServerClassifier {
 
 impl ModelClassifier for AppServerClassifier {
     fn classify(&mut self, prompt: &str, target: &ModelTarget) -> Result<Classification, String> {
-        let text = self
+        let (text, usage) = self
             .client
             .classify(
                 target,
@@ -288,7 +314,9 @@ impl ModelClassifier for AppServerClassifier {
                 classification_schema(),
             )
             .map_err(|error: AppServerError| error.to_string())?;
-        parse_classification(&text)
+        let mut classification = parse_classification(&text)?;
+        classification.usage = usage;
+        Ok(classification)
     }
 }
 
@@ -362,6 +390,7 @@ mod tests {
             Ok(Classification {
                 tier,
                 reason: "scripted".into(),
+                usage: None,
             }),
             0,
         )

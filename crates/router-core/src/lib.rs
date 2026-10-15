@@ -9,6 +9,7 @@ pub mod domain;
 pub mod paths;
 pub mod persistence;
 pub mod risk;
+pub mod savings;
 pub mod session;
 pub mod task_manifest;
 pub mod task_route;
@@ -23,7 +24,7 @@ pub use chat::{
 };
 pub use classifier::{
     escalate_local, route_local, AppServerClassifier, Classification, DecisionSource,
-    LocalClassifier, ModelClassifier, RouteDecision, Router,
+    LocalClassifier, ModelClassifier, RouteDecision, Router, RouterUsage,
 };
 pub use codex::{CodexNotFound, CodexSearch, Os};
 pub use coordinator::{
@@ -38,6 +39,7 @@ pub use domain::{
 pub use paths::Migration;
 pub use persistence::{RouterStore, StoreError, StoredSpec};
 pub use risk::{RiskMatch, RiskRules, RiskRulesError};
+pub use savings::{SavingsSummary, UsageSource};
 pub use session::{
     AccessMode, ApprovalDecision, ApprovalKind, EventSink, Session, SessionError, SessionEvent,
 };
@@ -48,6 +50,6 @@ pub use task_service::{
     SpecFile, TaskBoard, TaskCard, TaskConfigFactory, TaskEvent, TaskService, TaskSink,
 };
 pub use tiers::{
-    CatalogModel, DesktopHookConfig, Language, ModelTarget, RouterConfig, RouterConfigError, Tier,
-    TierTargets, ROUTER_CONFIG_VERSION,
+    CatalogModel, DesktopHookConfig, Language, ModelPrice, ModelTarget, RouterConfig,
+    RouterConfigError, Tier, TierTargets, ROUTER_CONFIG_VERSION,
 };

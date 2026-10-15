@@ -100,6 +100,15 @@ fn main() {
                 );
                 respond(
                     &mut stdout,
+                    json!({ "method": "thread/tokenUsage/updated", "params": {
+                        "threadId": "classifier-thread", "turnId": "classifier-turn", "tokenUsage": {
+                            "total": { "inputTokens": 1200, "cachedInputTokens": 200, "outputTokens": 30,
+                                "reasoningOutputTokens": 10, "totalTokens": 1230 },
+                            "last": { "inputTokens": 1200, "cachedInputTokens": 200, "outputTokens": 30,
+                                "reasoningOutputTokens": 10, "totalTokens": 1230 } } } }),
+                );
+                respond(
+                    &mut stdout,
                     json!({ "method": "turn/completed", "params": {
                         "threadId": "classifier-thread",
                         "turn": { "id": "classifier-turn",

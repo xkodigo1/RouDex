@@ -59,6 +59,20 @@ fn app_server_classifier_runs_an_ephemeral_read_only_turn() {
         .expect("classification");
     assert_eq!(result.tier, Tier::Fuerte);
     assert_eq!(result.reason, "fake classification");
+    let usage = result.usage.expect("the classifier reports what it spent");
+    assert_eq!(
+        (usage.input, usage.cached_input, usage.output),
+        (1200, 200, 30)
+    );
+
+    let rules = RiskRules::default();
+    let mut classifier = AppServerClassifier::new(workspace.client("success"), &workspace.0);
+    let decision = Router::new(&config, &rules).decide("Diseña la sincronización", &mut classifier);
+    let router = decision
+        .router_usage
+        .expect("the decision carries the router's cost");
+    assert_eq!(router.model, config.classifier.model);
+    assert_eq!(router.tokens.total, 1230);
 }
 
 #[test]

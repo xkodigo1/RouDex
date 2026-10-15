@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -90,10 +91,20 @@ pub struct TierTargets {
     pub fuerte: ModelTarget,
 }
 
+/// What a model costs, in USD per million tokens, for the savings estimate
+/// (spec 005, D5). RouDex ships no prices: the user sets them.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelPrice {
+    pub input: f64,
+    pub cached_input: f64,
+    pub output: f64,
+}
+
 /// Router configuration (`router.toml`). Absence selects the defaults, and a
 /// file may set only some keys; an invalid document is an error, never a
 /// silent fallback.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct RouterConfig {
     pub version: u32,
@@ -111,6 +122,9 @@ pub struct RouterConfig {
     /// Chosen by the user in the app; unset means English.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<Language>,
+    /// Prices by model id, for the savings estimate.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub prices: BTreeMap<String, ModelPrice>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,6 +149,7 @@ impl Default for RouterConfig {
             desktop_hook: DesktopHookConfig::default(),
             codex_path: None,
             language: None,
+            prices: BTreeMap::new(),
         }
     }
 }
@@ -149,6 +164,8 @@ pub enum RouterConfigError {
     Version(u32),
     #[error("router configuration has an empty model or effort for {0}")]
     Empty(&'static str),
+    #[error("the price of {0} must be zero or more, in USD per million tokens")]
+    Price(String),
 }
 
 impl RouterConfig {
@@ -211,6 +228,14 @@ impl RouterConfig {
     }
 
     fn validate(&self) -> Result<(), RouterConfigError> {
+        for (model, price) in &self.prices {
+            if [price.input, price.cached_input, price.output]
+                .iter()
+                .any(|value| !value.is_finite() || *value < 0.0)
+            {
+                return Err(RouterConfigError::Price(model.clone()));
+            }
+        }
         if self.version != ROUTER_CONFIG_VERSION {
             return Err(RouterConfigError::Version(self.version));
         }
@@ -422,6 +447,31 @@ include_codex_desktop = true
             "an invalid result is never written"
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn prices_are_read_by_model_and_must_not_be_negative() {
+        let config = RouterConfig::from_toml(
+            "[prices.\"gpt-6.1-sol\"]\ninput = 2.0\ncached_input = 0.5\noutput = 10\n",
+        )
+        .unwrap();
+        assert_eq!(
+            config.prices["gpt-6.1-sol"],
+            ModelPrice {
+                input: 2.0,
+                cached_input: 0.5,
+                output: 10.0
+            }
+        );
+        let negative = "[prices.x]\ninput = -1.0\ncached_input = 0\noutput = 0\n";
+        assert!(matches!(
+            RouterConfig::from_toml(negative),
+            Err(RouterConfigError::Price(model)) if model == "x"
+        ));
+        assert!(
+            RouterConfig::from_toml("[prices.x]\ninput = 1.0\n").is_err(),
+            "all three prices"
+        );
     }
 
     #[test]

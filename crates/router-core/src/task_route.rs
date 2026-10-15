@@ -60,6 +60,7 @@ pub fn resolve_task_route(
         source,
         reason,
         risk,
+        router_usage: None,
     }
 }
 
